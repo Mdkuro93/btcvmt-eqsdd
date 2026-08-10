@@ -1,0 +1,6 @@
+{
+  "name": "BTC VMT - Quản Lý GCN QSDĐ",
+  "description": "Hệ thống quản lý Giấy chứng nhận quyền sử dụng đất (sổ đỏ), theo dõi biến động, mượn/xuất/thế chấp/tách sổ và phân quyền phòng ban.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
