@@ -490,7 +490,7 @@ export const Assets: React.FC = () => {
               ) : (
                 assets.map((asset) => {
                   const overdue = isAssetOverdue(asset);
-                  const displayCode = asset.asset_code || `VMT_${asset.collateral_type || 'BDS'}_${asset.id.slice(-5)}`;
+                  const displayCode = asset.asset_code || `VMT_${asset.collateral_type || 'BDS'}_${(asset.id.replace(/\D/g, '') || '1').padStart(8, '0')}`;
                   const plotCode = formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no);
                   
                   return (

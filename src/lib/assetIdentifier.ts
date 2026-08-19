@@ -18,6 +18,34 @@ export const COLLATERAL_TYPES: CollateralTypeOption[] = [
   { code: 'TS_KHAC', name: 'Khác', shortName: 'TS_KHAC' },
 ];
 
+/**
+ * Danh mục chi tiết Loại tài sản (Property Types)
+ */
+export const PROPERTY_TYPES = [
+  'Đất nền',
+  'Đất nền phân lô',
+  'Biệt thự',
+  'Biệt thự đơn lập',
+  'Biệt thự song lập',
+  'Biệt thự tứ lập',
+  'Biệt thự nghỉ dưỡng / Villa',
+  'Nhà phố / Liền kề',
+  'Shophouse / Nhà phố thương mại',
+  'Căn hộ chung cư',
+  'Căn hộ Penthouse / Duplex',
+  'Condotel / Căn hộ du lịch',
+  'Officetel / Căn hộ văn phòng',
+  'Dinh thự / Biệt phủ',
+  'Đất thương mại dịch vụ (TMDV)',
+  'Đất cơ sở sản xuất phi nông nghiệp (SKC)',
+  'Đất trồng cây lâu năm / Nông nghiệp',
+  'Nhà xưởng / Kho bãi KCN',
+  'Tòa nhà văn phòng',
+  'Khách sạn / Resort',
+  'Cổ phần / Phần vốn góp',
+  'Tài sản khác',
+] as const;
+
 export const REGION_CODES = [
   { code: 'VMB', name: 'Vùng Miền Bắc' },
   { code: 'VMT', name: 'Vùng Miền Trung' },
@@ -56,34 +84,42 @@ export function resolveRegionCode(
 }
 
 /**
- * Generate sequential asset identifier: [REGION]_[COLLATERAL]_[00001]
- * Example: VMT_BDS_00001, VMB_COPHAN_00002
+ * Generate sequential asset identifier separated per Region and per Collateral Type:
+ * Format: [REGION]_[COLLATERAL]_[00000001] (8 digits sequence)
+ * Examples:
+ * - VMT_BDS_00000001, VMT_BDS_00000002...
+ * - VMN_BDS_00000001, VMN_BDS_00000002...
+ * - VMB_BDS_00000001, VMB_BDS_00000002...
+ * - VMT_TSCD_00000001...
  */
 export function generateNextAssetCode(
   regionCode: string = 'VMT',
   collateralType: string = 'BDS',
   existingAssets: Asset[] = []
 ): string {
-  const cleanRegion = (regionCode || 'VMT').toUpperCase();
-  const cleanType = (collateralType || 'BDS').toUpperCase();
+  const cleanRegion = (regionCode || 'VMT').toUpperCase().trim();
+  const cleanType = (collateralType || 'BDS').toUpperCase().trim();
   const prefix = `${cleanRegion}_${cleanType}_`;
 
   let maxSeq = 0;
 
   existingAssets.forEach(a => {
     if (a.asset_code) {
-      // Check if it matches any pattern like XXX_YYY_12345 or prefix_12345
-      const parts = a.asset_code.split('_');
-      const numPart = parts[parts.length - 1];
-      const parsedNum = parseInt(numPart, 10);
-      if (!isNaN(parsedNum) && parsedNum > maxSeq) {
-        maxSeq = parsedNum;
+      const code = a.asset_code.trim().toUpperCase();
+      // Only count assets matching this exact Region and Collateral Type prefix
+      if (code.startsWith(prefix)) {
+        const numPart = code.slice(prefix.length);
+        const parsedNum = parseInt(numPart, 10);
+        if (!isNaN(parsedNum) && parsedNum > maxSeq) {
+          maxSeq = parsedNum;
+        }
       }
     }
   });
 
   const nextSeq = maxSeq + 1;
-  const seqStr = String(nextSeq).padStart(5, '0');
+  // 8-digit padding: 00000001
+  const seqStr = String(nextSeq).padStart(8, '0');
   return `${prefix}${seqStr}`;
 }
 

@@ -4,7 +4,7 @@ import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { updateAsset, fetchAssets } from '../api/assets';
 import { logActivity } from '../api/activityLogs';
-import { COLLATERAL_TYPES, checkAssetDuplicate, resolveRegionCode, generateNextAssetCode } from '../lib/assetIdentifier';
+import { COLLATERAL_TYPES, PROPERTY_TYPES, checkAssetDuplicate, resolveRegionCode, generateNextAssetCode } from '../lib/assetIdentifier';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -559,15 +559,13 @@ export const EditAssetModal: React.FC<Props> = ({
                 <select
                   value={assetType}
                   onChange={e => setAssetType(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
+                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 focus:ring-1 focus:ring-blue-500"
                 >
-                  <option value="Đất nền">Đất nền</option>
-                  <option value="Biệt thự">Biệt thự</option>
-                  <option value="Nhà phố liền kề">Nhà phố liền kề</option>
-                  <option value="Căn hộ cao tầng">Căn hộ cao tầng</option>
-                  <option value="Shophouse / TMDV">Shophouse / TMDV</option>
-                  <option value="Nhà xưởng KCN">Nhà xưởng KCN</option>
-                  <option value="Tài sản khác">Tài sản khác</option>
+                  {PROPERTY_TYPES.map(pt => (
+                    <option key={pt} value={pt}>
+                      {pt}
+                    </option>
+                  ))}
                 </select>
               </div>
 

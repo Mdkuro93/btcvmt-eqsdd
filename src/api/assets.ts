@@ -291,52 +291,63 @@ export async function checkDuplicateAssets(certificateNos: string[]): Promise<st
 }
 
 export async function importAssets(assetsData: any[]) {
-  if (!isSupabaseConfigured) {
-    const current = mockStore.getAssets();
-    const newAssets: Asset[] = assetsData.map((a, idx) => ({
+  const current = mockStore.getAssets();
+  const projects = mockStore.getProjects();
+  const warehouses = mockStore.getWarehouses();
+
+  let accumulatedAssets = [...current];
+  const newAssets: Asset[] = assetsData.map((a, idx) => {
+    const selectedWh = warehouses.find(w => w.id === a.warehouse_id);
+    const regionCode = resolveRegionCode(a.project_id, projects, selectedWh?.region_code);
+    const colType = a.collateral_type || 'BDS';
+    const code = a.asset_code || generateNextAssetCode(regionCode, colType, accumulatedAssets);
+
+    const assetItem: Asset = {
       id: 'asset-' + Date.now() + '-' + idx,
+      asset_code: code,
+      collateral_type: colType,
       certificate_no: a.certificate_no || `GCN-IMPORT-${idx + 1}`,
       project_id: a.project_id || null,
       subdivision: a.subdivision || null,
+      lot_no: a.lot_no || null,
       area: Number(a.area) || 0,
       owner_name: a.owner_name || 'Công ty Cổ phần Đầu tư VMT',
+      asset_type: a.asset_type || 'Đất nền',
+      land_lot_no: a.land_lot_no || null,
+      map_sheet_no: a.map_sheet_no || null,
+      province: a.province || null,
+      district: a.district || null,
+      ward: a.ward || null,
+      address_detail: a.address_detail || null,
+      usage_purpose: a.usage_purpose || null,
       custody_status: a.custody_status || 'in_stock',
       lifecycle_status: a.lifecycle_status || 'active',
       sale_status: a.sale_status || 'not_ready',
       mortgage_status: a.mortgage_status || 'none',
       warehouse_id: a.warehouse_id || null,
       current_holder_dept: a.current_holder_dept || null,
+      notes: a.notes || null,
       created_at: new Date().toISOString(),
-    }));
+    };
+
+    accumulatedAssets.push(assetItem);
+    return assetItem;
+  });
+
+  if (!isSupabaseConfigured) {
     mockStore.saveAssets([...newAssets, ...current]);
     return newAssets;
   }
   try {
     const { data, error } = await supabase
       .from('assets')
-      .insert(assetsData)
+      .insert(newAssets)
       .select();
 
     if (error) throw error;
     return data;
   } catch (err) {
     console.warn('Supabase importAssets error, saving to mockStore:', err);
-    const current = mockStore.getAssets();
-    const newAssets: Asset[] = assetsData.map((a, idx) => ({
-      id: 'asset-' + Date.now() + '-' + idx,
-      certificate_no: a.certificate_no || `GCN-IMPORT-${idx + 1}`,
-      project_id: a.project_id || null,
-      subdivision: a.subdivision || null,
-      area: Number(a.area) || 0,
-      owner_name: a.owner_name || 'Công ty Cổ phần Đầu tư VMT',
-      custody_status: a.custody_status || 'in_stock',
-      lifecycle_status: a.lifecycle_status || 'active',
-      sale_status: a.sale_status || 'not_ready',
-      mortgage_status: a.mortgage_status || 'none',
-      warehouse_id: a.warehouse_id || null,
-      current_holder_dept: a.current_holder_dept || null,
-      created_at: new Date().toISOString(),
-    }));
     mockStore.saveAssets([...newAssets, ...current]);
     return newAssets;
   }

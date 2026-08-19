@@ -30,8 +30,9 @@ const MOCK_PROJECTS: Project[] = [
 const MOCK_ASSETS: Asset[] = [
   {
     id: 'asset-01',
-    asset_code: 'VMN_BDS_00001',
+    asset_code: 'VMN_BDS_00000001',
     collateral_type: 'BDS',
+    asset_type: 'Biệt thự',
     certificate_no: 'GCN-VMT-001',
     subdivision: 'Phân khu A',
     lot_no: 'A-01',
@@ -59,8 +60,9 @@ const MOCK_ASSETS: Asset[] = [
   },
   {
     id: 'asset-02',
-    asset_code: 'VMN_BDS_00002',
+    asset_code: 'VMN_BDS_00000002',
     collateral_type: 'BDS',
+    asset_type: 'Shophouse / Nhà phố thương mại',
     certificate_no: 'GCN-VMT-002',
     subdivision: 'Lô B2',
     lot_no: 'B-02',
@@ -94,8 +96,9 @@ const MOCK_ASSETS: Asset[] = [
   },
   {
     id: 'asset-03',
-    asset_code: 'VMN_BDS_00003',
+    asset_code: 'VMN_BDS_00000003',
     collateral_type: 'BDS',
+    asset_type: 'Đất nền',
     certificate_no: 'GCN-VMT-003',
     subdivision: 'Khu công nghiệp',
     lot_no: 'CN-01',
@@ -123,8 +126,9 @@ const MOCK_ASSETS: Asset[] = [
   },
   {
     id: 'asset-04',
-    asset_code: 'VMB_BDS_00004',
+    asset_code: 'VMB_BDS_00000001',
     collateral_type: 'BDS',
+    asset_type: 'Tòa nhà văn phòng',
     certificate_no: 'GCN-VMT-004',
     subdivision: 'Tháp C',
     lot_no: 'TC-04',
@@ -424,22 +428,30 @@ export const mockStore = {
     const projects = mockStore.getProjects();
     const warehouses = mockStore.getWarehouses();
 
-    assets = assets.map((a, idx) => {
+    // Track sequence per (region_collateral)
+    const counters: Record<string, number> = {};
+
+    assets = assets.map((a) => {
       const proj = projects.find(p => p.id === a.project_id);
       const wh = warehouses.find(w => w.id === a.warehouse_id);
       
-      // Auto-assign asset_code if legacy asset is missing it
+      const regionCode = wh?.region_code || (proj?.areas?.region_id === 'reg-02' ? 'VMB' : (proj?.areas?.region_id === 'reg-03' ? 'VMT' : 'VMN'));
+      const colType = a.collateral_type || 'BDS';
+      const key = `${regionCode}_${colType}`;
+
+      counters[key] = (counters[key] || 0) + 1;
+
+      // Auto-assign asset_code if legacy asset is missing it or doesn't have 8 digits
       let code = a.asset_code;
       if (!code) {
-        const regionCode = wh?.region_code || (proj?.areas?.region_id === 'reg-02' ? 'VMB' : 'VMN');
-        const colType = a.collateral_type || 'BDS';
-        code = `${regionCode}_${colType}_${String(idx + 1).padStart(5, '0')}`;
+        code = `${regionCode}_${colType}_${String(counters[key]).padStart(8, '0')}`;
       }
 
       return {
         ...a,
         asset_code: code,
-        collateral_type: a.collateral_type || 'BDS',
+        collateral_type: colType,
+        asset_type: a.asset_type || (a.usage_purpose?.includes('thương mại') ? 'Shophouse / Nhà phố thương mại' : (a.usage_purpose?.includes('sản xuất') ? 'Nhà xưởng / Kho bãi KCN' : 'Đất nền')),
         projects: proj ? { name: proj.name, areas: proj.areas } : a.projects,
         warehouses: wh ? { name: wh.name, is_central: wh.is_central, code: wh.code, region_code: wh.region_code } : a.warehouses,
       };
