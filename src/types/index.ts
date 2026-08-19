@@ -1,4 +1,4 @@
-export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer';
+export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer' | 'super_admin' | 'admin';
 
 export interface Region {
   id: string;
@@ -12,10 +12,23 @@ export interface Area {
   regions?: { name: string };
 }
 
+
+export interface StorageLocation {
+  id: string;
+  warehouse_id: string;
+  floor: string | null;
+  row: string | null;
+  shelf: string | null;
+  box: string | null;
+  capacity: number | null;
+}
+
 export interface Warehouse {
   id: string;
   name: string;
   region_id: string | null;
+  code?: string | null;         // e.g. "001", "002"
+  region_code?: string | null;  // e.g. "VMB", "VMT", "VMN"
   is_central: boolean;
   regions?: { name: string };
 }
@@ -48,16 +61,65 @@ export type MortgageStatus = 'none' | 'mortgaged';
 
 export interface Asset {
   id: string;
+  asset_code?: string | null;         // Mã định danh tự sinh: VMT_BDS_00001
+  collateral_type?: string | null;     // Loại TSĐB (BDS, TSCD, VONGOP, COPHAN...)
   certificate_no: string;
   project_id: string | null;
+  certificate_group?: 'so_lon' | 'so_nho' | null;
   subdivision: string | null;
+  lot_no?: string | null;
   area: number | null;
   owner_name: string | null;
+  
+  // Thông tin thửa đất & Địa lý
+  map_sheet_no?: string | null;       // Số tờ bản đồ
+  land_lot_no?: string | null;        // Số thửa đất
+  province?: string | null;           // Tỉnh / Thành phố
+  district?: string | null;           // Quận / Huyện
+  ward?: string | null;               // Xã / Phường
+  address_detail?: string | null;     // Địa chỉ chi tiết
+
+  // Loại đất & Hạn dùng
+  usage_purpose?: string | null;      // Mục đích sử dụng (Đất ở, TMDV...)
+  land_use_purpose?: string | null;
+  usage_term?: string | null;
+  land_use_term?: string | null;
+  usage_term_type?: 'fixed_date' | 'long_term' | null;
+  usage_term_date?: string | null;
+  
+  // Pháp lý mở rộng
+  asset_type?: string | null;         // Loại tài sản (Đất nền, Biệt thự...)
+  registry_no?: string | null;        // Số vào sổ cấp GCN
+  registry_date?: string | null;      // Ngày vào sổ
+  managing_unit?: string | null;      // Đơn vị quản lý sổ      // Thời hạn sử dụng (Lâu dài, 50 năm...)
+
+  // Hồ sơ thế chấp
+  mortgage_bank?: string | null;                 // Ngân hàng nhận thế chấp
+  mortgage_unit?: string | null;                 // Đơn vị thực hiện thế chấp
+  mortgage_bank_2?: string | null;               // Ngân hàng cầm cố, thế chấp 2
+  mortgage_unit_2?: string | null;               // Đơn vị vay 2
+  mortgage_valuation?: number | null;            // Giá trị định giá
+  collateral_ratio?: number | null;              // Tỷ lệ đảm bảo (%)
+  collateral_value?: number | null;              // Giá trị đảm bảo (VNĐ)
+  mortgage_expected_release_date?: string | null;// Ngày dự kiến giải chấp
+
+  // Ghi chú
+  notes?: string | null;              // Ghi chú tự do cấp tài sản
+
+  // File scan & Tách sổ
+  scan_file_url?: string | null;      // Đường dẫn / Upload scan GCN
+  parent_asset_id?: string | null;    // Sổ gốc (nếu là sổ con sau tách)
+
+  // Thông tin mượn
+  expected_return_date?: string | null; // Hạn trả mượn dự kiến
+  borrow_purpose?: string | null;       // Mục đích mượn
+
   custody_status: CustodyStatus;
   lifecycle_status: LifecycleStatus;
   sale_status: SaleStatus;
   mortgage_status: MortgageStatus;
   warehouse_id: string | null;
+  location_id?: string | null;
   current_holder_dept: string | null;
   created_at: string;
   projects?: {
@@ -68,7 +130,7 @@ export interface Asset {
       regions?: { name: string };
     };
   };
-  warehouses?: { name: string; is_central: boolean };
+  warehouses?: { name: string; is_central: boolean; code?: string; region_code?: string };
 }
 
 export type TransactionType = 'checkout' | 'checkin' | 'split' | 'mortgage' | 'sale_update';

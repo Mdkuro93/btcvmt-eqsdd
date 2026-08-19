@@ -112,17 +112,23 @@ export const Admin: React.FC = () => {
   };
 
   // Warehouse Handlers
+  const [newWarehouseCode, setNewWarehouseCode] = useState('');
+  const [newWarehouseRegionCode, setNewWarehouseRegionCode] = useState('VMN');
+
   const handleAddWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWarehouseName.trim()) return;
     try {
       await createWarehouse({
         name: newWarehouseName.trim(),
+        code: newWarehouseCode.trim() || undefined,
+        region_code: newWarehouseRegionCode || 'VMT',
         region_id: newWarehouseRegionId || null,
         is_central: newWarehouseIsCentral,
       });
       toast.success('Thêm kho thành công');
       setNewWarehouseName('');
+      setNewWarehouseCode('');
       loadAllData();
     } catch (err: any) {
       toast.error('Lỗi: ' + err.message);
@@ -330,39 +336,72 @@ export const Admin: React.FC = () => {
 
           {/* TAB 3: WAREHOUSES */}
           {activeTab === 'warehouses' && (
-            <div className="space-y-6 max-w-3xl">
-              <form onSubmit={handleAddWarehouse} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <input
-                    type="text"
-                    value={newWarehouseName}
-                    onChange={(e) => setNewWarehouseName(e.target.value)}
-                    placeholder="Tên kho (VD: Kho BTC Miền Nam)..."
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  />
-                  <select
-                    value={newWarehouseRegionId}
-                    onChange={(e) => setNewWarehouseRegionId(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  >
-                    <option value="">-- Kho dùng chung / Chọn vùng --</option>
-                    {regions.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </select>
-                  <button type="submit" className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md text-sm font-semibold hover:bg-blue-800 flex items-center justify-center gap-1">
-                    <Plus className="w-4 h-4" /> Thêm kho
-                  </button>
+            <div className="space-y-6 max-w-4xl">
+              <form onSubmit={handleAddWarehouse} className="space-y-3 bg-gray-50 p-4 rounded-md border border-gray-200">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Tên kho *</label>
+                    <input
+                      type="text"
+                      value={newWarehouseName}
+                      onChange={(e) => setNewWarehouseName(e.target.value)}
+                      placeholder="VD: Kho Dự Án Bình Dương..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Mã STT Kho (3 số)</label>
+                    <input
+                      type="text"
+                      maxLength={3}
+                      value={newWarehouseCode}
+                      onChange={(e) => setNewWarehouseCode(e.target.value)}
+                      placeholder="001, 002..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Mã Vùng</label>
+                    <select
+                      value={newWarehouseRegionCode}
+                      onChange={(e) => setNewWarehouseRegionCode(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                    >
+                      <option value="VMN">VMN (Miền Nam)</option>
+                      <option value="VMT">VMT (Miền Trung)</option>
+                      <option value="VMB">VMB (Miền Bắc)</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is_central"
-                    checked={newWarehouseIsCentral}
-                    onChange={(e) => setNewWarehouseIsCentral(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="is_central" className="text-xs font-medium text-gray-700">Là Kho Trung Tâm (Sổ nhập lại sẽ mặc định về đây)</label>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-4">
+                    <select
+                      value={newWarehouseRegionId}
+                      onChange={(e) => setNewWarehouseRegionId(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white"
+                    >
+                      <option value="">-- Liên kết Vùng --</option>
+                      {regions.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newWarehouseIsCentral}
+                        onChange={(e) => setNewWarehouseIsCentral(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-medium text-gray-700">Kho Trung Tâm</span>
+                    </label>
+                  </div>
+
+                  <button type="submit" className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md text-sm font-semibold hover:bg-blue-800 flex items-center justify-center gap-1">
+                    <Plus className="w-4 h-4" /> Thêm kho mới
+                  </button>
                 </div>
               </form>
 
@@ -370,18 +409,29 @@ export const Admin: React.FC = () => {
                 {warehouses.length === 0 ? (
                   <div className="p-4 text-sm text-gray-500 text-center">Chưa có kho nào.</div>
                 ) : (
-                  warehouses.map((w) => (
-                    <div key={w.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
-                      <div>
-                        <span className="font-semibold text-gray-900">{w.name}</span>
-                        {w.is_central && <span className="ml-2 text-xs bg-blue-100 text-[#1E3A8A] px-2 py-0.5 rounded-full font-medium">Kho Trung Tâm</span>}
-                        <span className="text-xs text-gray-500 ml-2">{w.regions?.name ? `(${w.regions.name})` : ''}</span>
+                  warehouses.map((w) => {
+                    const rCode = w.region_code || (w.regions?.name?.includes('Bắc') ? 'VMB' : w.regions?.name?.includes('Nam') ? 'VMN' : 'VMT');
+                    const wCode = w.code || '001';
+                    return (
+                      <div key={w.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{w.name}</span>
+                            <span className="font-mono text-xs px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded">
+                              Mã chứng từ mẫu: {rCode}-{wCode}-PN-0001/{new Date().getFullYear()}
+                            </span>
+                            {w.is_central && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">Kho Trung Tâm</span>}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Mã Vùng: <span className="font-semibold text-gray-700">{rCode}</span> · STT Kho: <span className="font-semibold text-gray-700">{wCode}</span> {w.regions?.name ? `· Vùng: ${w.regions.name}` : ''}
+                          </div>
+                        </div>
+                        <button onClick={() => handleDeleteWarehouse(w.id)} className="text-red-500 hover:text-red-700 p-1">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button onClick={() => handleDeleteWarehouse(w.id)} className="text-red-500 hover:text-red-700 p-1">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

@@ -15,9 +15,9 @@ const MOCK_AREAS: Area[] = [
 ];
 
 const MOCK_WAREHOUSES: Warehouse[] = [
-  { id: 'wh-01', name: 'Kho Trung Tâm BTC', region_id: 'reg-01', is_central: true, regions: { name: 'Miền Nam' } },
-  { id: 'wh-02', name: 'Kho Dự Án Bình Dương', region_id: 'reg-01', is_central: false, regions: { name: 'Miền Nam' } },
-  { id: 'wh-03', name: 'Kho Chi Nhánh Hà Nội', region_id: 'reg-02', is_central: false, regions: { name: 'Miền Bắc' } },
+  { id: 'wh-01', name: 'Kho Trung Tâm BTC', code: '001', region_code: 'VMN', region_id: 'reg-01', is_central: true, regions: { name: 'Miền Nam' } },
+  { id: 'wh-02', name: 'Kho Dự Án Bình Dương', code: '002', region_code: 'VMN', region_id: 'reg-01', is_central: false, regions: { name: 'Miền Nam' } },
+  { id: 'wh-03', name: 'Kho Chi Nhánh Hà Nội', code: '003', region_code: 'VMB', region_id: 'reg-02', is_central: false, regions: { name: 'Miền Bắc' } },
 ];
 
 const MOCK_PROJECTS: Project[] = [
@@ -30,10 +30,22 @@ const MOCK_PROJECTS: Project[] = [
 const MOCK_ASSETS: Asset[] = [
   {
     id: 'asset-01',
+    asset_code: 'VMN_BDS_00001',
+    collateral_type: 'BDS',
     certificate_no: 'GCN-VMT-001',
     subdivision: 'Phân khu A',
+    lot_no: 'A-01',
     area: 450.5,
     owner_name: 'Công ty Cổ phần Đầu tư VMT',
+    map_sheet_no: '04',
+    land_lot_no: '112',
+    province: 'TP. Hồ Chí Minh',
+    district: 'Quận 2 (Thành phố Thủ Đức)',
+    ward: 'Phường An Phú',
+    address_detail: '12 Đường Song Hành, Phường An Phú, TP. Thủ Đức, TP.HCM',
+    land_use_purpose: 'Đất ở tại đô thị (ODT)',
+    land_use_term: 'Lâu dài',
+    scan_file_url: 'https://example.com/scan-gcn-vmt-001.pdf',
     custody_status: 'in_stock',
     lifecycle_status: 'active',
     sale_status: 'not_ready',
@@ -43,14 +55,32 @@ const MOCK_ASSETS: Asset[] = [
     current_holder_dept: null,
     created_at: '2025-01-10T08:00:00Z',
     projects: { name: 'Dự án Khu Đô Thị VMT Central', areas: { name: 'TP. Hồ Chí Minh', region_id: 'reg-01' } },
-    warehouses: { name: 'Kho Trung Tâm BTC', is_central: true },
+    warehouses: { name: 'Kho Trung Tâm BTC', code: '001', region_code: 'VMN', is_central: true },
   },
   {
     id: 'asset-02',
+    asset_code: 'VMN_BDS_00002',
+    collateral_type: 'BDS',
     certificate_no: 'GCN-VMT-002',
     subdivision: 'Lô B2',
+    lot_no: 'B-02',
     area: 1200.0,
     owner_name: 'Công ty Cổ phần Đầu tư VMT',
+    map_sheet_no: '12',
+    land_lot_no: '88',
+    province: 'Bình Dương',
+    district: 'TP. Thuận An',
+    ward: 'Phường Lái Thiêu',
+    address_detail: 'Đại lộ Bình Dương, Phường Lái Thiêu, TP. Thuận An, Bình Dương',
+    land_use_purpose: 'Đất thương mại dịch vụ (TMD)',
+    land_use_term: '50 năm (Đến 2072)',
+    mortgage_bank: 'Ngân hàng BIDV - Chi nhánh TP.HCM',
+    mortgage_unit: 'Ban Nguồn Vốn - TĐ1',
+    mortgage_valuation: 35000000000,
+    mortgage_expected_release_date: '2026-12-31',
+    expected_return_date: '2026-02-01',
+    borrow_purpose: 'Mượn sổ nộp hồ sơ thẩm định tín dụng mở rộng hạn mức',
+    scan_file_url: 'https://example.com/scan-gcn-vmt-002.pdf',
     custody_status: 'checked_out',
     lifecycle_status: 'active',
     sale_status: 'ready_for_sale',
@@ -60,14 +90,26 @@ const MOCK_ASSETS: Asset[] = [
     current_holder_dept: 'Ban Nguồn Vốn',
     created_at: '2025-01-12T09:30:00Z',
     projects: { name: 'Dự án Khu Dân Cư VMT Riverside', areas: { name: 'Bình Dương', region_id: 'reg-01' } },
-    warehouses: { name: 'Kho Dự Án Bình Dương', is_central: false },
+    warehouses: { name: 'Kho Dự Án Bình Dương', code: '002', region_code: 'VMN', is_central: false },
   },
   {
     id: 'asset-03',
+    asset_code: 'VMN_BDS_00003',
+    collateral_type: 'BDS',
     certificate_no: 'GCN-VMT-003',
     subdivision: 'Khu công nghiệp',
+    lot_no: 'CN-01',
     area: 3500.8,
     owner_name: 'Công ty TNHH BĐS VMT Đồng Nai',
+    map_sheet_no: '25',
+    land_lot_no: '405',
+    province: 'Đồng Nai',
+    district: 'TP. Biên Hòa',
+    ward: 'Phường Long Bình',
+    address_detail: 'KCN Long Bình, TP. Biên Hòa, Đồng Nai',
+    land_use_purpose: 'Đất cơ sở sản xuất phi nông nghiệp (SKC)',
+    land_use_term: 'Đến 2068',
+    scan_file_url: 'https://example.com/scan-gcn-vmt-003.pdf',
     custody_status: 'in_stock',
     lifecycle_status: 'active',
     sale_status: 'ready_for_sale',
@@ -77,14 +119,26 @@ const MOCK_ASSETS: Asset[] = [
     current_holder_dept: null,
     created_at: '2025-01-15T11:00:00Z',
     projects: { name: 'Dự án Tổ Hợp Thương Mại VMT Plaza', areas: { name: 'Đồng Nai', region_id: 'reg-01' } },
-    warehouses: { name: 'Kho Trung Tâm BTC', is_central: true },
+    warehouses: { name: 'Kho Trung Tâm BTC', code: '001', region_code: 'VMN', is_central: true },
   },
   {
     id: 'asset-04',
+    asset_code: 'VMB_BDS_00004',
+    collateral_type: 'BDS',
     certificate_no: 'GCN-VMT-004',
     subdivision: 'Tháp C',
+    lot_no: 'TC-04',
     area: 820.0,
     owner_name: 'Công ty Cổ phần Đầu tư VMT',
+    map_sheet_no: '08',
+    land_lot_no: '15',
+    province: 'Hà Nội',
+    district: 'Quận Cầu Giấy',
+    ward: 'Phường Dịch Vọng Hậu',
+    address_detail: 'Duy Tân, Quận Cầu Giấy, Hà Nội',
+    land_use_purpose: 'Đất thương mại dịch vụ (TMD)',
+    land_use_term: 'Lâu dài',
+    scan_file_url: 'https://example.com/scan-gcn-vmt-004.pdf',
     custody_status: 'in_stock',
     lifecycle_status: 'active',
     sale_status: 'sold',
@@ -94,9 +148,59 @@ const MOCK_ASSETS: Asset[] = [
     current_holder_dept: null,
     created_at: '2025-01-20T14:15:00Z',
     projects: { name: 'Dự án VMT Capital Tower', areas: { name: 'Hà Nội', region_id: 'reg-02' } },
-    warehouses: { name: 'Kho Chi Nhánh Hà Nội', is_central: false },
+    warehouses: { name: 'Kho Chi Nhánh Hà Nội', code: '003', region_code: 'VMB', is_central: false },
   },
 ];
+
+function generateMockAssets(count: number) {
+  const subdivisions = ['Phân khu A', 'Lô B2', 'Khu công nghiệp', 'Tháp C', 'Khu Biệt Thự', 'Khu Nhà Phố', 'Block D', 'Block E'];
+  const custodyStatuses: ('in_stock' | 'checked_out')[] = ['in_stock', 'checked_out'];
+  const lifecycleStatuses: ('active' | 'split' | 'invalidated')[] = ['active', 'split', 'invalidated'];
+  const saleStatuses: ('not_ready' | 'ready_for_sale' | 'sold')[] = ['not_ready', 'ready_for_sale', 'sold'];
+  const mortgageStatuses: ('none' | 'mortgaged')[] = ['none', 'mortgaged'];
+  
+  let currentId = 5;
+
+  for (let i = 0; i < count; i++) {
+    const proj = MOCK_PROJECTS[Math.floor(Math.random() * MOCK_PROJECTS.length)];
+    const wh = MOCK_WAREHOUSES[Math.floor(Math.random() * MOCK_WAREHOUSES.length)];
+    const certNo = `GCN-VMT-${(currentId++).toString().padStart(4, '0')}`;
+    
+    // Skew random to make mostly 'active'
+    let lsIdx = Math.floor(Math.random() * 10);
+    let ls: 'active' | 'split' | 'invalidated' = 'active';
+    if (lsIdx === 8) ls = 'split';
+    if (lsIdx === 9) ls = 'invalidated';
+
+    MOCK_ASSETS.push({
+      id: `asset-gen-${i}`,
+      certificate_no: certNo,
+      subdivision: subdivisions[Math.floor(Math.random() * subdivisions.length)],
+      area: Math.floor(Math.random() * 5000) + 50,
+      owner_name: 'Công ty Cổ phần Đầu tư VMT',
+      map_sheet_no: Math.floor(Math.random() * 50).toString(),
+      land_lot_no: Math.floor(Math.random() * 500).toString(),
+      province: 'Tỉnh / TP Ngẫu Nhiên',
+      district: 'Quận / Huyện Ngẫu Nhiên',
+      ward: 'Phường / Xã Ngẫu Nhiên',
+      address_detail: 'Địa chỉ ngẫu nhiên',
+      land_use_purpose: 'Đất ở tại đô thị (ODT)',
+      land_use_term: 'Lâu dài',
+      custody_status: custodyStatuses[Math.floor(Math.random() * custodyStatuses.length)],
+      lifecycle_status: ls,
+      sale_status: saleStatuses[Math.floor(Math.random() * saleStatuses.length)],
+      mortgage_status: mortgageStatuses[Math.floor(Math.random() * mortgageStatuses.length)],
+      project_id: proj.id,
+      warehouse_id: wh.id,
+      current_holder_dept: null,
+      created_at: new Date(Date.now() - Math.floor(Math.random() * 10000000000)).toISOString(),
+      projects: { name: proj.name, areas: proj.areas as any },
+      warehouses: { name: wh.name, code: wh.code, region_code: wh.region_code, is_central: wh.is_central },
+    });
+  }
+}
+
+generateMockAssets(500);
 
 const MOCK_TRANSACTIONS: any[] = [
   {
@@ -232,20 +336,46 @@ const STORAGE_KEYS = {
 };
 
 function getStored<T>(key: string, defaultData: T): T {
+  if (typeof window === 'undefined') return defaultData;
+  if ((window as any)._mockStoreCache && (window as any)._mockStoreCache[key]) {
+    return (window as any)._mockStoreCache[key];
+  }
+
   try {
     const item = localStorage.getItem(key);
+    let parsed: any;
     if (!item) {
       localStorage.setItem(key, JSON.stringify(defaultData));
-      return defaultData;
+      parsed = defaultData;
+    } else {
+      parsed = JSON.parse(item);
+      if (Array.isArray(parsed) && parsed.length === 0 && Array.isArray(defaultData) && defaultData.length > 0) {
+        localStorage.setItem(key, JSON.stringify(defaultData));
+        parsed = defaultData;
+      }
     }
-    return JSON.parse(item);
+    
+    if (!(window as any)._mockStoreCache) {
+      (window as any)._mockStoreCache = {};
+    }
+    (window as any)._mockStoreCache[key] = parsed;
+    return parsed;
   } catch {
+    localStorage.setItem(key, JSON.stringify(defaultData));
+    if (!(window as any)._mockStoreCache) {
+      (window as any)._mockStoreCache = {};
+    }
+    (window as any)._mockStoreCache[key] = defaultData;
     return defaultData;
   }
 }
 
 function setStored<T>(key: string, data: T): void {
   try {
+    if (!(window as any)._mockStoreCache) {
+      (window as any)._mockStoreCache = {};
+    }
+    (window as any)._mockStoreCache[key] = data;
     localStorage.setItem(key, JSON.stringify(data));
   } catch (err) {
     console.warn('LocalStorage error:', err);
@@ -283,7 +413,7 @@ export const mockStore = {
       const area = areas.find(a => a.id === p.area_id);
       return {
         ...p,
-        areas: area ? { name: area.name, region_id: area.region_id } : p.areas,
+        areas: area ? { name: area.name, region_id: area.region_id, regions: area.regions } : p.areas,
       };
     });
   },
@@ -294,13 +424,24 @@ export const mockStore = {
     const projects = mockStore.getProjects();
     const warehouses = mockStore.getWarehouses();
 
-    assets = assets.map(a => {
+    assets = assets.map((a, idx) => {
       const proj = projects.find(p => p.id === a.project_id);
       const wh = warehouses.find(w => w.id === a.warehouse_id);
+      
+      // Auto-assign asset_code if legacy asset is missing it
+      let code = a.asset_code;
+      if (!code) {
+        const regionCode = wh?.region_code || (proj?.areas?.region_id === 'reg-02' ? 'VMB' : 'VMN');
+        const colType = a.collateral_type || 'BDS';
+        code = `${regionCode}_${colType}_${String(idx + 1).padStart(5, '0')}`;
+      }
+
       return {
         ...a,
+        asset_code: code,
+        collateral_type: a.collateral_type || 'BDS',
         projects: proj ? { name: proj.name, areas: proj.areas } : a.projects,
-        warehouses: wh ? { name: wh.name, is_central: wh.is_central } : a.warehouses,
+        warehouses: wh ? { name: wh.name, is_central: wh.is_central, code: wh.code, region_code: wh.region_code } : a.warehouses,
       };
     });
 
@@ -310,9 +451,14 @@ export const mockStore = {
         assets = assets.filter(
           a =>
             a.certificate_no?.toLowerCase().includes(s) ||
+            a.asset_code?.toLowerCase().includes(s) ||
             a.subdivision?.toLowerCase().includes(s) ||
+            a.lot_no?.toLowerCase().includes(s) ||
             a.owner_name?.toLowerCase().includes(s)
         );
+      }
+      if (filters.collateralType) {
+        assets = assets.filter(a => a.collateral_type === filters.collateralType);
       }
       if (filters.projectId) {
         assets = assets.filter(a => a.project_id === filters.projectId);
@@ -333,7 +479,8 @@ export const mockStore = {
         assets = assets.filter(a => a.warehouse_id === filters.warehouseId);
       }
       if (filters.subdivision) {
-        assets = assets.filter(a => a.subdivision?.toLowerCase().includes(filters.subdivision.toLowerCase()));
+        const sub = filters.subdivision.toLowerCase();
+        assets = assets.filter(a => a.subdivision?.toLowerCase().includes(sub));
       }
     }
 
@@ -357,12 +504,39 @@ export const mockStore = {
 
   getLogs: (params?: any): any[] => {
     let logs = getStored(STORAGE_KEYS.LOGS, MOCK_ACTIVITY_LOGS);
+    const warehouses = mockStore.getWarehouses();
+    const assets = mockStore.getAssets();
+
+    logs = logs.map(l => {
+      const asset = assets.find(a => a.id === l.asset_id);
+      const wh = warehouses.find(w => w.id === l.warehouse_id || w.id === asset?.warehouse_id);
+      return {
+        ...l,
+        asset,
+        warehouse: wh ? { name: wh.name } : l.warehouse,
+      };
+    });
+
     if (typeof params === 'object' && params !== null) {
       if (params.assetId) {
         logs = logs.filter(l => l.asset_id === params.assetId);
       }
       if (params.actionType) {
         logs = logs.filter(l => l.action_type === params.actionType);
+      }
+      if (params.warehouseId) {
+        logs = logs.filter(l => l.warehouse_id === params.warehouseId || l.asset?.warehouse_id === params.warehouseId);
+      }
+      if (params.projectId) {
+        logs = logs.filter(l => l.asset?.project_id === params.projectId);
+      }
+      if (params.fromDate) {
+        logs = logs.filter(l => new Date(l.log_date) >= new Date(params.fromDate));
+      }
+      if (params.toDate) {
+        const to = new Date(params.toDate);
+        to.setHours(23, 59, 59, 999);
+        logs = logs.filter(l => new Date(l.log_date) <= to);
       }
     }
     return logs;

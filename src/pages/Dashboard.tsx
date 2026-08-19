@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { fetchAssets } from '../api/assets';
+import { fetchTransactions } from '../api/transactions';
 import { generateDemoData } from '../api/demo';
+import { Asset } from '../types';
 import { 
   Files, 
   Warehouse, 
   ArrowUpRight, 
   Landmark, 
   ShoppingBag, 
-  PlusCircle, 
   Search, 
   CheckSquare, 
   BookText, 
@@ -17,40 +18,50 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const Dashboard: React.FC = () => {
   const { profile } = useAuth();
-  const [stats, setStats] = useState({
-    total: 0,
-    inStock: 0,
-    checkedOut: 0,
-    mortgaged: 0,
-    sold: 0,
-  });
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingDemo, setGeneratingDemo] = useState(false);
+  const [overdueSLA, setOverdueSLA] = useState(0);
 
   useEffect(() => {
     loadStats();
   }, []);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const channel = supabase.channel('dashboard_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, () => loadStats())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const loadStats = async () => {
     setLoading(true);
     try {
-      const { data: assets, error } = await supabase
-        .from('assets')
-        .select('custody_status, mortgage_status, sale_status');
+      const { data } = await fetchAssets({}, 1, 10000);
+      setAssets(data || []);
 
-      if (error) throw error;
-
-      if (assets) {
-        setStats({
-          total: assets.length,
-          inStock: assets.filter(a => a.custody_status === 'in_stock').length,
-          checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
-          mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
-          sold: assets.filter(a => a.sale_status === 'sold').length,
+      const txs = await fetchTransactions();
+      if (txs) {
+        const now = new Date();
+        let overdueCount = 0;
+        txs.forEach((tx: any) => {
+          (tx.items || []).forEach((item: any) => {
+            if (item.status === 'pending') {
+              const created = new Date(item.created_at);
+              const diffMs = now.getTime() - created.getTime();
+              const diffHours = diffMs / (1000 * 60 * 60);
+              if (diffHours > 24) overdueCount++; // SLA 24h
+            }
+          });
         });
+        setOverdueSLA(overdueCount);
       }
     } catch (err) {
       console.warn('Load stats error:', err);
@@ -58,6 +69,16 @@ export const Dashboard: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const stats = useMemo(() => {
+    return {
+      total: assets.length,
+      inStock: assets.filter(a => a.custody_status === 'in_stock').length,
+      checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
+      mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
+      sold: assets.filter(a => a.sale_status === 'sold').length,
+    };
+  }, [assets]);
 
   const handleGenerateDemo = async () => {
     setGeneratingDemo(true);

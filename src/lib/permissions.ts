@@ -16,6 +16,8 @@ export const ALL_PERMISSIONS = [
 ];
 
 export const DEFAULT_PERMISSIONS_BY_ROLE: Record<Role, string[]> = {
+  super_admin: ALL_PERMISSIONS.map(p => p.key),
+  admin: ALL_PERMISSIONS.map(p => p.key),
   btc_manager: ALL_PERMISSIONS.map(p => p.key),
   capital_dept: ['asset.view', 'request.borrow', 'request.return', 'request.mortgage', 'request.unmortgage'],
   project_dept: ['asset.view', 'request.borrow', 'request.return', 'request.split'],

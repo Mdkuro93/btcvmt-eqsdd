@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Profile, Role } from '../types';
 import { DEFAULT_PERMISSIONS_BY_ROLE } from '../api/users';
 
@@ -40,6 +40,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
+
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
 
     async function initAuth() {
       try {
@@ -110,28 +115,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, role: Role = 'btc_manager') => {
     setLoading(true);
-    try {
-      // Try real Supabase auth if configured
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password: 'password123',
-      });
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password: 'password123',
+        });
 
-      if (!error && data.user) {
-        setUser({ id: data.user.id, email: data.user.email || email });
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('*, regions(name), areas(name)')
-          .eq('id', data.user.id)
-          .single();
+        if (!error && data.user) {
+          setUser({ id: data.user.id, email: data.user.email || email });
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('*, regions(name), areas(name)')
+            .eq('id', data.user.id)
+            .single();
 
-        if (prof) {
-          setProfile(prof as Profile);
-          return;
+          if (prof) {
+            setProfile(prof as Profile);
+            setLoading(false);
+            return;
+          }
         }
+      } catch (e) {
+        console.warn('Supabase login skipped, using direct role sign-in:', e);
       }
-    } catch (e) {
-      console.warn('Supabase login skipped, using direct role sign-in:', e);
     }
 
     // Direct role sign-in fallback
@@ -141,6 +148,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       project_dept: 'Chuyên viên Ban DAĐT',
       re_dept: 'Chuyên viên Ban KD BĐS',
       viewer: 'Người xem tra cứu',
+      super_admin: 'Quản trị viên cấp cao',
+      admin: 'Quản trị hệ thống',
     };
 
     const newProfile: Profile = {
@@ -161,10 +170,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
     }
     // Switch to viewer or clear
     setUser({ id: DEMO_USER_ID, email: 'viewer@btcvmt.vn' });
@@ -190,7 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setProfile(updated);
 
-    if (user && user.id !== DEMO_USER_ID) {
+    if (isSupabaseConfigured && user && user.id !== DEMO_USER_ID) {
       try {
         await supabase
           .from('profiles')

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { fetchTransactions, decideTransactionItem } from '../api/transactions';
+import { fetchWarehouses } from '../api/assets';
+import { DecideRequestModal } from '../components/DecideRequestModal';
+import { BulkDecideModal } from '../components/BulkDecideModal';
 import { DEFAULT_PERMISSIONS_BY_ROLE } from '../api/users';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import toast, { Toaster } from 'react-hot-toast';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const TYPE_LABEL: Record<string, string> = {
   checkout: 'Mượn/Xuất sổ',
@@ -43,7 +47,12 @@ function detailsSummary(type: string, details: any) {
     case 'sale_update':
       return details.saleStatus === 'sold' ? 'Đã bán' : 'Sẵn sàng bán';
     case 'split':
-      return `QĐ ${details.decisionNo || ''} · ${(details.splitChildren || []).length} sổ con`;
+      if (details.splitType === 'reissue') {
+        return `Cấp đổi sang GCN mới: ${details.newCertificateNo || 'Chưa nhập'}`;
+      } else if (details.splitType === 'partial') {
+        return `Tách 1 phần (QĐ ${details.decisionNo || ''}) · ${(details.splitChildren || []).length} sổ con · DT còn lại: ${(details.remainingArea || 0).toLocaleString('vi-VN')} m²`;
+      }
+      return `Tách toàn bộ (QĐ ${details.decisionNo || ''}) · ${(details.splitChildren || []).length} sổ con (Sổ mẹ hết HL)`;
     default:
       return '';
   }
@@ -56,6 +65,19 @@ export const Requests: React.FC = () => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [decidingItemId, setDecidingItemId] = useState<string | null>(null);
 
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [modalItem, setModalItem] = useState<any>(null);
+  const [modalDecision, setModalDecision] = useState<'approved' | 'rejected' | null>(null);
+  
+  // Bulk approval state
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetchWarehouses().then(setWarehouses).catch(() => {});
+  }, []);
+
+
   const effectivePerms = profile?.permissions && profile.permissions.length > 0
     ? profile.permissions
     : DEFAULT_PERMISSIONS_BY_ROLE[profile?.role || 'viewer'] || [];
@@ -63,6 +85,17 @@ export const Requests: React.FC = () => {
 
   useEffect(() => {
     loadTransactions();
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const channel1 = supabase.channel('txs_page_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => loadTransactions())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transaction_items' }, () => loadTransactions())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel1);
+    };
   }, []);
 
   const loadTransactions = async () => {
@@ -78,6 +111,25 @@ export const Requests: React.FC = () => {
     }
   };
 
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const getSelectedItemsFull = () => {
+    const list: any[] = [];
+    transactions.forEach(tx => {
+      (tx.items || []).forEach((i: any) => {
+        if (selectedItems.has(i.id)) list.push(i);
+      });
+    });
+    return list;
+  };
+
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -86,18 +138,45 @@ export const Requests: React.FC = () => {
     });
   };
 
-  const handleDecide = async (itemId: string, decision: 'approved' | 'rejected') => {
+  const handleDecide = (item: any, decision: 'approved' | 'rejected') => {
+    setModalItem(item);
+    setModalDecision(decision);
+  };
+
+  const confirmBulkDecision = async (payloads: any[]) => {
     if (!user) return;
-    setDecidingItemId(itemId);
     try {
-      await decideTransactionItem(itemId, decision, user.id);
+      for (const p of payloads) {
+        await decideTransactionItem(p.itemId, p.decision, p.notes, user.id, p.finalDetails);
+      }
+      toast.success('Đã duyệt hàng loạt thành công');
+      await loadTransactions();
+      setSelectedItems(new Set());
+    } catch (error: any) {
+      toast.error('Lỗi khi duyệt hàng loạt: ' + (error.message || ''));
+      console.error(error);
+    }
+  };
+
+  const confirmDecision = async (decision: 'approved' | 'rejected', notes: string, finalDetails?: any) => {
+    if (!user || !modalItem) return;
+    setDecidingItemId(modalItem.id);
+    try {
+      await decideTransactionItem(modalItem.id, decision, notes, user.id, finalDetails);
       toast.success(decision === 'approved' ? 'Đã duyệt' : 'Đã từ chối');
       await loadTransactions();
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        next.delete(modalItem.id);
+        return next;
+      });
     } catch (error: any) {
       toast.error('Lỗi khi xử lý: ' + (error.message || ''));
       console.error(error);
     } finally {
       setDecidingItemId(null);
+      setModalItem(null);
+      setModalDecision(null);
     }
   };
 
@@ -116,6 +195,14 @@ export const Requests: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-900">
           {isApprover ? 'Duyệt phiếu yêu cầu' : 'Phiếu yêu cầu của tôi'}
         </h1>
+        {isApprover && selectedItems.size > 0 && (
+          <button
+            onClick={() => setIsBulkModalOpen(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md font-semibold text-sm hover:bg-blue-700"
+          >
+            Duyệt {selectedItems.size} mục đã chọn
+          </button>
+        )}
       </div>
 
       <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
@@ -165,12 +252,25 @@ export const Requests: React.FC = () => {
                           <tr className="text-left text-xs text-gray-500 uppercase">
                             <th className="py-1 pr-4">Số GCN</th>
                             <th className="py-1 pr-4">Trạng thái</th>
-                            {isApprover && <th className="py-1 pr-4 text-right">Thao tác</th>}
+                            {isApprover && <th className="py-1 pr-4 w-8"></th>}
+                                {isApprover && <th className="py-1 pr-4 text-right">Thao tác</th>}
                           </tr>
                         </thead>
                         <tbody>
                           {(tx.items || []).map((item: any) => (
                             <tr key={item.id} className="border-t border-gray-200">
+                              {isApprover && (
+                                <td className="py-2 pr-4">
+                                  {item.status === 'pending' && (
+                                    <input 
+                                      type="checkbox" 
+                                      checked={selectedItems.has(item.id)}
+                                      onChange={() => toggleItemSelection(item.id)}
+                                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                    />
+                                  )}
+                                </td>
+                              )}
                               <td className="py-2 pr-4 font-medium text-gray-900">
                                 {item.asset?.certificate_no}
                                 {tx.type === 'split' && item.asset?.mortgage_status === 'mortgaged' && (
@@ -186,14 +286,14 @@ export const Requests: React.FC = () => {
                                     <div className="flex justify-end gap-2">
                                       <button
                                         disabled={decidingItemId === item.id}
-                                        onClick={() => handleDecide(item.id, 'rejected')}
+                                        onClick={() => handleDecide(item, 'rejected')}
                                         className="px-3 py-1.5 rounded-md text-xs font-semibold border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50"
                                       >
                                         Từ chối
                                       </button>
                                       <button
                                         disabled={decidingItemId === item.id}
-                                        onClick={() => handleDecide(item.id, 'approved')}
+                                        onClick={() => handleDecide(item, 'approved')}
                                         className="px-3 py-1.5 rounded-md text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                                       >
                                         {decidingItemId === item.id ? 'Đang xử lý...' : 'Duyệt'}
@@ -219,6 +319,14 @@ export const Requests: React.FC = () => {
           </div>
         )}
       </div>
+      <DecideRequestModal
+        isOpen={!!modalItem && !!modalDecision}
+        onClose={() => { setModalItem(null); setModalDecision(null); }}
+        onConfirm={confirmDecision}
+        item={modalItem}
+        decisionType={modalDecision!}
+        warehouses={warehouses}
+      />
     </div>
   );
 };

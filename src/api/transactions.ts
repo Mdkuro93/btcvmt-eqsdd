@@ -1,10 +1,14 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
-import { TransactionType } from '../types';
-import { updateAsset } from './assets';
+import { TransactionType, Asset } from '../types';
+import { updateAsset, createAsset, fetchWarehouses } from './assets';
 import { logActivity } from './activityLogs';
+import { generateNextVoucherCode } from '../lib/voucherEngine';
 
 export async function fetchTransactions(): Promise<any[]> {
+  if (!isSupabaseConfigured) {
+    return mockStore.getTransactions();
+  }
   try {
     const { data, error } = await supabase
       .from('transactions')
@@ -41,7 +45,7 @@ export async function createTransaction(
   if (typeof param1 === 'string' && type) {
     createdBy = param1;
     txType = type;
-    txNotes = details?.notes || details?.reason || '';
+    txNotes = details?.notes || details?.reason || details?.splitNotes || '';
     items = (assetIds || []).map(id => ({
       asset_id: id,
       type: txType,
@@ -119,7 +123,8 @@ export async function decideTransactionItem(
   itemId: string,
   decision: 'approved' | 'rejected',
   notes?: string,
-  performerId?: string
+  performerId?: string,
+  finalDetails?: any
 ) {
   let targetItem: any = null;
 
@@ -150,75 +155,257 @@ export async function decideTransactionItem(
 
   const assetId = targetItem.asset_id;
   const itemType = targetItem.type;
-  const details = targetItem.details || {};
+  const details = finalDetails || targetItem.details || {};
+
+  const allAssets = mockStore.getAssets();
+  const currentAsset = allAssets.find((a: any) => a.id === assetId) || targetItem.asset;
+  const warehouses = mockStore.getWarehouses();
+  const currentWarehouse = warehouses.find((w: any) => w.id === (details.targetWarehouseId || currentAsset?.warehouse_id)) || warehouses[0];
+
+  let generatedVoucher = '';
 
   if (decision === 'approved') {
-    const assetUpdates: Record<string, any> = {};
-
-    if (itemType === 'checkout') {
-      assetUpdates.custody_status = 'checked_out';
-      if (details.department) assetUpdates.current_holder_dept = details.department;
-    } else if (itemType === 'checkin') {
-      assetUpdates.custody_status = 'in_stock';
-      assetUpdates.current_holder_dept = null;
-    } else if (itemType === 'mortgage') {
-      assetUpdates.mortgage_status = 'mortgaged';
-    } else if (itemType === 'sale_update') {
-      if (details.saleStatus) assetUpdates.sale_status = details.saleStatus;
-    }
-
-    if (Object.keys(assetUpdates).length > 0) {
-      await updateAsset(assetId, assetUpdates);
-    }
+    const { voucherCode } = generateNextVoucherCode(currentWarehouse, itemType);
+    generatedVoucher = voucherCode;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('transaction_items')
-      .update({
-        status: decision,
-        decision_notes: notes || null,
-        decided_by: performerId || null,
-        decided_at: new Date().toISOString(),
-      })
-      .eq('id', itemId)
-      .select()
-      .single();
-
-    if (!error && data) {
-      await logActivity({
-        assetId,
-        actionType: decision === 'approved' ? 'Phê duyệt YC' : 'Từ chối YC',
-        description: `Kết quả phê duyệt: ${decision === 'approved' ? 'Chấp thuận' : 'Từ chối'}. Ghi chú: ${notes || 'Không'}`,
-      });
-      return data;
+  if (isSupabaseConfigured) {
+    // Call secure RPC
+    const { error } = await supabase.rpc('decide_transaction_item', {
+      p_item_id: itemId,
+      p_status: decision,
+      p_notes: notes || null,
+      p_details: details,
+      p_voucher_code: generatedVoucher || null
+    });
+    
+    if (error) {
+      console.error('RPC decide_transaction_item failed:', error);
+      throw error;
     }
-  } catch (err) {
-    console.warn('Supabase decideTransactionItem error, updating mockStore:', err);
-  }
+  } else {
+    // Local mock store logic
+    if (decision === 'approved') {
+      const assetUpdates: Record<string, any> = {};
 
-  const txs = mockStore.getTransactions();
-  const updatedTxs = txs.map(tx => ({
-    ...tx,
-    items: (tx.items || []).map((i: any) => {
-      if (i.id === itemId) {
-        return {
-          ...i,
-          status: decision,
-          decision_notes: notes || undefined,
-          decided_at: new Date().toISOString(),
-        };
+      if (itemType === 'checkout') {
+        assetUpdates.custody_status = 'checked_out';
+        if (details.department) assetUpdates.current_holder_dept = details.department;
+        if (details.returnDate) assetUpdates.expected_return_date = details.returnDate;
+        if (details.reason) assetUpdates.borrow_purpose = details.reason;
+        if (details.targetWarehouseId) assetUpdates.warehouse_id = details.targetWarehouseId;
+        await updateAsset(assetId, assetUpdates);
+      } else if (itemType === 'checkin') {
+        assetUpdates.custody_status = 'in_stock';
+        assetUpdates.current_holder_dept = null;
+        assetUpdates.expected_return_date = null;
+        assetUpdates.borrow_purpose = null;
+        await updateAsset(assetId, assetUpdates);
+      } else if (itemType === 'mortgage') {
+        assetUpdates.mortgage_status = 'mortgaged';
+        if (details.bank) assetUpdates.mortgage_bank = details.bank;
+        if (details.borrower) assetUpdates.mortgage_unit = details.borrower;
+        if (details.valuation) assetUpdates.mortgage_valuation = Number(details.valuation);
+        if (details.releaseDate) assetUpdates.mortgage_expected_release_date = details.releaseDate;
+        await updateAsset(assetId, assetUpdates);
+      } else if (itemType === 'sale_update') {
+        if (details.saleStatus) assetUpdates.sale_status = details.saleStatus;
+        await updateAsset(assetId, assetUpdates);
+      } else if (itemType === 'split') {
+        const splitType = details.splitType || 'full';
+        
+        if (splitType === 'reissue') {
+          // CẤP ĐỔI / CẤP LẠI SỔ
+          assetUpdates.lifecycle_status = 'invalidated';
+          assetUpdates.notes = `${currentAsset?.notes ? currentAsset.notes + ' | ' : ''}Đã cấp đổi sang GCN mới: ${details.newCertificateNo || ''} (Lý do: ${details.reissueReason || ''})`;
+          await updateAsset(assetId, assetUpdates);
+
+          if (details.newCertificateNo) {
+            const reissuedAssetData = {
+              certificate_no: details.newCertificateNo,
+              registry_no: details.newRegistryNo || currentAsset?.registry_no || null,
+              project_id: currentAsset?.project_id || null,
+              subdivision: currentAsset?.subdivision || null,
+              lot_no: currentAsset?.lot_no || null,
+              area: currentAsset?.area || null,
+              owner_name: currentAsset?.owner_name || null,
+              warehouse_id: currentAsset?.warehouse_id || null,
+              parent_asset_id: assetId,
+              custody_status: 'in_stock' as any,
+              lifecycle_status: 'active' as any,
+              sale_status: currentAsset?.sale_status || 'not_ready',
+              mortgage_status: currentAsset?.mortgage_status || 'none',
+              map_sheet_no: currentAsset?.map_sheet_no || null,
+              land_lot_no: currentAsset?.land_lot_no || null,
+              province: currentAsset?.province || null,
+              district: currentAsset?.district || null,
+              ward: currentAsset?.ward || null,
+              address_detail: currentAsset?.address_detail || null,
+              usage_purpose: currentAsset?.usage_purpose || null,
+              asset_type: currentAsset?.asset_type || null,
+              managing_unit: currentAsset?.managing_unit || null,
+              notes: `Cấp đổi từ GCN gốc: ${currentAsset?.certificate_no || ''}`,
+            };
+            await createAsset(reissuedAssetData);
+          }
+        } else if (splitType === 'partial') {
+          // TÁCH MỘT PHẦN: SỔ MẸ VẪN CÒN HIỆU LỰC (ACTIVE), GIẢM DIỆN TÍCH
+          const totalSplitArea = (details.splitChildren || []).reduce((sum: number, c: any) => sum + (Number(c.area) || 0), 0);
+          const remainingArea = Math.max(0, (currentAsset?.area || 0) - totalSplitArea);
+
+          assetUpdates.lifecycle_status = 'active';
+          assetUpdates.custody_status = 'in_stock';
+          assetUpdates.area = remainingArea;
+          assetUpdates.notes = `${currentAsset?.notes ? currentAsset.notes + ' | ' : ''}Đã trích tách một phần (${totalSplitArea.toLocaleString('vi-VN')} m² theo QĐ ${details.decisionNo || ''}). Diện tích còn lại: ${remainingArea.toLocaleString('vi-VN')} m²`;
+          await updateAsset(assetId, assetUpdates);
+
+          if (Array.isArray(details.splitChildren)) {
+            for (const child of details.splitChildren) {
+              if (!child.certificate_no) continue;
+              const childAssetData = {
+                certificate_no: child.certificate_no,
+                project_id: currentAsset?.project_id || null,
+                subdivision: child.subdivision || currentAsset?.subdivision || null,
+                lot_no: child.land_lot_no || currentAsset?.lot_no || null,
+                area: child.area ? Number(child.area) : null,
+                owner_name: currentAsset?.owner_name || null,
+                warehouse_id: currentAsset?.warehouse_id || null,
+                parent_asset_id: assetId,
+                custody_status: 'in_stock' as any,
+                lifecycle_status: 'active' as any,
+                sale_status: 'not_ready' as any,
+                mortgage_status: 'none' as any,
+                map_sheet_no: currentAsset?.map_sheet_no || null,
+                land_lot_no: child.land_lot_no || currentAsset?.land_lot_no || null,
+                province: currentAsset?.province || null,
+                district: currentAsset?.district || null,
+                ward: currentAsset?.ward || null,
+                address_detail: currentAsset?.address_detail || null,
+                usage_purpose: currentAsset?.usage_purpose || null,
+                asset_type: currentAsset?.asset_type || null,
+                managing_unit: currentAsset?.managing_unit || null,
+                notes: `Tách từ GCN gốc: ${currentAsset?.certificate_no || ''} theo QĐ ${details.decisionNo || ''}`,
+              };
+              await createAsset(childAssetData);
+            }
+          }
+        } else {
+          // TÁCH TOÀN BỘ: SỔ CŨ HẾT HIỆU LỰC (INVALIDATED)
+          assetUpdates.lifecycle_status = 'invalidated';
+          assetUpdates.custody_status = 'in_stock';
+          assetUpdates.notes = `${currentAsset?.notes ? currentAsset.notes + ' | ' : ''}Đã tách toàn bộ thành ${(details.splitChildren || []).length} sổ con theo QĐ ${details.decisionNo || ''}`;
+          await updateAsset(assetId, assetUpdates);
+
+          if (Array.isArray(details.splitChildren)) {
+            for (const child of details.splitChildren) {
+              if (!child.certificate_no) continue;
+              const childAssetData = {
+                certificate_no: child.certificate_no,
+                project_id: currentAsset?.project_id || null,
+                subdivision: child.subdivision || currentAsset?.subdivision || null,
+                lot_no: child.land_lot_no || currentAsset?.lot_no || null,
+                area: child.area ? Number(child.area) : null,
+                owner_name: currentAsset?.owner_name || null,
+                warehouse_id: currentAsset?.warehouse_id || null,
+                parent_asset_id: assetId,
+                custody_status: 'in_stock' as any,
+                lifecycle_status: 'active' as any,
+                sale_status: 'not_ready' as any,
+                mortgage_status: 'none' as any,
+                map_sheet_no: currentAsset?.map_sheet_no || null,
+                land_lot_no: child.land_lot_no || currentAsset?.land_lot_no || null,
+                province: currentAsset?.province || null,
+                district: currentAsset?.district || null,
+                ward: currentAsset?.ward || null,
+                address_detail: currentAsset?.address_detail || null,
+                usage_purpose: currentAsset?.usage_purpose || null,
+                asset_type: currentAsset?.asset_type || null,
+                managing_unit: currentAsset?.managing_unit || null,
+                notes: `Tách từ GCN gốc: ${currentAsset?.certificate_no || ''} theo QĐ ${details.decisionNo || ''}`,
+              };
+              await createAsset(childAssetData);
+            }
+          }
+        }
       }
-      return i;
-    }),
-  }));
-  mockStore.saveTransactions(updatedTxs);
+    }
 
-  await logActivity({
-    assetId,
-    actionType: decision === 'approved' ? 'Phê duyệt YC' : 'Từ chối YC',
-    description: `Kết quả phê duyệt: ${decision === 'approved' ? 'Chấp thuận' : 'Từ chối'}. Ghi chú: ${notes || 'Không'}`,
-  });
+    const txs = mockStore.getTransactions();
+    const updatedTxs = txs.map(tx => ({
+      ...tx,
+      items: (tx.items || []).map((i: any) => {
+        if (i.id === itemId) {
+          return {
+            ...i,
+            status: decision,
+            details: details,
+            voucher_code: generatedVoucher || undefined,
+            decision_notes: notes || undefined,
+            decided_at: new Date().toISOString(),
+          };
+        }
+        return i;
+      }),
+    }));
+    mockStore.saveTransactions(updatedTxs);
+  }
+
+  // Activity Logging (happens for both Supabase and Mock modes because logActivity handles both internally)
+  if (decision === 'approved') {
+    if (itemType === 'checkout') {
+      await logActivity({
+        assetId, actionType: 'Mượn/Xuất sổ', documentNo: generatedVoucher,
+        description: `Xuất sổ cho ${details.department || 'Ban/Bộ phận'}. Lý do: ${details.reason || 'Mượn xử lý công việc'}`,
+        usedBy: details.department || 'Bộ phận sử dụng', warehouseId: currentWarehouse?.id, notes: notes || undefined, performedBy: performerId,
+      });
+    } else if (itemType === 'checkin') {
+      await logActivity({
+        assetId, actionType: 'Nhập sổ', documentNo: generatedVoucher,
+        description: `Nhập lưu kho GCN QSDĐ về kho ${currentWarehouse?.name || 'Trung tâm'}`,
+        usedBy: 'BTC VMT', warehouseId: currentWarehouse?.id, notes: notes || undefined, performedBy: performerId,
+      });
+    } else if (itemType === 'mortgage') {
+      await logActivity({
+        assetId, actionType: 'Thế chấp', documentNo: generatedVoucher,
+        description: `Thế chấp tại ${details.bank || 'Ngân hàng'}. Đơn vị: ${details.borrower || '-'}. Định giá: ${details.valuation ? Number(details.valuation).toLocaleString('vi-VN') + ' VNĐ' : '-'}`,
+        usedBy: details.bank || 'Ngân hàng nhận thế chấp', warehouseId: currentWarehouse?.id, notes: notes || undefined, performedBy: performerId,
+      });
+    } else if (itemType === 'sale_update') {
+      await logActivity({
+        assetId, actionType: 'Xuất bán', documentNo: generatedVoucher,
+        description: `Chuyển trạng thái kinh doanh sang: ${details.saleStatus === 'sold' ? 'Đã bán' : 'Sẵn sàng bán'}. Giá: ${details.salePrice ? Number(details.salePrice).toLocaleString('vi-VN') + ' VNĐ' : 'Chưa nhập'}`,
+        usedBy: 'Khách hàng / Ban KD', warehouseId: currentWarehouse?.id, notes: notes || undefined, performedBy: performerId,
+      });
+    } else if (itemType === 'split') {
+      const splitType = details.splitType || 'full';
+      if (splitType === 'reissue') {
+        await logActivity({
+          assetId, actionType: 'Cấp đổi GCN (Thu hồi sổ cũ)', documentNo: generatedVoucher,
+          description: `Thu hồi GCN cũ ${currentAsset?.certificate_no || ''} để cấp đổi sang GCN mới ${details.newCertificateNo || ''}. Lý do: ${details.reissueReason || 'Cấp đổi theo quy định'}`,
+          usedBy: 'Ban DAĐT / Văn phòng ĐKĐĐ', warehouseId: currentWarehouse?.id, notes: notes || undefined, performedBy: performerId,
+        });
+      } else if (splitType === 'partial') {
+        const totalSplitArea = (details.splitChildren || []).reduce((sum: number, c: any) => sum + (Number(c.area) || 0), 0);
+        await logActivity({
+          assetId, actionType: 'Tách sổ (Trích 1 phần)', documentNo: generatedVoucher,
+          description: `Trích tách ${details.splitChildren?.length || 0} sổ con (${totalSplitArea.toLocaleString('vi-VN')} m²) theo QĐ ${details.decisionNo || ''}. Diện tích còn lại của sổ gốc: ${(details.remainingArea || 0).toLocaleString('vi-VN')} m²`,
+          usedBy: 'Ban DAĐT / Văn phòng ĐKĐĐ', warehouseId: currentWarehouse?.id, notes: details.splitNotes || notes || undefined, performedBy: performerId,
+        });
+      } else {
+        await logActivity({
+          assetId, actionType: 'Tách sổ (Toàn bộ)', documentNo: generatedVoucher,
+          description: `Tách toàn bộ sổ gốc ${currentAsset?.certificate_no || ''} thành ${details.splitChildren?.length || 0} sổ con theo QĐ ${details.decisionNo || ''} (Sổ gốc hết hiệu lực)`,
+          usedBy: 'Ban DAĐT / Văn phòng ĐKĐĐ', warehouseId: currentWarehouse?.id, notes: details.splitNotes || notes || undefined, performedBy: performerId,
+        });
+      }
+    }
+  } else {
+    await logActivity({
+      assetId, actionType: 'Từ chối YC',
+      description: `Yêu cầu (${itemType}) bị từ chối. Lý do/Ghi chú: ${notes || 'Không'}`,
+      performedBy: performerId,
+    });
+  }
 
   return targetItem;
 }

@@ -1,7 +1,10 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 
 export async function fetchActivityLogs(params?: any): Promise<any[]> {
+  if (!isSupabaseConfigured) {
+    return mockStore.getLogs(params);
+  }
   const assetId = typeof params === 'string' ? params : params?.assetId;
   const actionType = typeof params === 'object' ? params?.actionType : undefined;
 

@@ -1,7 +1,11 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 
 export async function generateDemoData() {
+  if (!isSupabaseConfigured) {
+    mockStore.resetDemoData();
+    return;
+  }
   try {
     // Attempt Supabase seeding
     const { data: region, error: rErr } = await supabase

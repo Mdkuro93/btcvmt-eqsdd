@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, FileText, CheckCircle, AlertTriangle, Loader2, X } from 'lucide-react';
-import { fetchProjects, importAssets } from '../api/assets';
+import { fetchProjects, importAssets, checkDuplicateAssets } from '../api/assets';
 import { useAuth } from '../contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -13,6 +13,7 @@ export const Import: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     loadProjects();
@@ -57,7 +58,7 @@ export const Import: React.FC = () => {
     setLoading(true);
     
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
@@ -108,11 +109,26 @@ export const Import: React.FC = () => {
             sale_status: 'not_ready',
             mortgage_status: 'none',
             hasError,
-            errorMessage
+            errorMessage,
+            isDuplicate: false,
           };
         });
 
-        setParsedData(mappedData);
+        const certNos = mappedData.map(d => d.certificate_no).filter(Boolean);
+        const duplicates = await checkDuplicateAssets(certNos);
+        const duplicateSet = new Set(duplicates);
+
+        const finalData = mappedData.map(d => {
+          if (!d.hasError && d.certificate_no && duplicateSet.has(d.certificate_no)) {
+            return {
+              ...d,
+              isDuplicate: true
+            };
+          }
+          return d;
+        });
+
+        setParsedData(finalData);
       } catch (err) {
         toast.error('Lỗi khi đọc file Excel. Vui lòng kiểm tra lại định dạng.');
         console.error(err);
@@ -134,33 +150,46 @@ export const Import: React.FC = () => {
 
   const handleImport = async () => {
     if (parsedData.length === 0) return;
-    const validData = parsedData.filter(d => !d.hasError);
+    const validData = parsedData.filter(d => !d.hasError && !d.isDuplicate);
     if (validData.length === 0) {
       toast.error('Không có dữ liệu hợp lệ để import');
       return;
     }
 
     setIsImporting(true);
+    setImportProgress({ current: 0, total: validData.length });
+    let imported = 0;
     try {
       // Remove display-only fields before sending to DB
       const dbData = validData.map(d => {
-        const { _originalRow, projectName, hasError, errorMessage, ...rest } = d;
+        const { _originalRow, projectName, hasError, errorMessage, isDuplicate, ...rest } = d;
         return rest;
       });
 
-      await importAssets(dbData);
-      toast.success(`Đã import thành công ${dbData.length} GCN!`);
+      const batchSize = 500;
+      for (let i = 0; i < dbData.length; i += batchSize) {
+        const batch = dbData.slice(i, i + batchSize);
+        await importAssets(batch);
+        imported += batch.length;
+        setImportProgress({ current: imported, total: dbData.length });
+        
+        // Small delay to allow UI to update if on mockStore
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      toast.success(`Đã import thành công ${imported} GCN!`);
       clearData();
     } catch (error: any) {
       console.error(error);
-      toast.error('Lỗi khi import dữ liệu: ' + error.message);
+      toast.error(`Lỗi lô dữ liệu: ${error.message}. Đã nhập thành công ${imported}/${validData.length} dòng.`);
     } finally {
       setIsImporting(false);
     }
   };
 
-  const validCount = parsedData.filter(d => !d.hasError).length;
+  const validCount = parsedData.filter(d => !d.hasError && !d.isDuplicate).length;
   const invalidCount = parsedData.filter(d => d.hasError).length;
+  const duplicateCount = parsedData.filter(d => !d.hasError && d.isDuplicate).length;
 
   return (
     <div className="space-y-6">
@@ -224,7 +253,7 @@ export const Import: React.FC = () => {
               <div>
                 <h3 className="text-sm font-medium text-gray-900">{file.name}</h3>
                 <p className="text-xs text-gray-500">
-                  Tổng số dòng dữ liệu: {parsedData.length} | Hợp lệ: <span className="text-green-600 font-semibold">{validCount}</span> | Lỗi: <span className="text-red-600 font-semibold">{invalidCount}</span>
+                  Tổng số dòng: {parsedData.length} | Hợp lệ: <span className="text-green-600 font-semibold">{validCount}</span> | Trùng lặp: <span className="text-amber-600 font-semibold">{duplicateCount}</span> | Lỗi: <span className="text-red-600 font-semibold">{invalidCount}</span>
                 </p>
               </div>
             </div>
@@ -252,12 +281,17 @@ export const Import: React.FC = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {parsedData.map((row, idx) => (
-                    <tr key={idx} className={row.hasError ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                    <tr key={idx} className={row.hasError ? 'bg-red-50' : row.isDuplicate ? 'bg-amber-50' : 'hover:bg-gray-50'}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {row.hasError ? (
                           <div className="flex items-center text-red-600" title={row.errorMessage}>
                             <AlertTriangle className="h-4 w-4 mr-1" />
                             <span className="text-xs">{row.errorMessage}</span>
+                          </div>
+                        ) : row.isDuplicate ? (
+                          <div className="flex items-center text-amber-600" title="GCN đã tồn tại trên hệ thống, sẽ bị bỏ qua">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            <span className="text-xs">Đã tồn tại</span>
                           </div>
                         ) : (
                           <div className="flex items-center text-green-600">
@@ -277,7 +311,10 @@ export const Import: React.FC = () => {
               </table>
             </div>
             
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-end">
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-sm font-medium text-blue-700">
+                {isImporting ? `Đang nhập lô dữ liệu... ${importProgress.current}/${importProgress.total} dòng` : ''}
+              </div>
               <button
                 onClick={handleImport}
                 disabled={validCount === 0 || isImporting}
