@@ -2,6 +2,23 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Asset, Region, Area, Warehouse, Project } from '../types';
 import { generateNextAssetCode, resolveRegionCode } from '../lib/assetIdentifier';
+import { createAuditLog } from './auditLogs';
+
+function getDifferences(oldData: Record<string, any>, newData: Record<string, any>): { oldDiff: Record<string, any>; newDiff: Record<string, any> } {
+  const oldDiff: Record<string, any> = {};
+  const newDiff: Record<string, any> = {};
+
+  for (const key of Object.keys(newData)) {
+    if (key === 'projects' || key === 'warehouses' || key === 'updater' || key === 'updated_at' || key === 'updated_by' || key === 'created_at') continue;
+    const oldVal = oldData[key] !== undefined ? oldData[key] : null;
+    const newVal = newData[key] !== undefined ? newData[key] : null;
+    if (oldVal !== newVal) {
+      oldDiff[key] = oldVal;
+      newDiff[key] = newVal;
+    }
+  }
+  return { oldDiff, newDiff };
+}
 
 export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promise<{ data: Asset[], totalCount: number }> {
   if (!isSupabaseConfigured) {
@@ -12,36 +29,146 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     return { data, totalCount };
   }
   try {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    // Optimized select - Only fetch needed relational attributes
     let query = supabase.from('assets').select(`
-      *,
-      projects(name, areas(name, region_id, regions(name))),
-      warehouses(name, is_central, regions(name))
-    `);
+      id, asset_code, collateral_type, certificate_no, subdivision, lot_no, area,
+      owner_name, map_sheet_no, land_lot_no, province, district, ward, address_detail,
+      business_project_name, business_plot_code,
+      land_use_purpose, land_use_term, custody_status, lifecycle_status, sale_status,
+      mortgage_status, mortgage_bank, mortgage_unit, mortgage_bank_2, mortgage_unit_2,
+      mortgage_valuation, collateral_ratio, collateral_value, mortgage_expected_release_date,
+      expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,
+      current_holder_dept, notes, asset_type, registry_no, registry_date, managing_unit,
+      certificate_group, usage_term_type, usage_term_date, parent_asset_id, created_at,
+      updated_at, updated_by,
+      updater:profiles!updated_by(id, full_name, email),
+      projects:projects(name, areas(name, region_id, regions(name))),
+      warehouses:warehouses(name, code, region_code, is_central, regions(name))
+    `, { count: 'exact' });
 
     if (filters) {
       if (filters.search) {
-        query = query.or(`certificate_no.ilike.%${filters.search}%,subdivision.ilike.%${filters.search}%,owner_name.ilike.%${filters.search}%`);
+        const s = filters.search.trim();
+        query = query.or(`certificate_no.ilike.%${s}%,asset_code.ilike.%${s}%,subdivision.ilike.%${s}%,lot_no.ilike.%${s}%,owner_name.ilike.%${s}%,business_project_name.ilike.%${s}%,business_plot_code.ilike.%${s}%`);
       }
+      if (filters.collateralType) query = query.eq('collateral_type', filters.collateralType);
       if (filters.projectId) query = query.eq('project_id', filters.projectId);
-      if (filters.custodyStatus) query = query.eq('custody_status', filters.custodyStatus);
-      if (filters.lifecycleStatus) query = query.eq('lifecycle_status', filters.lifecycleStatus);
-      if (filters.saleStatus) query = query.eq('sale_status', filters.saleStatus);
-      if (filters.mortgageStatus) query = query.eq('mortgage_status', filters.mortgageStatus);
+      
+      const custody = filters.custodyStatus || filters.custody_status;
+      if (custody) query = query.eq('custody_status', custody);
+      
+      const lifecycle = filters.lifecycleStatus || filters.lifecycle_status;
+      if (lifecycle) query = query.eq('lifecycle_status', lifecycle);
+      
+      const sale = filters.saleStatus || filters.sale_status;
+      if (sale) query = query.eq('sale_status', sale);
+      
+      const mortgage = filters.mortgageStatus || filters.mortgage_status;
+      if (mortgage) query = query.eq('mortgage_status', mortgage);
+      
       if (filters.warehouseId) query = query.eq('warehouse_id', filters.warehouseId);
-      if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision}%`);
+      if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision.trim()}%`);
     }
 
-    const { data, error } = await query;
+    // Apply Server-side Sort & Range Pagination
+    query = query.order('created_at', { ascending: false }).range(from, to);
+
+    const { data, count, error } = await query;
     if (error) throw error;
-    const resultData = data || [];
-    return { data: resultData, totalCount: resultData.length };
+    
+    return { 
+      data: (data || []) as unknown as Asset[], 
+      totalCount: count ?? (data?.length || 0) 
+    };
   } catch (err) {
-    console.warn('Supabase fetchAssets error, using mockStore:', err);
+    console.warn('Supabase fetchAssets error, using mockStore fallback:', err);
     const allFiltered = mockStore.getAssets(filters);
     const totalCount = allFiltered.length;
     const startIndex = (page - 1) * pageSize;
     const data = allFiltered.slice(startIndex, startIndex + pageSize);
     return { data, totalCount };
+  }
+}
+
+/**
+ * Ultra-lightweight query for checking duplicate records and generating sequential asset codes
+ * Avoids downloading heavy relations, files, and addresses (<5KB vs 5MB).
+ */
+export async function fetchAssetIdentifierCandidates(projectId?: string): Promise<Asset[]> {
+  if (!isSupabaseConfigured) {
+    return mockStore.getAssets();
+  }
+  try {
+    let query = supabase.from('assets').select(`
+      id, asset_code, collateral_type, certificate_no, project_id,
+      subdivision, lot_no, map_sheet_no, land_lot_no, lifecycle_status,
+      business_project_name, business_plot_code,
+      warehouse_id, created_at, projects(name)
+    `).order('created_at', { ascending: false }).limit(2000);
+
+    if (projectId) {
+      query = query.eq('project_id', projectId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []) as unknown as Asset[];
+  } catch (err) {
+    console.warn('Supabase fetchAssetIdentifierCandidates error, using mockStore:', err);
+    return mockStore.getAssets();
+  }
+}
+
+/**
+ * Lightweight Dashboard stats aggregator
+ */
+export async function fetchDashboardAssetStats(): Promise<{
+  total: number;
+  inStock: number;
+  checkedOut: number;
+  mortgaged: number;
+  sold: number;
+}> {
+  if (!isSupabaseConfigured) {
+    const assets = mockStore.getAssets();
+    return {
+      total: assets.length,
+      inStock: assets.filter(a => a.custody_status === 'in_stock').length,
+      checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
+      mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
+      sold: assets.filter(a => a.sale_status === 'sold').length,
+    };
+  }
+  try {
+    // Perform fast count queries in parallel
+    const [totalRes, inStockRes, checkedOutRes, mortgagedRes, soldRes] = await Promise.all([
+      supabase.from('assets').select('*', { count: 'exact', head: true }),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'in_stock'),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'checked_out'),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('mortgage_status', 'mortgaged'),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('sale_status', 'sold'),
+    ]);
+
+    return {
+      total: totalRes.count || 0,
+      inStock: inStockRes.count || 0,
+      checkedOut: checkedOutRes.count || 0,
+      mortgaged: mortgagedRes.count || 0,
+      sold: soldRes.count || 0,
+    };
+  } catch (err) {
+    console.warn('Supabase fetchDashboardAssetStats error, fallback:', err);
+    const assets = mockStore.getAssets();
+    return {
+      total: assets.length,
+      inStock: assets.filter(a => a.custody_status === 'in_stock').length,
+      checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
+      mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
+      sold: assets.filter(a => a.sale_status === 'sold').length,
+    };
   }
 }
 
@@ -165,6 +292,8 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     certificate_group: assetData.certificate_group || null,
     subdivision: assetData.subdivision || null,
     lot_no: assetData.lot_no || null,
+    business_project_name: assetData.business_project_name?.trim() || null,
+    business_plot_code: assetData.business_plot_code?.trim() || null,
     area: assetData.area || 0,
     owner_name: assetData.owner_name || 'Công ty Cổ phần Đầu tư VMT',
     
@@ -229,30 +358,279 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
   }
 }
 
-export async function updateAsset(id: string, updates: Partial<Asset>): Promise<Asset> {
+export async function updateAsset(
+  id: string, 
+  updates: Partial<Asset>, 
+  user?: { id?: string; email?: string; full_name?: string } | null,
+  notes?: string
+): Promise<Asset> {
+  const currentAsset = (isSupabaseConfigured 
+    ? (await supabase.from('assets').select('*').eq('id', id).single()).data 
+    : mockStore.getAssets().find(a => a.id === id)) || {};
+
+  const payload = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+    updated_by: user?.id || null,
+  };
+
+  const { oldDiff, newDiff } = getDifferences(currentAsset, payload);
+
+  let updatedAsset: Asset;
+
   if (!isSupabaseConfigured) {
     const current = mockStore.getAssets();
-    const updatedList = current.map(a => (a.id === id ? { ...a, ...updates } : a));
+    const updatedList = current.map(a => (a.id === id ? { ...a, ...payload } : a));
     mockStore.saveAssets(updatedList);
-    return mockStore.getAssets().find(a => a.id === id)!;
-  }
-  try {
-    const { data, error } = await supabase
-      .from('assets')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    updatedAsset = mockStore.getAssets().find(a => a.id === id)!;
+  } else {
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn('Supabase updateAsset error, updating in mockStore:', err);
-    const current = mockStore.getAssets();
-    const updatedList = current.map(a => (a.id === id ? { ...a, ...updates } : a));
-    mockStore.saveAssets(updatedList);
-    return mockStore.getAssets().find(a => a.id === id)!;
+      if (error) throw error;
+      updatedAsset = data;
+    } catch (err) {
+      console.warn('Supabase updateAsset error, updating in mockStore:', err);
+      const current = mockStore.getAssets();
+      const updatedList = current.map(a => (a.id === id ? { ...a, ...payload } : a));
+      mockStore.saveAssets(updatedList);
+      updatedAsset = mockStore.getAssets().find(a => a.id === id)!;
+    }
   }
+
+  // Create audit log entry
+  if (Object.keys(newDiff).length > 0) {
+    try {
+      await createAuditLog({
+        record_id: id,
+        action: 'UPDATE',
+        old_data: oldDiff,
+        new_data: newDiff,
+        changed_by: user?.id || null,
+        changed_by_name: user?.full_name || user?.email || 'Người dùng hệ thống',
+        notes: notes || 'Chỉnh sửa thông tin GCN',
+      });
+    } catch (e) {
+      console.warn('Could not record audit log:', e);
+    }
+  }
+
+  return updatedAsset;
+}
+
+export async function bulkUpdateAssets(
+  ids: string[],
+  updates: Partial<Asset>,
+  user?: { id?: string; email?: string; full_name?: string } | null,
+  notes?: string
+): Promise<{ count: number }> {
+  if (!ids.length) return { count: 0 };
+
+  const payload: any = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+    updated_by: user?.id || null,
+  };
+
+  // Clean undefined
+  Object.keys(payload).forEach(k => {
+    if (payload[k] === undefined) delete payload[k];
+  });
+
+  const allAssets = isSupabaseConfigured
+    ? (await supabase.from('assets').select('*').in('id', ids)).data || []
+    : mockStore.getAssets().filter(a => ids.includes(a.id));
+
+  if (!isSupabaseConfigured) {
+    const current = mockStore.getAssets();
+    const updatedList = current.map(a => {
+      if (ids.includes(a.id)) {
+        return { ...a, ...payload };
+      }
+      return a;
+    });
+    mockStore.saveAssets(updatedList);
+  } else {
+    try {
+      const { error } = await supabase
+        .from('assets')
+        .update(payload)
+        .in('id', ids);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('Supabase bulkUpdateAssets error, updating in mockStore:', err);
+      const current = mockStore.getAssets();
+      const updatedList = current.map(a => {
+        if (ids.includes(a.id)) {
+          return { ...a, ...payload };
+        }
+        return a;
+      });
+      mockStore.saveAssets(updatedList);
+    }
+  }
+
+  // Record audit logs for each affected asset
+  for (const oldA of allAssets) {
+    const { oldDiff, newDiff } = getDifferences(oldA, payload);
+    if (Object.keys(newDiff).length > 0) {
+      try {
+        await createAuditLog({
+          record_id: oldA.id,
+          action: 'BULK_UPDATE',
+          old_data: oldDiff,
+          new_data: newDiff,
+          changed_by: user?.id || null,
+          changed_by_name: user?.full_name || user?.email || 'Người dùng hệ thống',
+          notes: notes || `Cập nhật hàng loạt (${ids.length} tài sản)`,
+        });
+      } catch (e) {
+        console.warn('Could not record bulk audit log for:', oldA.id, e);
+      }
+    }
+  }
+
+  return { count: ids.length };
+}
+
+export async function importExcelAndUpdateAssets(
+  rows: any[],
+  user?: { id?: string; email?: string; full_name?: string } | null,
+  mode: 'update_or_create' | 'update_only' | 'create_only' = 'update_or_create'
+): Promise<{ updatedCount: number; createdCount: number; errors: string[] }> {
+  const currentAssets = isSupabaseConfigured 
+    ? (await supabase.from('assets').select('*')).data || []
+    : mockStore.getAssets();
+
+  const projects = await fetchProjects();
+  const warehouses = await fetchWarehouses();
+
+  let updatedCount = 0;
+  let createdCount = 0;
+  const errors: string[] = [];
+
+  for (const row of rows) {
+    try {
+      const matchId = (row.id || row['ID Hệ Thống'] || '').toString().trim();
+      const matchAssetCode = (row.asset_code || row['Mã Tài Sản / TSĐB'] || row['Mã Tài Sản'] || '').toString().trim();
+      const matchCertNo = (row.certificate_no || row['Số GCN QSDĐ'] || row['Số GCN'] || row['Số sổ'] || '').toString().trim();
+
+      const existing = currentAssets.find(a => 
+        (matchId && a.id === matchId) ||
+        (matchAssetCode && a.asset_code === matchAssetCode) ||
+        (matchCertNo && a.certificate_no?.trim().toLowerCase() === matchCertNo.toLowerCase())
+      );
+
+      // Match project
+      const projName = row.project_name || row['Dự Án (Pháp lý)'] || row['Dự Án'] || row['Tên Dự Án'];
+      const matchedProj = projName ? projects.find(p => p.name.toLowerCase() === projName.toString().trim().toLowerCase()) : null;
+
+      // Match warehouse
+      const whName = row.warehouse_name || row['Kho Lưu Giữ'] || row['Kho'];
+      const matchedWh = whName ? warehouses.find(w => w.name.toLowerCase() === whName.toString().trim().toLowerCase()) : null;
+
+      const businessProjName = row.business_project_name || row['Tên Dự Án Kinh Doanh'] || row['Tên dự án kinh doanh'];
+      const businessPlot = row.business_plot_code || row['Mã Lô Kinh Doanh'] || row['Mã lô kinh doanh'];
+      const subdivision = row.subdivision || row['Phân Khu'] || row['Phân khu'];
+      const lotNo = row.lot_no || row['Số Lô / Thửa (Mã Lô Pháp Lý)'] || row['Số Lô'] || row['Mã lô'];
+      const landLotNo = row.land_lot_no || row['Số Thửa Bản Đồ'] || row['Số Thửa'] || row['Số thửa'];
+      const mapSheetNo = row.map_sheet_no || row['Số Tờ Bản Đồ'] || row['Số Tờ'] || row['Số tờ'];
+      const rawArea = row.area !== undefined ? row.area : (row['Diện Tích (m²)'] !== undefined ? row['Diện Tích (m²)'] : row['Diện tích (m2)']);
+      const area = rawArea !== undefined && rawArea !== '' ? Number(rawArea) : undefined;
+      const ownerName = row.owner_name || row['Chủ Sở Hữu'] || row['Chủ sở hữu'];
+      const assetType = row.asset_type || row['Loại Tài Sản'] || row['Loại tài sản'];
+      const usagePurpose = row.usage_purpose || row['Mục Đích Sử Dụng'] || row['Mục đích sử dụng'];
+
+      if (existing && mode !== 'create_only') {
+        const updates: Partial<Asset> = {
+          updated_at: new Date().toISOString(),
+          updated_by: user?.id || null,
+        };
+        if (businessProjName !== undefined && businessProjName !== '') updates.business_project_name = String(businessProjName).trim();
+        if (businessPlot !== undefined && businessPlot !== '') updates.business_plot_code = String(businessPlot).trim();
+        if (subdivision !== undefined && subdivision !== '') updates.subdivision = String(subdivision).trim();
+        if (lotNo !== undefined && lotNo !== '') updates.lot_no = String(lotNo).trim();
+        if (landLotNo !== undefined && landLotNo !== '') updates.land_lot_no = String(landLotNo).trim();
+        if (mapSheetNo !== undefined && mapSheetNo !== '') updates.map_sheet_no = String(mapSheetNo).trim();
+        if (area !== undefined && !isNaN(area)) updates.area = area;
+        if (ownerName !== undefined && ownerName !== '') updates.owner_name = String(ownerName).trim();
+        if (assetType !== undefined && assetType !== '') updates.asset_type = String(assetType).trim();
+        if (usagePurpose !== undefined && usagePurpose !== '') updates.usage_purpose = String(usagePurpose).trim();
+        if (matchedProj) updates.project_id = matchedProj.id;
+        if (matchedWh) updates.warehouse_id = matchedWh.id;
+
+        const { oldDiff, newDiff } = getDifferences(existing, updates);
+
+        if (Object.keys(newDiff).length > 0) {
+          if (!isSupabaseConfigured) {
+            const current = mockStore.getAssets();
+            mockStore.saveAssets(current.map(a => a.id === existing.id ? { ...a, ...updates } : a));
+          } else {
+            await supabase.from('assets').update(updates).eq('id', existing.id);
+          }
+
+          await createAuditLog({
+            record_id: existing.id,
+            action: 'IMPORT',
+            old_data: oldDiff,
+            new_data: newDiff,
+            changed_by: user?.id || null,
+            changed_by_name: user?.full_name || user?.email || 'Người dùng hệ thống',
+            notes: `Cập nhật thông tin từ file Excel (Khớp: ${matchCertNo || existing.certificate_no})`,
+          });
+          updatedCount++;
+        }
+      } else if (!existing && mode !== 'update_only') {
+        if (!matchCertNo) {
+          errors.push(`Bỏ qua dòng thiếu Số GCN QSDĐ`);
+          continue;
+        }
+
+        const newAssetData: Partial<Asset> = {
+          certificate_no: matchCertNo,
+          project_id: matchedProj?.id || null,
+          warehouse_id: matchedWh?.id || null,
+          business_project_name: businessProjName ? String(businessProjName).trim() : null,
+          business_plot_code: businessPlot ? String(businessPlot).trim() : null,
+          subdivision: subdivision ? String(subdivision).trim() : null,
+          lot_no: lotNo ? String(lotNo).trim() : null,
+          land_lot_no: landLotNo ? String(landLotNo).trim() : null,
+          map_sheet_no: mapSheetNo ? String(mapSheetNo).trim() : null,
+          area: area && !isNaN(area) ? area : null,
+          owner_name: ownerName ? String(ownerName).trim() : 'Công ty Cổ phần Đầu tư VMT',
+          asset_type: assetType ? String(assetType).trim() : 'Đất nền',
+          usage_purpose: usagePurpose ? String(usagePurpose).trim() : null,
+          custody_status: 'in_stock',
+          lifecycle_status: 'active',
+          sale_status: 'not_ready',
+          mortgage_status: 'none',
+          updated_at: new Date().toISOString(),
+          updated_by: user?.id || null,
+        };
+
+        const created = await createAsset(newAssetData);
+        await createAuditLog({
+          record_id: created.id,
+          action: 'CREATE',
+          old_data: null,
+          new_data: newAssetData,
+          changed_by: user?.id || null,
+          changed_by_name: user?.full_name || user?.email || 'Người dùng hệ thống',
+          notes: 'Khởi tạo mới từ file Excel',
+        });
+        createdCount++;
+      }
+    } catch (err: any) {
+      errors.push(`Dòng "${row['Số GCN QSDĐ'] || row.id || 'N/A'}": ${err.message}`);
+    }
+  }
+
+  return { updatedCount, createdCount, errors };
 }
 
 export async function checkDuplicateAssets(certificateNos: string[]): Promise<string[]> {
@@ -310,6 +688,8 @@ export async function importAssets(assetsData: any[]) {
       project_id: a.project_id || null,
       subdivision: a.subdivision || null,
       lot_no: a.lot_no || null,
+      business_project_name: a.business_project_name || null,
+      business_plot_code: a.business_plot_code || null,
       area: Number(a.area) || 0,
       owner_name: a.owner_name || 'Công ty Cổ phần Đầu tư VMT',
       asset_type: a.asset_type || 'Đất nền',

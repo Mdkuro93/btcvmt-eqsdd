@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAssets } from '../api/assets';
+import { fetchDashboardAssetStats } from '../api/assets';
 import { fetchTransactions } from '../api/transactions';
 import { generateDemoData } from '../api/demo';
 import { Asset } from '../types';
@@ -22,32 +22,27 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const Dashboard: React.FC = () => {
   const { profile } = useAuth();
-  const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingDemo, setGeneratingDemo] = useState(false);
   const [overdueSLA, setOverdueSLA] = useState(0);
+  const [stats, setStats] = useState({
+    total: 0,
+    inStock: 0,
+    checkedOut: 0,
+    mortgaged: 0,
+    sold: 0,
+  });
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    const channel = supabase.channel('dashboard_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, () => loadStats())
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await fetchAssets({}, 1, 10000);
-      setAssets(data || []);
+      const [assetStats, txs] = await Promise.all([
+        fetchDashboardAssetStats(),
+        fetchTransactions(),
+      ]);
 
-      const txs = await fetchTransactions();
+      setStats(assetStats);
+
       if (txs) {
         const now = new Date();
         let overdueCount = 0;
@@ -68,17 +63,30 @@ export const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const stats = useMemo(() => {
-    return {
-      total: assets.length,
-      inStock: assets.filter(a => a.custody_status === 'in_stock').length,
-      checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
-      mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
-      sold: assets.filter(a => a.sale_status === 'sold').length,
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  // Realtime subscription with debounce and single channel
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let timer: any = null;
+    const channel = supabase.channel('dashboard_stats_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          loadStats();
+        }, 1000);
+      })
+      .subscribe();
+
+    return () => {
+      clearTimeout(timer);
+      supabase.removeChannel(channel);
     };
-  }, [assets]);
+  }, [loadStats]);
 
   const handleGenerateDemo = async () => {
     setGeneratingDemo(true);

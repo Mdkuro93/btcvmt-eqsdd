@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, ShieldCheck, AlertTriangle, Building2, FileText, MapPin } from 'lucide-react';
 import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAssets } from '../api/assets';
+import { fetchAssetIdentifierCandidates } from '../api/assets';
 import { COLLATERAL_TYPES, PROPERTY_TYPES, resolveRegionCode, generateNextAssetCode, checkAssetDuplicate } from '../lib/assetIdentifier';
 import toast from 'react-hot-toast';
 
@@ -27,8 +27,10 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
   // Core Fields
   const [certificateNo, setCertificateNo] = useState('');
   const [projectId, setProjectId] = useState('');
+  const [businessProjectName, setBusinessProjectName] = useState('');
   const [subdivision, setSubdivision] = useState('');
   const [lotNo, setLotNo] = useState('');
+  const [businessPlotCode, setBusinessPlotCode] = useState('');
   const [area, setArea] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
@@ -68,14 +70,14 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
 
   useEffect(() => {
     if (isOpen) {
-      fetchAssets({}, 1, 5000)
-        .then(res => {
-          setAllAssets(res.data);
-          updateCode(res.data, projectId, collateralType, warehouseId);
+      fetchAssetIdentifierCandidates(projectId || undefined)
+        .then(candidates => {
+          setAllAssets(candidates);
+          updateCode(candidates, projectId, collateralType, warehouseId);
         })
         .catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, projectId]);
 
   const updateCode = (assetsList: Asset[], pId: string, cType: string, wId: string) => {
     const wh = warehouses.find(w => w.id === wId);
@@ -148,8 +150,10 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
         collateral_type: collateralType,
         certificate_no: certificateNo.trim(),
         project_id: projectId || null,
+        business_project_name: businessProjectName.trim() || null,
         subdivision: subdivision.trim() || null,
         lot_no: lotNo.trim() || null,
+        business_plot_code: businessPlotCode.trim() || null,
         area: area ? Number(area) : null,
         owner_name: ownerName.trim() || null,
         warehouse_id: warehouseId || null,
@@ -190,8 +194,10 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
       // Reset form
       setCertificateNo('');
       setProjectId('');
+      setBusinessProjectName('');
       setSubdivision('');
       setLotNo('');
+      setBusinessPlotCode('');
       setArea('');
       setOwnerName('');
       setWarehouseId('');
@@ -395,19 +401,33 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Dự Án</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Dự Án (Pháp lý)</label>
                 <select
                   value={projectId}
                   onChange={e => setProjectId(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 focus:ring-1 focus:ring-blue-500"
                 >
-                  <option value="">-- Chọn dự án --</option>
+                  <option value="">-- Chọn dự án pháp lý --</option>
                   {projects.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.name} {p.areas?.name ? `(${p.areas.name})` : ''}
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-blue-900 mb-1 flex items-center justify-between">
+                  <span>Tên Dự Án Kinh Doanh</span>
+                  <span className="text-[10px] text-blue-600 font-normal">Tên bán hàng</span>
+                </label>
+                <input
+                  type="text"
+                  value={businessProjectName}
+                  onChange={e => setBusinessProjectName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md text-xs border-blue-200 bg-blue-50/20 focus:ring-1 focus:ring-blue-500"
+                  placeholder="VD: Cồn Dầu, Spana, Cora..."
+                />
               </div>
 
               <div>
@@ -425,7 +445,7 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Số Lô / Thửa (Mã Lô)
+                  Số Lô / Thửa (Mã Lô Pháp Lý)
                 </label>
                 <input
                   type="text"
@@ -433,6 +453,20 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
                   onChange={e => setLotNo(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
                   placeholder="VD: Lô A-12, LK-04..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-blue-900 mb-1 flex items-center justify-between">
+                  <span>Mã Lô Kinh Doanh</span>
+                  <span className="text-[10px] text-blue-600 font-normal">Mã bán hàng</span>
+                </label>
+                <input
+                  type="text"
+                  value={businessPlotCode}
+                  onChange={e => setBusinessPlotCode(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md text-xs border-blue-200 bg-blue-50/20 focus:ring-1 focus:ring-blue-500"
+                  placeholder="VD: LK02-15, BT-VIP-08..."
                 />
               </div>
 

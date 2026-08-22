@@ -34,8 +34,10 @@ export const EditAssetModal: React.FC<Props> = ({
   const [certificateNo, setCertificateNo] = useState('');
   const [certificateGroup, setCertificateGroup] = useState<'so_lon' | 'so_nho'>('so_nho');
   const [projectId, setProjectId] = useState('');
+  const [businessProjectName, setBusinessProjectName] = useState('');
   const [subdivision, setSubdivision] = useState('');
   const [lotNo, setLotNo] = useState('');
+  const [businessPlotCode, setBusinessPlotCode] = useState('');
   const [area, setArea] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
@@ -86,8 +88,10 @@ export const EditAssetModal: React.FC<Props> = ({
       setCertificateNo(asset.certificate_no || '');
       setCertificateGroup(asset.certificate_group || 'so_nho');
       setProjectId(asset.project_id || '');
+      setBusinessProjectName(asset.business_project_name || '');
       setSubdivision(asset.subdivision || '');
       setLotNo(asset.lot_no || '');
+      setBusinessPlotCode(asset.business_plot_code || '');
       setArea(asset.area !== null && asset.area !== undefined ? String(asset.area) : '');
       setOwnerName(asset.owner_name || '');
       setWarehouseId(asset.warehouse_id || '');
@@ -185,8 +189,10 @@ export const EditAssetModal: React.FC<Props> = ({
         certificate_no: certificateNo.trim(),
         certificate_group: certificateGroup,
         project_id: projectId || null,
+        business_project_name: businessProjectName.trim() || null,
         subdivision: subdivision.trim() || null,
         lot_no: lotNo.trim() || null,
+        business_plot_code: businessPlotCode.trim() || null,
         area: area ? Number(area) : null,
         owner_name: ownerName.trim() || null,
         warehouse_id: warehouseId || null,
@@ -218,7 +224,12 @@ export const EditAssetModal: React.FC<Props> = ({
         notes: notes.trim() || null,
       };
 
-      await updateAsset(asset.id, updates);
+      await updateAsset(
+        asset.id, 
+        updates, 
+        profile ? { id: profile.id, email: profile.email, full_name: profile.full_name } : null,
+        notes || 'Chỉnh sửa cập nhật thông tin GCN'
+      );
 
       // Log activity
       await logActivity({
@@ -418,20 +429,34 @@ export const EditAssetModal: React.FC<Props> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Dự Án Trực Thuộc
+                  Dự Án Trực Thuộc (Pháp lý)
                 </label>
                 <select
                   value={projectId}
                   onChange={e => setProjectId(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 focus:ring-1 focus:ring-blue-500"
                 >
-                  <option value="">-- Chọn dự án --</option>
+                  <option value="">-- Chọn dự án pháp lý --</option>
                   {projects.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.name} {p.areas?.name ? `(${p.areas.name})` : ''}
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-blue-900 mb-1 flex items-center justify-between">
+                  <span>Tên Dự Án Kinh Doanh</span>
+                  <span className="text-[10px] text-blue-600 font-normal">Tên bán hàng</span>
+                </label>
+                <input
+                  type="text"
+                  value={businessProjectName}
+                  onChange={e => setBusinessProjectName(e.target.value)}
+                  placeholder="VD: Cồn Dầu, Spana, Cora..."
+                  className="w-full px-3 py-2 border rounded-md text-xs border-blue-200 bg-blue-50/20 focus:ring-1 focus:ring-blue-500"
+                />
               </div>
 
               <div>
@@ -449,7 +474,7 @@ export const EditAssetModal: React.FC<Props> = ({
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Số Lô / Thửa (Mã Lô)
+                  Số Lô / Thửa (Mã Lô Pháp Lý)
                 </label>
                 <input
                   type="text"
@@ -457,6 +482,20 @@ export const EditAssetModal: React.FC<Props> = ({
                   onChange={e => setLotNo(e.target.value)}
                   placeholder="Lô A-12, LK-04..."
                   className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-blue-900 mb-1 flex items-center justify-between">
+                  <span>Mã Lô Kinh Doanh</span>
+                  <span className="text-[10px] text-blue-600 font-normal">Mã bán hàng</span>
+                </label>
+                <input
+                  type="text"
+                  value={businessPlotCode}
+                  onChange={e => setBusinessPlotCode(e.target.value)}
+                  placeholder="VD: LK02-15, BT-VIP-08..."
+                  className="w-full px-3 py-2 border rounded-md text-xs border-blue-200 bg-blue-50/20 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
 

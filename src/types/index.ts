@@ -70,6 +70,10 @@ export interface Asset {
   lot_no?: string | null;
   area: number | null;
   owner_name: string | null;
+
+  // Thông tin kinh doanh / Thương mại (Commercial Info)
+  business_project_name?: string | null; // Tên dự án kinh doanh (VD: Cồn Dầu, Spana, Cora...)
+  business_plot_code?: string | null;    // Mã lô kinh doanh (VD: LK02-15, BT-VIP-08...)
   
   // Thông tin thửa đất & Địa lý
   map_sheet_no?: string | null;       // Số tờ bản đồ
@@ -122,6 +126,13 @@ export interface Asset {
   location_id?: string | null;
   current_holder_dept: string | null;
   created_at: string;
+  updated_at?: string | null;
+  updated_by?: string | null;
+  updater?: {
+    id?: string;
+    full_name?: string | null;
+    email?: string | null;
+  } | null;
   projects?: {
     name: string;
     areas?: {
@@ -131,6 +142,23 @@ export interface Asset {
     };
   };
   warehouses?: { name: string; is_central: boolean; code?: string; region_code?: string };
+}
+
+export interface AuditLog {
+  id: string;
+  record_id: string;
+  action: 'UPDATE' | 'BULK_UPDATE' | 'IMPORT' | 'CREATE' | 'DELETE' | string;
+  old_data?: Record<string, any> | null;
+  new_data?: Record<string, any> | null;
+  changed_by?: string | null;
+  changed_by_name?: string | null;
+  notes?: string | null;
+  created_at: string;
+  profiles?: {
+    id?: string;
+    full_name?: string | null;
+    email?: string | null;
+  } | null;
 }
 
 export type TransactionType = 'checkout' | 'checkin' | 'split' | 'mortgage' | 'sale_update';

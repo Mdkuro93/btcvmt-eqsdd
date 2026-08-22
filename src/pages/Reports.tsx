@@ -137,15 +137,23 @@ export const Reports: React.FC = () => {
 
         const plotCode = formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no);
 
+        const projectDisplayName = asset.business_project_name 
+          ? `${asset.projects?.name || ''} (KD: ${asset.business_project_name})`
+          : (asset.projects?.name || '-');
+
+        const plotCodeDisplay = asset.business_plot_code 
+          ? `${plotCode} [KD: ${asset.business_plot_code}]` 
+          : plotCode;
+
         const row = [
           idx + 1,
           // Thông tin chung
-          asset.projects?.name || '-',
+          projectDisplayName,
           asset.usage_purpose || '-',
           asset.parent_asset_id ? 'Sổ con (Tách thửa)' : (asset.lifecycle_status === 'invalidated' ? 'Sổ gốc (Đã tách)' : 'Sổ chính'),
           asset.subdivision || '-',
           asset.lot_no || asset.land_lot_no || '-',
-          plotCode,
+          plotCodeDisplay,
           asset.area || 0,
           // Thông tin pháp lý GCN
           asset.owner_name || 'Công ty Cổ phần Đầu tư VMT',
@@ -470,7 +478,12 @@ export const Reports: React.FC = () => {
                       </td>
 
                       {/* THÔNG TIN CHUNG */}
-                      <td className="px-3 py-2 font-semibold text-gray-900 border-r border-gray-200">{asset.projects?.name || '-'}</td>
+                      <td className="px-3 py-2 font-semibold text-gray-900 border-r border-gray-200">
+                        <div>{asset.projects?.name || '-'}</div>
+                        {asset.business_project_name && (
+                          <div className="text-[10px] text-emerald-700 font-normal">KD: {asset.business_project_name}</div>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-gray-700 border-r border-gray-200">{asset.usage_purpose || '-'}</td>
                       <td className="px-3 py-2 text-gray-700 border-r border-gray-200">
                         {asset.parent_asset_id ? (
@@ -487,6 +500,9 @@ export const Reports: React.FC = () => {
                         <span className="font-semibold text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded text-[11px] border border-blue-100">
                           {formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no)}
                         </span>
+                        {asset.business_plot_code && (
+                          <div className="text-[10px] font-bold text-indigo-700 mt-0.5">KD: {asset.business_plot_code}</div>
+                        )}
                       </td>
                       <td className="px-3 py-2 font-bold text-gray-900 border-r border-gray-200 text-right">
                         {asset.area ? asset.area.toLocaleString('vi-VN') : '-'}

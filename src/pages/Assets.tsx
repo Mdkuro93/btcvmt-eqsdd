@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAssets, fetchProjects, createAsset, fetchWarehouses, deleteAsset, deleteMultipleAssets, createMultipleAssets } from '../api/assets';
 import { createTransaction } from '../api/transactions';
@@ -9,6 +9,9 @@ import { CreateAssetModal } from '../components/CreateAssetModal';
 import { EditAssetModal } from '../components/EditAssetModal';
 import { ImportExcelModal } from '../components/ImportExcelModal';
 import { AssetHistoryModal } from '../components/AssetHistoryModal';
+import { BulkEditModal } from '../components/BulkEditModal';
+import { AssetAuditModal } from '../components/AssetAuditModal';
+import { exportAssetsToExcel } from '../lib/excelHelper';
 import { COLLATERAL_TYPES, formatPlotCode } from '../lib/assetIdentifier';
 import {
   Search,
@@ -22,11 +25,14 @@ import {
   Building2,
   Trash2,
   Upload,
+  Download,
   Edit3,
   ShieldCheck,
   Tag,
   Copy,
   Check,
+  CheckSquare,
+  History,
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -61,8 +67,10 @@ export const Assets: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [historyAsset, setHistoryAsset] = useState<Asset | null>(null);
+  const [auditAsset, setAuditAsset] = useState<Asset | null>(null);
   const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -71,7 +79,7 @@ export const Assets: React.FC = () => {
     fetchWarehouses().then(setWarehouses).catch(() => {});
   }, []);
 
-  // Debounce search
+  // Debounce search inputs to avoid triggering API on every keystroke
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [debouncedSubdivision, setDebouncedSubdivision] = useState(subdivision);
 
@@ -79,31 +87,11 @@ export const Assets: React.FC = () => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
       setDebouncedSubdivision(subdivision);
-    }, 300);
+    }, 350);
     return () => clearTimeout(timer);
   }, [search, subdivision]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, debouncedSubdivision, collateralType, projectId, custodyStatus, lifecycleStatus, saleStatus, mortgageStatus, warehouseId]);
-
-  useEffect(() => {
-    loadAssets();
-  }, [debouncedSearch, debouncedSubdivision, collateralType, projectId, custodyStatus, lifecycleStatus, saleStatus, mortgageStatus, warehouseId, page, pageSize]);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    const channel = supabase.channel('assets_page_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, () => {
-        loadAssets();
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [debouncedSearch, debouncedSubdivision, collateralType, projectId, custodyStatus, lifecycleStatus, saleStatus, mortgageStatus, warehouseId, page, pageSize]);
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       const data = await fetchProjects();
       setProjects(data || []);
@@ -111,9 +99,9 @@ export const Assets: React.FC = () => {
       console.error('Failed to load projects', error);
       toast.error('Lỗi tải danh sách dự án');
     }
-  };
+  }, []);
 
-  const loadAssets = async () => {
+  const loadAssets = useCallback(async () => {
     setLoading(true);
     try {
       const { data, totalCount: total } = await fetchAssets({
@@ -135,7 +123,36 @@ export const Assets: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [debouncedSearch, debouncedSubdivision, collateralType, projectId, custodyStatus, lifecycleStatus, saleStatus, mortgageStatus, warehouseId, page, pageSize]);
+
+  // Reset to page 1 when any filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, debouncedSubdivision, collateralType, projectId, custodyStatus, lifecycleStatus, saleStatus, mortgageStatus, warehouseId]);
+
+  // Fetch data on filter / page change
+  useEffect(() => {
+    loadAssets();
+  }, [loadAssets]);
+
+  // Realtime subscription: Subscribe ONCE with safe debounce and clean unsubscribe on unmount
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let reloadTimer: any = null;
+    const channel = supabase.channel('assets_table_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, () => {
+        clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(() => {
+          loadAssets();
+        }, 500);
+      })
+      .subscribe();
+
+    return () => {
+      clearTimeout(reloadTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [loadAssets]);
 
   const isAssetOverdue = (asset: Asset) => {
     if (asset.custody_status === 'checked_out' && asset.expected_return_date) {
@@ -256,19 +273,28 @@ export const Assets: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => exportAssetsToExcel(assets, 'Danh_sach_GCN_QSDD_VMT')}
+            className="inline-flex items-center px-3.5 py-2 border border-emerald-300 text-xs font-semibold rounded-lg shadow-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+            title="Xuất toàn bộ danh sách đang hiển thị ra file Excel"
+          >
+            <Download className="mr-1.5 h-4 w-4 text-emerald-600" />
+            Xuất Excel
+          </button>
+
           {(profile?.role === 'btc_manager' || profile?.role === 'super_admin') && (
             <>
               <button
                 onClick={() => setIsImportModalOpen(true)}
-                className="inline-flex items-center px-3.5 py-2 border border-blue-200 text-xs font-semibold rounded-lg shadow-sm text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+                className="inline-flex items-center px-3.5 py-2 border border-blue-200 text-xs font-semibold rounded-lg shadow-xs text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
               >
                 <Upload className="mr-1.5 h-4 w-4" />
-                Import Excel
+                Import / Cập nhật Excel
               </button>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-xs font-bold rounded-lg shadow-sm text-white bg-[#1E3A8A] hover:bg-blue-800 transition-colors"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-xs font-bold rounded-lg shadow-xs text-white bg-[#1E3A8A] hover:bg-blue-800 transition-colors"
               >
                 <Plus className="mr-1.5 h-4 w-4" />
                 Khai báo GCN mới
@@ -287,7 +313,7 @@ export const Assets: React.FC = () => {
           </div>
           <input
             type="text"
-            placeholder="Tìm theo Mã TS (VMT_BDS_..), Số GCN, CSH, Thửa..."
+            placeholder="Tìm theo Mã TS, Số GCN, Tên DA/Mã lô KD, CSH, Thửa..."
             className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -406,28 +432,60 @@ export const Assets: React.FC = () => {
 
       {/* Bulk Action Bar */}
       {selectedAssetIds.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
-          <div className="text-xs text-blue-900 font-semibold">
-            Đang chọn <span className="font-bold text-blue-700">{selectedAssetIds.size}</span> tài sản
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-blue-600 text-white rounded-lg text-xs">
+              <CheckSquare className="w-4 h-4" />
+            </span>
+            <div className="text-xs text-blue-950 font-semibold">
+              Đang chọn <span className="font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">{selectedAssetIds.size}</span> tài sản / GCN
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => exportAssetsToExcel(selectedAssetsList, 'Danh_sach_GCN_Duoc_Chon')}
+              className="inline-flex items-center px-3 py-1.5 border border-emerald-300 text-xs font-semibold rounded-lg text-emerald-800 bg-white hover:bg-emerald-50 transition-colors shadow-xs"
+              title="Xuất các dòng đang chọn ra Excel"
+            >
+              <Download className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+              Xuất Excel ({selectedAssetIds.size})
+            </button>
+
+            {(profile?.role === 'btc_manager' || profile?.role === 'super_admin') && (
+              <button
+                onClick={() => setIsBulkEditOpen(true)}
+                className="inline-flex items-center px-3.5 py-1.5 border border-blue-400 text-xs font-bold rounded-lg text-white bg-blue-700 hover:bg-blue-800 transition-colors shadow-xs"
+              >
+                <CheckSquare className="w-3.5 h-3.5 mr-1.5" />
+                Sửa Hàng Loạt ({selectedAssetIds.size})
+              </button>
+            )}
+
             {(profile?.role === 'btc_manager' || profile?.role === 'super_admin') && (
               <button
                 onClick={handleDeleteMultiple}
-                className="inline-flex items-center px-3 py-1.5 border border-red-200 text-xs font-semibold rounded-lg text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                className="inline-flex items-center px-3 py-1.5 border border-red-200 text-xs font-semibold rounded-lg text-red-700 bg-white hover:bg-red-50 transition-colors shadow-xs"
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1" />
                 Xóa ({selectedAssetIds.size})
               </button>
             )}
+
             {profile?.role !== 'viewer' && (
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="inline-flex items-center px-3.5 py-1.5 border border-transparent text-xs font-bold rounded-lg text-white bg-[#1E3A8A] hover:bg-blue-800 transition-colors"
+                className="inline-flex items-center px-3.5 py-1.5 border border-transparent text-xs font-bold rounded-lg text-white bg-[#1E3A8A] hover:bg-blue-800 transition-colors shadow-xs"
               >
                 Tạo yêu cầu luân chuyển / mượn
               </button>
             )}
+
+            <button
+              onClick={() => setSelectedAssetIds(new Set())}
+              className="text-xs text-slate-500 hover:text-slate-800 underline px-2 py-1 cursor-pointer"
+            >
+              Bỏ chọn tất cả
+            </button>
           </div>
         </div>
       )}
@@ -530,10 +588,17 @@ export const Assets: React.FC = () => {
 
                       {/* 2. Dự Án */}
                       <td className="px-3 py-3">
-                        <div className="text-xs text-gray-900 font-semibold truncate max-w-[150px]" title={asset.projects?.name || ''}>
+                        <div className="text-xs text-gray-900 font-semibold truncate max-w-[170px]" title={asset.projects?.name || ''}>
                           {asset.projects?.name || '-'}
                         </div>
-                        <div className="text-[10px] text-gray-400">
+                        {asset.business_project_name && (
+                          <div className="mt-0.5">
+                            <span className="inline-flex items-center text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[160px]" title={`Tên dự án kinh doanh: ${asset.business_project_name}`}>
+                              KD: {asset.business_project_name}
+                            </span>
+                          </div>
+                        )}
+                        <div className="text-[10px] text-gray-400 mt-0.5">
                           {asset.projects?.areas?.name || ''}
                         </div>
                       </td>
@@ -545,7 +610,7 @@ export const Assets: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* 4. Mã lô đất (Phân Khu & "-" & Số thửa/lô) */}
+                      {/* 4. Mã lô đất (Phân Khu & "-" & Số thửa/lô) & Mã lô kinh doanh */}
                       <td className="px-3 py-3 whitespace-nowrap bg-blue-50/20">
                         {plotCode !== '-' ? (
                           <span className="inline-block px-2.5 py-1 rounded text-xs font-bold text-blue-900 bg-blue-100 border border-blue-200">
@@ -553,6 +618,13 @@ export const Assets: React.FC = () => {
                           </span>
                         ) : (
                           <span className="text-xs text-gray-400 italic">Chưa xác định</span>
+                        )}
+                        {asset.business_plot_code && (
+                          <div className="mt-1">
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200" title={`Mã lô kinh doanh / bán hàng: ${asset.business_plot_code}`}>
+                              KD: {asset.business_plot_code}
+                            </span>
+                          </div>
                         )}
                         {asset.subdivision && (
                           <div className="text-[10px] text-gray-400 mt-0.5">
@@ -637,10 +709,20 @@ export const Assets: React.FC = () => {
                             </button>
                           )}
 
+                          {/* Lịch sử Audit Trail / Lưu vết */}
+                          <button
+                            onClick={() => setAuditAsset(asset)}
+                            className="p-1.5 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-md transition-colors"
+                            title="Xem lịch sử thay đổi & Lưu vết (Audit Trail)"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Lịch sử giao dịch luân chuyển */}
                           <button
                             onClick={() => setHistoryAsset(asset)}
                             className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
-                            title="Lịch sử biến động"
+                            title="Lịch sử luân chuyển kho"
                           >
                             <Tag className="w-3.5 h-3.5" />
                           </button>
@@ -744,7 +826,7 @@ export const Assets: React.FC = () => {
                   <span className="font-semibold text-gray-900">{detailAsset.collateral_type || 'BDS'}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500 block text-[11px]">Dự Án:</span>
+                  <span className="text-gray-500 block text-[11px]">Dự Án (Pháp lý):</span>
                   <span className="font-semibold text-gray-900">{detailAsset.projects?.name || '-'}</span>
                 </div>
                 <div>
@@ -752,6 +834,27 @@ export const Assets: React.FC = () => {
                   <span className="font-bold text-blue-800 bg-blue-100/60 px-2 py-0.5 rounded inline-block">
                     {detailAsset.subdivision || 'Chưa phân khu'}
                   </span>
+                </div>
+              </div>
+
+              {/* Commercial Info Block */}
+              <div className="border border-blue-200 bg-blue-50/40 rounded-lg p-3.5 space-y-2">
+                <h4 className="font-bold text-blue-900 uppercase flex items-center text-xs">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 mr-2" /> Thông Tin Thương Mại / Bán Hàng (Commercial Info)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="bg-white p-2.5 rounded border border-blue-100">
+                    <span className="text-gray-500 block text-[11px] font-medium">Tên Dự Án Kinh Doanh:</span>
+                    <strong className="text-emerald-800 text-xs font-bold block mt-0.5">
+                      {detailAsset.business_project_name || <span className="text-gray-400 font-normal italic">Chưa thiết lập</span>}
+                    </strong>
+                  </div>
+                  <div className="bg-white p-2.5 rounded border border-blue-100">
+                    <span className="text-gray-500 block text-[11px] font-medium">Mã Lô Kinh Doanh:</span>
+                    <strong className="text-indigo-800 text-xs font-bold block mt-0.5">
+                      {detailAsset.business_plot_code || <span className="text-gray-400 font-normal italic">Chưa thiết lập</span>}
+                    </strong>
+                  </div>
                 </div>
               </div>
 
@@ -867,13 +970,37 @@ export const Assets: React.FC = () => {
           <ImportExcelModal
             isOpen={isImportModalOpen}
             onClose={() => setIsImportModalOpen(false)}
-            onImport={handleImportMultiple}
-            projects={projects}
-            warehouses={warehouses}
+            onSuccess={() => {
+              setIsImportModalOpen(false);
+              loadAssets();
+            }}
+            currentUser={profile ? { id: profile.id, email: profile.email, full_name: profile.full_name } : null}
           />
         </>
       )}
 
+      {/* Bulk Edit Modal */}
+      {isBulkEditOpen && (
+        <BulkEditModal
+          selectedAssets={selectedAssetsList}
+          currentUser={profile ? { id: profile.id, email: profile.email, full_name: profile.full_name } : null}
+          onClose={() => setIsBulkEditOpen(false)}
+          onSuccess={() => {
+            setSelectedAssetIds(new Set());
+            loadAssets();
+          }}
+        />
+      )}
+
+      {/* Audit Log Timeline Modal */}
+      {auditAsset && (
+        <AssetAuditModal
+          asset={auditAsset}
+          onClose={() => setAuditAsset(null)}
+        />
+      )}
+
+      {/* Asset Transaction History Modal */}
       {historyAsset && (
         <AssetHistoryModal
           assetId={historyAsset.id}

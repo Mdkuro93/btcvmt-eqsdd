@@ -1,4 +1,4 @@
-import { Asset, Region, Area, Warehouse, Project, Profile, Role } from '../types';
+import { Asset, Region, Area, Warehouse, Project, Profile, Role, AuditLog } from '../types';
 import { DEFAULT_PERMISSIONS_BY_ROLE } from './permissions';
 
 const MOCK_REGIONS: Region[] = [
@@ -36,6 +36,8 @@ const MOCK_ASSETS: Asset[] = [
     certificate_no: 'GCN-VMT-001',
     subdivision: 'Phân khu A',
     lot_no: 'A-01',
+    business_project_name: 'Khu Đô Thị Central Palm',
+    business_plot_code: 'PALM-A01',
     area: 450.5,
     owner_name: 'Công ty Cổ phần Đầu tư VMT',
     map_sheet_no: '04',
@@ -66,6 +68,8 @@ const MOCK_ASSETS: Asset[] = [
     certificate_no: 'GCN-VMT-002',
     subdivision: 'Lô B2',
     lot_no: 'B-02',
+    business_project_name: 'Spana Riverside',
+    business_plot_code: 'SP-SH-02',
     area: 1200.0,
     owner_name: 'Công ty Cổ phần Đầu tư VMT',
     map_sheet_no: '12',
@@ -328,6 +332,77 @@ const MOCK_PROFILES: Profile[] = [
   },
 ];
 
+const MOCK_AUDIT_LOGS: AuditLog[] = [
+  {
+    id: 'audit-001',
+    record_id: 'asset-01',
+    action: 'UPDATE',
+    old_data: {
+      business_project_name: 'Dự án Palm City',
+      business_plot_code: 'PLM-01',
+      subdivision: 'Phân khu A',
+      area: 420.0,
+    },
+    new_data: {
+      business_project_name: 'Khu Đô Thị Central Palm',
+      business_plot_code: 'PALM-A01',
+      subdivision: 'Phân khu A',
+      area: 450.5,
+    },
+    changed_by: '00000000-0000-0000-0000-000000000001',
+    changed_by_name: 'Nguyễn Văn Quản Trị (Ban TCKT)',
+    notes: 'Cập nhật điều chỉnh mã lô kinh doanh theo bảng hàng đợt 2',
+    created_at: new Date(Date.now() - 3600000 * 24 * 2).toISOString(),
+    profiles: {
+      id: '00000000-0000-0000-0000-000000000001',
+      full_name: 'Nguyễn Văn Quản Trị',
+      email: 'manager@btcvmt.vn',
+    },
+  },
+  {
+    id: 'audit-002',
+    record_id: 'asset-01',
+    action: 'BULK_UPDATE',
+    old_data: {
+      sale_status: 'not_ready',
+    },
+    new_data: {
+      sale_status: 'ready_for_sale',
+    },
+    changed_by: '00000000-0000-0000-0000-000000000004',
+    changed_by_name: 'Trần Thị Bích (Ban KD BĐS)',
+    notes: 'Cập nhật hàng loạt trạng thái sẵn sàng bán cho phân khu A',
+    created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+    profiles: {
+      id: '00000000-0000-0000-0000-000000000004',
+      full_name: 'Trần Thị Bích',
+      email: 're_dept@btcvmt.vn',
+    },
+  },
+  {
+    id: 'audit-003',
+    record_id: 'asset-02',
+    action: 'IMPORT',
+    old_data: {
+      business_project_name: null,
+      business_plot_code: null,
+    },
+    new_data: {
+      business_project_name: 'Spana Riverside',
+      business_plot_code: 'SP-SH-02',
+    },
+    changed_by: '00000000-0000-0000-0000-000000000001',
+    changed_by_name: 'Nguyễn Văn Quản Trị (Ban TCKT)',
+    notes: 'Nhập thông tin tên và mã lô kinh doanh từ file Excel Danh_sach_ban_hang_2026.xlsx',
+    created_at: new Date(Date.now() - 3600000 * 18).toISOString(),
+    profiles: {
+      id: '00000000-0000-0000-0000-000000000001',
+      full_name: 'Nguyễn Văn Quản Trị',
+      email: 'manager@btcvmt.vn',
+    },
+  },
+];
+
 const STORAGE_KEYS = {
   REGIONS: 'btcvmt_regions',
   AREAS: 'btcvmt_areas',
@@ -337,6 +412,7 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'btcvmt_transactions',
   LOGS: 'btcvmt_activity_logs',
   PROFILES: 'btcvmt_profiles',
+  AUDIT_LOGS: 'btcvmt_audit_logs',
 };
 
 function getStored<T>(key: string, defaultData: T): T {
@@ -447,11 +523,17 @@ export const mockStore = {
         code = `${regionCode}_${colType}_${String(counters[key]).padStart(8, '0')}`;
       }
 
+      const profiles = mockStore.getProfiles();
+      const updaterProf = a.updated_by ? profiles.find(p => p.id === a.updated_by) : null;
+
       return {
         ...a,
         asset_code: code,
         collateral_type: colType,
         asset_type: a.asset_type || (a.usage_purpose?.includes('thương mại') ? 'Shophouse / Nhà phố thương mại' : (a.usage_purpose?.includes('sản xuất') ? 'Nhà xưởng / Kho bãi KCN' : 'Đất nền')),
+        updated_at: a.updated_at || a.created_at,
+        updated_by: a.updated_by || null,
+        updater: updaterProf ? { id: updaterProf.id, full_name: updaterProf.full_name, email: updaterProf.email } : (a.updater || null),
         projects: proj ? { name: proj.name, areas: proj.areas } : a.projects,
         warehouses: wh ? { name: wh.name, is_central: wh.is_central, code: wh.code, region_code: wh.region_code } : a.warehouses,
       };
@@ -466,7 +548,9 @@ export const mockStore = {
             a.asset_code?.toLowerCase().includes(s) ||
             a.subdivision?.toLowerCase().includes(s) ||
             a.lot_no?.toLowerCase().includes(s) ||
-            a.owner_name?.toLowerCase().includes(s)
+            a.owner_name?.toLowerCase().includes(s) ||
+            a.business_project_name?.toLowerCase().includes(s) ||
+            a.business_plot_code?.toLowerCase().includes(s)
         );
       }
       if (filters.collateralType) {
@@ -558,6 +642,43 @@ export const mockStore = {
   getProfiles: (): Profile[] => getStored(STORAGE_KEYS.PROFILES, MOCK_PROFILES),
   saveProfiles: (data: Profile[]) => setStored(STORAGE_KEYS.PROFILES, data),
 
+  getAuditLogs: (recordId?: string): AuditLog[] => {
+    let logs: AuditLog[] = getStored(STORAGE_KEYS.AUDIT_LOGS, MOCK_AUDIT_LOGS);
+    const profiles = mockStore.getProfiles();
+
+    logs = logs.map(l => {
+      const prof = profiles.find(p => p.id === l.changed_by);
+      return {
+        ...l,
+        profiles: prof ? { id: prof.id, full_name: prof.full_name, email: prof.email } : l.profiles,
+      };
+    });
+
+    if (recordId) {
+      logs = logs.filter(l => l.record_id === recordId);
+    }
+    return logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  saveAuditLogs: (data: AuditLog[]) => setStored(STORAGE_KEYS.AUDIT_LOGS, data),
+
+  addAuditLog: (log: Omit<AuditLog, 'id' | 'created_at'>): AuditLog => {
+    const logs = getStored<AuditLog[]>(STORAGE_KEYS.AUDIT_LOGS, MOCK_AUDIT_LOGS);
+    const profiles = mockStore.getProfiles();
+    const prof = profiles.find(p => p.id === log.changed_by);
+
+    const newLog: AuditLog = {
+      ...log,
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      created_at: new Date().toISOString(),
+      profiles: prof ? { id: prof.id, full_name: prof.full_name, email: prof.email } : (log.profiles || null),
+    };
+
+    logs.unshift(newLog);
+    setStored(STORAGE_KEYS.AUDIT_LOGS, logs);
+    return newLog;
+  },
+
   resetDemoData: () => {
     setStored(STORAGE_KEYS.REGIONS, MOCK_REGIONS);
     setStored(STORAGE_KEYS.AREAS, MOCK_AREAS);
@@ -567,5 +688,6 @@ export const mockStore = {
     setStored(STORAGE_KEYS.TRANSACTIONS, MOCK_TRANSACTIONS);
     setStored(STORAGE_KEYS.LOGS, MOCK_ACTIVITY_LOGS);
     setStored(STORAGE_KEYS.PROFILES, MOCK_PROFILES);
+    setStored(STORAGE_KEYS.AUDIT_LOGS, MOCK_AUDIT_LOGS);
   },
 };
