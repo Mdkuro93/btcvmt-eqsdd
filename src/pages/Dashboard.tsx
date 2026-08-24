@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchDashboardAssetStats } from '../api/assets';
 import { fetchTransactions } from '../api/transactions';
 import { generateDemoData } from '../api/demo';
+import { DashboardSummaryCard, DashboardSummaryData } from '../components/DashboardSummaryCard';
 import { Asset } from '../types';
 import { 
   Files, 
@@ -14,7 +15,9 @@ import {
   CheckSquare, 
   BookText, 
   Loader2,
-  Sparkles
+  Sparkles,
+  Layers,
+  FileCheck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
@@ -24,13 +27,26 @@ export const Dashboard: React.FC = () => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [generatingDemo, setGeneratingDemo] = useState(false);
-  const [overdueSLA, setOverdueSLA] = useState(0);
-  const [stats, setStats] = useState({
-    total: 0,
-    inStock: 0,
-    checkedOut: 0,
-    mortgaged: 0,
-    sold: 0,
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const [summaryData, setSummaryData] = useState<DashboardSummaryData>({
+    totalAssets: 0,
+    totalArea: 0,
+    activeProjectsCount: 0,
+    pendingRequests: 0,
+    overdueRequests: 0,
+    pendingByType: {
+      checkout: 0,
+      checkin: 0,
+      mortgage: 0,
+      split: 0,
+      sale_update: 0,
+    },
+    assetsInUse: 0,
+    checkedOutCount: 0,
+    mortgagedCount: 0,
+    inStockCount: 0,
+    soldCount: 0,
   });
 
   const loadStats = useCallback(async () => {
@@ -41,14 +57,26 @@ export const Dashboard: React.FC = () => {
         fetchTransactions(),
       ]);
 
-      setStats(assetStats);
+      let pendingTotal = 0;
+      let overdueCount = 0;
+      const typeCounts = {
+        checkout: 0,
+        checkin: 0,
+        mortgage: 0,
+        split: 0,
+        sale_update: 0,
+      };
 
       if (txs) {
         const now = new Date();
-        let overdueCount = 0;
         txs.forEach((tx: any) => {
           (tx.items || []).forEach((item: any) => {
             if (item.status === 'pending') {
+              pendingTotal++;
+              const t = item.type as keyof typeof typeCounts;
+              if (typeCounts[t] !== undefined) {
+                typeCounts[t]++;
+              }
               const created = new Date(item.created_at);
               const diffMs = now.getTime() - created.getTime();
               const diffHours = diffMs / (1000 * 60 * 60);
@@ -56,8 +84,23 @@ export const Dashboard: React.FC = () => {
             }
           });
         });
-        setOverdueSLA(overdueCount);
       }
+
+      setSummaryData({
+        totalAssets: assetStats.total,
+        totalArea: assetStats.totalArea || 0,
+        activeProjectsCount: assetStats.activeProjectsCount || 0,
+        pendingRequests: pendingTotal,
+        overdueRequests: overdueCount,
+        pendingByType: typeCounts,
+        assetsInUse: (assetStats.checkedOut || 0) + (assetStats.mortgaged || 0),
+        checkedOutCount: assetStats.checkedOut || 0,
+        mortgagedCount: assetStats.mortgaged || 0,
+        inStockCount: assetStats.inStock || 0,
+        soldCount: assetStats.sold || 0,
+      });
+
+      setLastUpdated(new Date());
     } catch (err) {
       console.warn('Load stats error:', err);
     } finally {
@@ -69,7 +112,7 @@ export const Dashboard: React.FC = () => {
     loadStats();
   }, [loadStats]);
 
-  // Realtime subscription with debounce and single channel
+  // Realtime subscription with debounce across all critical asset & transaction tables
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     let timer: any = null;
@@ -78,7 +121,19 @@ export const Dashboard: React.FC = () => {
         clearTimeout(timer);
         timer = setTimeout(() => {
           loadStats();
-        }, 1000);
+        }, 800);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          loadStats();
+        }, 800);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transaction_items' }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          loadStats();
+        }, 800);
       })
       .subscribe();
 
@@ -108,8 +163,8 @@ export const Dashboard: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tổng quan Quản lý GCN QSDĐ</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tổng quan Quản lý GCN QSDĐ & TSĐB</h1>
+          <p className="text-sm text-slate-500 mt-1">
             Xin chào, <span className="font-semibold text-[#1E3A8A]">{profile?.full_name || profile?.email}</span> ({profile?.role.replace('_', ' ')})
           </p>
         </div>
@@ -118,7 +173,7 @@ export const Dashboard: React.FC = () => {
           <button
             onClick={handleGenerateDemo}
             disabled={generatingDemo}
-            className="inline-flex items-center px-4 py-2 border border-blue-300 text-sm font-medium rounded-md shadow-sm text-[#1E3A8A] bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center px-4 py-2 border border-blue-300 text-xs font-semibold rounded-lg shadow-xs text-[#1E3A8A] bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition-colors"
           >
             {generatingDemo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2 text-blue-600" />}
             Tạo dữ liệu thử nghiệm
@@ -126,123 +181,69 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng số GCN</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> : stats.total}
-            </p>
-          </div>
-          <div className="p-3 bg-blue-50 text-[#1E3A8A] rounded-lg">
-            <Files className="w-6 h-6" />
-          </div>
-        </div>
+      {/* Real-time Summary Card Component */}
+      <DashboardSummaryCard
+        data={summaryData}
+        loading={loading}
+        onRefresh={loadStats}
+        lastUpdated={lastUpdated}
+        isRealtimeActive={isSupabaseConfigured}
+      />
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Trong kho</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin text-green-600" /> : stats.inStock}
-            </p>
-          </div>
-          <div className="p-3 bg-green-50 text-green-700 rounded-lg">
-            <Warehouse className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Đang mượn/xuất</p>
-            <p className="text-2xl font-bold text-amber-600 mt-1">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin text-amber-600" /> : stats.checkedOut}
-            </p>
-          </div>
-          <div className="p-3 bg-amber-50 text-amber-700 rounded-lg">
-            <ArrowUpRight className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Đang thế chấp</p>
-            <p className="text-2xl font-bold text-rose-600 mt-1">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin text-rose-600" /> : stats.mortgaged}
-            </p>
-          </div>
-          <div className="p-3 bg-rose-50 text-rose-700 rounded-lg">
-            <Landmark className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Đã xuất bán</p>
-            <p className="text-2xl font-bold text-indigo-600 mt-1">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin text-indigo-600" /> : stats.sold}
-            </p>
-          </div>
-          <div className="p-3 bg-indigo-50 text-indigo-700 rounded-lg">
-            <ShoppingBag className="w-6 h-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Access Actions */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <h2 className="text-base font-bold text-gray-900 mb-4">Lối truy cập nhanh</h2>
+      {/* Quick Access Navigation */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wider text-slate-500">Lối truy cập nhanh</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <Link
             to="/assets"
-            className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50/40 transition-all flex items-center gap-3 group"
+            className="p-4 border border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/40 transition-all flex items-center gap-3 group"
           >
-            <div className="p-2.5 bg-blue-100 text-[#1E3A8A] rounded-md">
+            <div className="p-2.5 bg-blue-100 text-[#1E3A8A] rounded-lg">
               <Files className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-gray-900 group-hover:text-[#1E3A8A]">Danh sách GCN</div>
-              <div className="text-xs text-gray-500">Xem và mượn/xuất sổ</div>
+              <div className="text-sm font-bold text-slate-900 group-hover:text-[#1E3A8A]">Danh mục GCN</div>
+              <div className="text-xs text-slate-500">Tra cứu, lọc & mượn sổ</div>
             </div>
           </Link>
 
           <Link
             to="/requests"
-            className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50/40 transition-all flex items-center gap-3 group"
+            className="p-4 border border-slate-200 rounded-xl hover:border-amber-500 hover:bg-amber-50/40 transition-all flex items-center gap-3 group"
           >
-            <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-md">
+            <div className="p-2.5 bg-amber-100 text-amber-800 rounded-lg">
               <CheckSquare className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-gray-900 group-hover:text-[#1E3A8A]">Yêu cầu & Phê duyệt</div>
-              <div className="text-xs text-gray-500">Xử lý các phiếu gửi lên</div>
+              <div className="text-sm font-bold text-slate-900 group-hover:text-amber-800">Yêu cầu & Phê duyệt</div>
+              <div className="text-xs text-slate-500">Xử lý {summaryData.pendingRequests} phiếu gửi lên</div>
             </div>
           </Link>
 
           <Link
             to="/lookup"
-            className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50/40 transition-all flex items-center gap-3 group"
+            className="p-4 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50/40 transition-all flex items-center gap-3 group"
           >
-            <div className="p-2.5 bg-amber-100 text-amber-800 rounded-md">
+            <div className="p-2.5 bg-indigo-100 text-indigo-800 rounded-lg">
               <Search className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-gray-900 group-hover:text-[#1E3A8A]">Tra cứu nhanh</div>
-              <div className="text-xs text-gray-500">Kiểm tra thông tin sổ</div>
+              <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-800">Tra cứu nhanh</div>
+              <div className="text-xs text-slate-500">Kiểm tra thông tin sổ</div>
             </div>
           </Link>
 
           {profile?.role === 'btc_manager' && (
             <Link
               to="/activity-logs"
-              className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50/40 transition-all flex items-center gap-3 group"
+              className="p-4 border border-slate-200 rounded-xl hover:border-purple-500 hover:bg-purple-50/40 transition-all flex items-center gap-3 group"
             >
-              <div className="p-2.5 bg-purple-100 text-purple-800 rounded-md">
+              <div className="p-2.5 bg-purple-100 text-purple-800 rounded-lg">
                 <BookText className="w-5 h-5" />
               </div>
               <div>
-                <div className="text-sm font-bold text-gray-900 group-hover:text-[#1E3A8A]">Nhật ký biến động</div>
-                <div className="text-xs text-gray-500">Theo dõi toàn bộ lịch sử</div>
+                <div className="text-sm font-bold text-slate-900 group-hover:text-purple-800">Nhật ký biến động</div>
+                <div className="text-xs text-slate-500">Lịch sử & Audit Trail</div>
               </div>
             </Link>
           )}
@@ -251,3 +252,4 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+

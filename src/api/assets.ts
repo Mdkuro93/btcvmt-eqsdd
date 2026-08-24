@@ -131,26 +131,43 @@ export async function fetchDashboardAssetStats(): Promise<{
   checkedOut: number;
   mortgaged: number;
   sold: number;
+  totalArea: number;
+  activeProjectsCount: number;
 }> {
   if (!isSupabaseConfigured) {
     const assets = mockStore.getAssets();
+    const projSet = new Set(assets.map(a => a.project_id || a.business_project_name).filter(Boolean));
+    const totalArea = assets.reduce((sum, a) => sum + (Number(a.area) || 0), 0);
     return {
       total: assets.length,
       inStock: assets.filter(a => a.custody_status === 'in_stock').length,
       checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
       mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
       sold: assets.filter(a => a.sale_status === 'sold').length,
+      totalArea,
+      activeProjectsCount: projSet.size || 1,
     };
   }
   try {
-    // Perform fast count queries in parallel
-    const [totalRes, inStockRes, checkedOutRes, mortgagedRes, soldRes] = await Promise.all([
+    // Perform fast count queries & lightweight area aggregation in parallel
+    const [totalRes, inStockRes, checkedOutRes, mortgagedRes, soldRes, areaRes] = await Promise.all([
       supabase.from('assets').select('*', { count: 'exact', head: true }),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'in_stock'),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'checked_out'),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('mortgage_status', 'mortgaged'),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('sale_status', 'sold'),
+      supabase.from('assets').select('area, project_id, business_project_name'),
     ]);
+
+    let totalArea = 0;
+    const projSet = new Set<string>();
+    if (areaRes.data) {
+      for (const r of areaRes.data) {
+        if (r.area) totalArea += Number(r.area) || 0;
+        if (r.project_id) projSet.add(r.project_id);
+        else if (r.business_project_name) projSet.add(r.business_project_name);
+      }
+    }
 
     return {
       total: totalRes.count || 0,
@@ -158,16 +175,22 @@ export async function fetchDashboardAssetStats(): Promise<{
       checkedOut: checkedOutRes.count || 0,
       mortgaged: mortgagedRes.count || 0,
       sold: soldRes.count || 0,
+      totalArea,
+      activeProjectsCount: projSet.size || (areaRes.data && areaRes.data.length > 0 ? 1 : 0),
     };
   } catch (err) {
     console.warn('Supabase fetchDashboardAssetStats error, fallback:', err);
     const assets = mockStore.getAssets();
+    const projSet = new Set(assets.map(a => a.project_id || a.business_project_name).filter(Boolean));
+    const totalArea = assets.reduce((sum, a) => sum + (Number(a.area) || 0), 0);
     return {
       total: assets.length,
       inStock: assets.filter(a => a.custody_status === 'in_stock').length,
       checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
       mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
       sold: assets.filter(a => a.sale_status === 'sold').length,
+      totalArea,
+      activeProjectsCount: projSet.size || 1,
     };
   }
 }
