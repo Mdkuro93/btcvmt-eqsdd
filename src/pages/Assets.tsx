@@ -11,6 +11,7 @@ import { ImportExcelModal } from '../components/ImportExcelModal';
 import { AssetHistoryModal } from '../components/AssetHistoryModal';
 import { BulkEditModal } from '../components/BulkEditModal';
 import { AssetAuditModal } from '../components/AssetAuditModal';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { exportAssetsToExcel } from '../lib/excelHelper';
 import { COLLATERAL_TYPES, formatPlotCode } from '../lib/assetIdentifier';
 import {
@@ -36,6 +37,9 @@ import {
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+import { LoadingFallback } from '../components/LoadingFallback';
+import { mockStore } from '../lib/mockStore';
 
 export const Assets: React.FC = () => {
   const { user, profile } = useAuth();
@@ -73,6 +77,11 @@ export const Assets: React.FC = () => {
   const [auditAsset, setAuditAsset] = useState<Asset | null>(null);
   const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Deletion Modal States
+  const [assetToDelete, setAssetToDelete] = useState<{ id: string; certificateNo: string } | null>(null);
+  const [isDeleteMultipleModalOpen, setIsDeleteMultipleModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -164,16 +173,28 @@ export const Assets: React.FC = () => {
     return false;
   };
 
-  const handleDeleteAsset = async (id: string, certificateNo: string) => {
-    if (window.confirm(`Bạn có chắc chắn muốn xoá vĩnh viễn GCN ${certificateNo}?`)) {
-      try {
-        await deleteAsset(id);
-        toast.success(`Đã xoá GCN ${certificateNo}`);
-        loadAssets();
-      } catch (error) {
-        toast.error('Lỗi khi xoá GCN');
-        console.error(error);
-      }
+  const handleDeleteAsset = (id: string, certificateNo: string) => {
+    setAssetToDelete({ id, certificateNo });
+  };
+
+  const confirmDeleteSingle = async () => {
+    if (!assetToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteAsset(assetToDelete.id);
+      toast.success(`Đã xoá GCN ${assetToDelete.certificateNo}`);
+      setSelectedAssetIds(prev => {
+        const next = new Set(prev);
+        next.delete(assetToDelete.id);
+        return next;
+      });
+      setAssetToDelete(null);
+      await loadAssets();
+    } catch (error: any) {
+      toast.error('Lỗi khi xoá GCN: ' + (error?.message || 'Lỗi không xác định'));
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -228,21 +249,26 @@ export const Assets: React.FC = () => {
     }
   };
 
-  const handleDeleteMultiple = async () => {
-    if (!window.confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN ${selectedAssetIds.size} GCN đã chọn không? Hành động này không thể hoàn tác.`)) {
-      return;
-    }
-    setLoading(true);
+  const handleDeleteMultiple = () => {
+    if (selectedAssetIds.size === 0) return;
+    setIsDeleteMultipleModalOpen(true);
+  };
+
+  const confirmDeleteMultiple = async () => {
+    const ids = Array.from(selectedAssetIds);
+    if (ids.length === 0) return;
+    setIsDeleting(true);
     try {
-      const ids = Array.from(selectedAssetIds);
       await deleteMultipleAssets(ids);
       toast.success(`Đã xóa thành công ${ids.length} GCN`);
       setSelectedAssetIds(new Set());
-      loadAssets();
-    } catch (error) {
-      toast.error('Lỗi khi xóa tài sản');
+      setIsDeleteMultipleModalOpen(false);
+      await loadAssets();
+    } catch (error: any) {
+      toast.error('Lỗi khi xóa tài sản: ' + (error?.message || 'Lỗi không xác định'));
       console.error(error);
-      setLoading(false);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -533,9 +559,29 @@ export const Assets: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center">
-                    <Loader2 className="h-8 w-8 text-blue-500 animate-spin mx-auto" />
-                    <p className="mt-2 text-xs text-gray-500">Đang tải danh sách tài sản...</p>
+                  <td colSpan={9} className="p-6">
+                    <LoadingFallback
+                      message="Đang tải danh sách GCN và TSĐB..."
+                      onRetry={() => loadAssets()}
+                      onForceLocal={() => {
+                        const allFiltered = mockStore.getAssets({
+                          search: debouncedSearch,
+                          collateralType: collateralType || undefined,
+                          projectId,
+                          custody_status: custodyStatus,
+                          lifecycle_status: lifecycleStatus,
+                          sale_status: saleStatus,
+                          mortgage_status: mortgageStatus,
+                          warehouseId,
+                          subdivision: debouncedSubdivision,
+                        });
+                        setTotalCount(allFiltered.length);
+                        const startIndex = (page - 1) * pageSize;
+                        setAssets(allFiltered.slice(startIndex, startIndex + pageSize));
+                        setLoading(false);
+                        toast.success('Đã tải dữ liệu tài sản cục bộ');
+                      }}
+                    />
                   </td>
                 </tr>
               ) : assets.length === 0 ? (
@@ -1008,6 +1054,30 @@ export const Assets: React.FC = () => {
           onClose={() => setHistoryAsset(null)}
         />
       )}
+
+      {/* Single Asset Delete Confirm Modal */}
+      <ConfirmModal
+        isOpen={!!assetToDelete}
+        onClose={() => setAssetToDelete(null)}
+        onConfirm={confirmDeleteSingle}
+        title="Xác nhận xóa GCN QSDĐ"
+        message={`Bạn có chắc chắn muốn xóa vĩnh viễn GCN "${assetToDelete?.certificateNo}" khỏi hệ thống không? Hành động này sẽ được ghi nhận vào nhật ký và không thể hoàn tác.`}
+        confirmText="Xác nhận xóa"
+        confirmVariant="danger"
+        loading={isDeleting}
+      />
+
+      {/* Bulk Delete Confirm Modal */}
+      <ConfirmModal
+        isOpen={isDeleteMultipleModalOpen}
+        onClose={() => setIsDeleteMultipleModalOpen(false)}
+        onConfirm={confirmDeleteMultiple}
+        title="Xác nhận xóa nhiều GCN QSDĐ"
+        message={`Bạn có chắc chắn muốn xóa vĩnh viễn ${selectedAssetIds.size} GCN QSDĐ đang chọn không? Tất cả các bản ghi đã chọn sẽ bị xóa khỏi cơ sở dữ liệu.`}
+        confirmText={`Xóa ${selectedAssetIds.size} GCN`}
+        confirmVariant="danger"
+        loading={isDeleting}
+      />
     </div>
   );
 };

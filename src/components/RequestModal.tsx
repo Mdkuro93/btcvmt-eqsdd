@@ -122,7 +122,10 @@ export const RequestModal: React.FC<Props> = ({
           details = { reason, department, returnDate, targetWarehouseId };
           break;
         case 'checkin':
-          details = { checkinDate };
+          details = { 
+            checkinDate, 
+            targetWarehouseId: targetWarehouseId || (selectedAssets[0]?.warehouse_id || warehouses[0]?.id) 
+          };
           break;
         case 'mortgage':
           details = { 
@@ -238,9 +241,26 @@ export const RequestModal: React.FC<Props> = ({
           )}
 
           {type === 'checkin' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày nhập thực tế</label>
-              <input required type="date" value={checkinDate} onChange={e => setCheckinDate(e.target.value)} className="w-full max-w-sm rounded-md border border-gray-300 p-2 text-sm focus:border-blue-500 focus:ring-blue-500" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày nhập thực tế *</label>
+                <input required type="date" value={checkinDate} onChange={e => setCheckinDate(e.target.value)} className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-500 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kho nhập sổ *</label>
+                <select
+                  value={targetWarehouseId || (selectedAssets[0]?.warehouse_id || '')}
+                  onChange={e => setTargetWarehouseId(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">-- Chọn kho lưu trữ --</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} {w.is_central ? '(Kho TT)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 

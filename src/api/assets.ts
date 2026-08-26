@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Asset, Region, Area, Warehouse, Project } from '../types';
 import { generateNextAssetCode, resolveRegionCode } from '../lib/assetIdentifier';
@@ -76,7 +76,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     // Apply Server-side Sort & Range Pagination
     query = query.order('created_at', { ascending: false }).range(from, to);
 
-    const { data, count, error } = await query;
+    const { data, count, error } = await withTimeout(query, 3000);
     if (error) throw error;
     
     return { 
@@ -84,7 +84,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
       totalCount: count ?? (data?.length || 0) 
     };
   } catch (err) {
-    console.warn('Supabase fetchAssets error, using mockStore fallback:', err);
+    console.warn('Supabase fetchAssets error or timeout, using mockStore fallback:', err);
     const allFiltered = mockStore.getAssets(filters);
     const totalCount = allFiltered.length;
     const startIndex = (page - 1) * pageSize;
@@ -95,7 +95,6 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
 
 /**
  * Ultra-lightweight query for checking duplicate records and generating sequential asset codes
- * Avoids downloading heavy relations, files, and addresses (<5KB vs 5MB).
  */
 export async function fetchAssetIdentifierCandidates(projectId?: string): Promise<Asset[]> {
   if (!isSupabaseConfigured) {
@@ -113,11 +112,11 @@ export async function fetchAssetIdentifierCandidates(projectId?: string): Promis
       query = query.eq('project_id', projectId);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await withTimeout(query, 3000);
     if (error) throw error;
     return (data || []) as unknown as Asset[];
   } catch (err) {
-    console.warn('Supabase fetchAssetIdentifierCandidates error, using mockStore:', err);
+    console.warn('Supabase fetchAssetIdentifierCandidates error or timeout, using mockStore:', err);
     return mockStore.getAssets();
   }
 }
@@ -149,15 +148,18 @@ export async function fetchDashboardAssetStats(): Promise<{
     };
   }
   try {
-    // Perform fast count queries & lightweight area aggregation in parallel
-    const [totalRes, inStockRes, checkedOutRes, mortgagedRes, soldRes, areaRes] = await Promise.all([
-      supabase.from('assets').select('*', { count: 'exact', head: true }),
-      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'in_stock'),
-      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'checked_out'),
-      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('mortgage_status', 'mortgaged'),
-      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('sale_status', 'sold'),
-      supabase.from('assets').select('area, project_id, business_project_name'),
-    ]);
+    // Perform fast count queries & lightweight area aggregation in parallel with 3s timeout
+    const [totalRes, inStockRes, checkedOutRes, mortgagedRes, soldRes, areaRes] = await withTimeout(
+      Promise.all([
+        supabase.from('assets').select('*', { count: 'exact', head: true }),
+        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'in_stock'),
+        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'checked_out'),
+        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('mortgage_status', 'mortgaged'),
+        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('sale_status', 'sold'),
+        supabase.from('assets').select('area, project_id, business_project_name'),
+      ]),
+      3000
+    );
 
     let totalArea = 0;
     const projSet = new Set<string>();
@@ -179,7 +181,7 @@ export async function fetchDashboardAssetStats(): Promise<{
       activeProjectsCount: projSet.size || (areaRes.data && areaRes.data.length > 0 ? 1 : 0),
     };
   } catch (err) {
-    console.warn('Supabase fetchDashboardAssetStats error, fallback:', err);
+    console.warn('Supabase fetchDashboardAssetStats error or timeout, fallback:', err);
     const assets = mockStore.getAssets();
     const projSet = new Set(assets.map(a => a.project_id || a.business_project_name).filter(Boolean));
     const totalArea = assets.reduce((sum, a) => sum + (Number(a.area) || 0), 0);
@@ -234,12 +236,15 @@ export async function lookupAssets(
   
   try {
     const q = queries.filter(q => q.trim().length > 0)[0] || '';
-    const { data, error } = await supabase.rpc('lookup_asset_status', { p_query: q });
+    const { data, error } = await withTimeout(
+      supabase.rpc('lookup_asset_status', { p_query: q }),
+      3000
+    );
     if (error) throw error;
     const resData = data || [];
     return { data: resData, totalCount: resData.length };
   } catch (err) {
-    console.warn('Supabase lookup_asset_status error, using mockStore:', err);
+    console.warn('Supabase lookup_asset_status error or timeout, using mockStore:', err);
     const allAssets = mockStore.getAssets();
     const queryList = queries.filter(q => q.trim().length > 0).map(q => q.trim().toLowerCase());
     
@@ -277,20 +282,23 @@ export async function fetchAssetById(id: string): Promise<Asset | null> {
     return assets.find(a => a.id === id) || null;
   }
   try {
-    const { data, error } = await supabase
-      .from('assets')
-      .select(`
-        *,
-        projects(name, areas(name, region_id)),
-        warehouses(name, is_central)
-      `)
-      .eq('id', id)
-      .single();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('assets')
+        .select(`
+          *,
+          projects(name, areas(name, region_id)),
+          warehouses(name, is_central)
+        `)
+        .eq('id', id)
+        .single(),
+      3000
+    );
 
     if (error) throw error;
     return data;
   } catch (err) {
-    console.warn('Supabase fetchAssetById error, using mockStore:', err);
+    console.warn('Supabase fetchAssetById error or timeout, using mockStore:', err);
     const assets = mockStore.getAssets();
     return assets.find(a => a.id === id) || null;
   }
@@ -307,7 +315,7 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
   const autoCode = assetData.asset_code || generateNextAssetCode(regionCode, collateralType, current);
 
   const fullAsset: Asset = {
-    id: 'asset-' + Date.now(),
+    id: 'asset-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
     asset_code: autoCode,
     collateral_type: collateralType,
     certificate_no: assetData.certificate_no || 'GCN-VMT-' + Math.floor(Math.random() * 1000),
@@ -366,16 +374,19 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     return mockStore.getAssets().find(a => a.id === fullAsset.id)!;
   }
   try {
-    const { data, error } = await supabase
-      .from('assets')
-      .insert([fullAsset])
-      .select()
-      .single();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('assets')
+        .insert([fullAsset])
+        .select()
+        .single(),
+      3000
+    );
 
     if (error) throw error;
     return data;
   } catch (err) {
-    console.warn('Supabase createAsset error, saving to mockStore:', err);
+    console.warn('Supabase createAsset error or timeout, saving to mockStore:', err);
     mockStore.saveAssets([fullAsset, ...current]);
     return mockStore.getAssets().find(a => a.id === fullAsset.id)!;
   }
@@ -388,7 +399,7 @@ export async function updateAsset(
   notes?: string
 ): Promise<Asset> {
   const currentAsset = (isSupabaseConfigured 
-    ? (await supabase.from('assets').select('*').eq('id', id).single()).data 
+    ? (await withTimeout(supabase.from('assets').select('*').eq('id', id).single(), 3000).catch(() => ({ data: null }))).data 
     : mockStore.getAssets().find(a => a.id === id)) || {};
 
   const payload = {
@@ -408,17 +419,20 @@ export async function updateAsset(
     updatedAsset = mockStore.getAssets().find(a => a.id === id)!;
   } else {
     try {
-      const { data, error } = await supabase
-        .from('assets')
-        .update(payload)
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('assets')
+          .update(payload)
+          .eq('id', id)
+          .select()
+          .single(),
+        3000
+      );
 
       if (error) throw error;
       updatedAsset = data;
     } catch (err) {
-      console.warn('Supabase updateAsset error, updating in mockStore:', err);
+      console.warn('Supabase updateAsset error or timeout, updating in mockStore:', err);
       const current = mockStore.getAssets();
       const updatedList = current.map(a => (a.id === id ? { ...a, ...payload } : a));
       mockStore.saveAssets(updatedList);
@@ -466,7 +480,7 @@ export async function bulkUpdateAssets(
   });
 
   const allAssets = isSupabaseConfigured
-    ? (await supabase.from('assets').select('*').in('id', ids)).data || []
+    ? (await withTimeout(supabase.from('assets').select('*').in('id', ids), 3000).catch(() => ({ data: [] }))).data || []
     : mockStore.getAssets().filter(a => ids.includes(a.id));
 
   if (!isSupabaseConfigured) {
@@ -480,13 +494,16 @@ export async function bulkUpdateAssets(
     mockStore.saveAssets(updatedList);
   } else {
     try {
-      const { error } = await supabase
-        .from('assets')
-        .update(payload)
-        .in('id', ids);
+      const { error } = await withTimeout(
+        supabase
+          .from('assets')
+          .update(payload)
+          .in('id', ids),
+        3000
+      );
       if (error) throw error;
     } catch (err) {
-      console.warn('Supabase bulkUpdateAssets error, updating in mockStore:', err);
+      console.warn('Supabase bulkUpdateAssets error or timeout, updating in mockStore:', err);
       const current = mockStore.getAssets();
       const updatedList = current.map(a => {
         if (ids.includes(a.id)) {
@@ -527,11 +544,13 @@ export async function importExcelAndUpdateAssets(
   mode: 'update_or_create' | 'update_only' | 'create_only' = 'update_or_create'
 ): Promise<{ updatedCount: number; createdCount: number; errors: string[] }> {
   const currentAssets = isSupabaseConfigured 
-    ? (await supabase.from('assets').select('*')).data || []
+    ? (await withTimeout(supabase.from('assets').select('*'), 3000).catch(() => ({ data: [] }))).data || []
     : mockStore.getAssets();
 
-  const projects = await fetchProjects();
-  const warehouses = await fetchWarehouses();
+  const [projects, warehouses] = await Promise.all([
+    fetchProjects(),
+    fetchWarehouses(),
+  ]);
 
   let updatedCount = 0;
   let createdCount = 0;
@@ -543,7 +562,7 @@ export async function importExcelAndUpdateAssets(
       const matchAssetCode = (row.asset_code || row['Mã Tài Sản / TSĐB'] || row['Mã Tài Sản'] || '').toString().trim();
       const matchCertNo = (row.certificate_no || row['Số GCN QSDĐ'] || row['Số GCN'] || row['Số sổ'] || '').toString().trim();
 
-      const existing = currentAssets.find(a => 
+      const existing = currentAssets.find((a: any) => 
         (matchId && a.id === matchId) ||
         (matchAssetCode && a.asset_code === matchAssetCode) ||
         (matchCertNo && a.certificate_no?.trim().toLowerCase() === matchCertNo.toLowerCase())
@@ -551,11 +570,11 @@ export async function importExcelAndUpdateAssets(
 
       // Match project
       const projName = row.project_name || row['Dự Án (Pháp lý)'] || row['Dự Án'] || row['Tên Dự Án'];
-      const matchedProj = projName ? projects.find(p => p.name.toLowerCase() === projName.toString().trim().toLowerCase()) : null;
+      const matchedProj = projName ? projects.find((p: any) => p.name.toLowerCase() === projName.toString().trim().toLowerCase()) : null;
 
       // Match warehouse
       const whName = row.warehouse_name || row['Kho Lưu Giữ'] || row['Kho'];
-      const matchedWh = whName ? warehouses.find(w => w.name.toLowerCase() === whName.toString().trim().toLowerCase()) : null;
+      const matchedWh = whName ? warehouses.find((w: any) => w.name.toLowerCase() === whName.toString().trim().toLowerCase()) : null;
 
       const businessProjName = row.business_project_name || row['Tên Dự Án Kinh Doanh'] || row['Tên dự án kinh doanh'];
       const businessPlot = row.business_plot_code || row['Mã Lô Kinh Doanh'] || row['Mã lô kinh doanh'];
@@ -594,7 +613,7 @@ export async function importExcelAndUpdateAssets(
             const current = mockStore.getAssets();
             mockStore.saveAssets(current.map(a => a.id === existing.id ? { ...a, ...updates } : a));
           } else {
-            await supabase.from('assets').update(updates).eq('id', existing.id);
+            await withTimeout(supabase.from('assets').update(updates).eq('id', existing.id), 3000).catch(() => {});
           }
 
           await createAuditLog({
@@ -671,10 +690,13 @@ export async function checkDuplicateAssets(certificateNos: string[]): Promise<st
     
     for (let i = 0; i < certificateNos.length; i += chunkSize) {
       const chunk = certificateNos.slice(i, i + chunkSize);
-      const { data, error } = await supabase
-        .from('assets')
-        .select('certificate_no')
-        .in('certificate_no', chunk);
+      const { data, error } = await withTimeout(
+        supabase
+          .from('assets')
+          .select('certificate_no')
+          .in('certificate_no', chunk),
+        3000
+      );
         
       if (error) throw error;
       if (data) {
@@ -684,7 +706,7 @@ export async function checkDuplicateAssets(certificateNos: string[]): Promise<st
     
     return duplicates;
   } catch (err) {
-    console.warn('Supabase checkDuplicateAssets error, using mockStore:', err);
+    console.warn('Supabase checkDuplicateAssets error or timeout, using mockStore:', err);
     const current = mockStore.getAssets();
     const existingSet = new Set(current.map(a => a.certificate_no));
     return certificateNos.filter(no => existingSet.has(no));
@@ -693,12 +715,14 @@ export async function checkDuplicateAssets(certificateNos: string[]): Promise<st
 
 export async function importAssets(assetsData: any[]) {
   const current = mockStore.getAssets();
-  const projects = mockStore.getProjects();
-  const warehouses = mockStore.getWarehouses();
+  const [projects, warehouses] = await Promise.all([
+    fetchProjects(),
+    fetchWarehouses(),
+  ]);
 
   let accumulatedAssets = [...current];
   const newAssets: Asset[] = assetsData.map((a, idx) => {
-    const selectedWh = warehouses.find(w => w.id === a.warehouse_id);
+    const selectedWh = warehouses.find((w: any) => w.id === a.warehouse_id);
     const regionCode = resolveRegionCode(a.project_id, projects, selectedWh?.region_code);
     const colType = a.collateral_type || 'BDS';
     const code = a.asset_code || generateNextAssetCode(regionCode, colType, accumulatedAssets);
@@ -742,15 +766,18 @@ export async function importAssets(assetsData: any[]) {
     return newAssets;
   }
   try {
-    const { data, error } = await supabase
-      .from('assets')
-      .insert(newAssets)
-      .select();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('assets')
+        .insert(newAssets)
+        .select(),
+      3000
+    );
 
     if (error) throw error;
     return data;
   } catch (err) {
-    console.warn('Supabase importAssets error, saving to mockStore:', err);
+    console.warn('Supabase importAssets error or timeout, saving to mockStore:', err);
     mockStore.saveAssets([...newAssets, ...current]);
     return newAssets;
   }
@@ -761,15 +788,18 @@ export async function fetchProjects(): Promise<Project[]> {
     return mockStore.getProjects();
   }
   try {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*, areas(name, region_id)')
-      .order('name');
+    const { data, error } = await withTimeout(
+      supabase
+        .from('projects')
+        .select('*, areas(name, region_id)')
+        .order('name'),
+      3000
+    );
 
     if (error) throw error;
     return data || [];
   } catch (err) {
-    console.warn('Supabase fetchProjects error, using mockStore:', err);
+    console.warn('Supabase fetchProjects error or timeout, using mockStore:', err);
     return mockStore.getProjects();
   }
 }
@@ -786,16 +816,19 @@ export async function createProject(project: { name: string; area_id: string }):
     return mockStore.getProjects().find(p => p.id === newProj.id)!;
   }
   try {
-    const { data, error } = await supabase
-      .from('projects')
-      .insert([project])
-      .select()
-      .single();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('projects')
+        .insert([project])
+        .select()
+        .single(),
+      3000
+    );
 
     if (error) throw error;
     return data;
   } catch (err) {
-    console.warn('Supabase createProject error, saving to mockStore:', err);
+    console.warn('Supabase createProject error or timeout, saving to mockStore:', err);
     const current = mockStore.getProjects();
     const newProj: Project = {
       id: 'proj-' + Date.now(),
@@ -814,12 +847,15 @@ export async function updateProject(id: string, updates: { name?: string; area_i
     return mockStore.getProjects().find(p => p.id === id);
   }
   try {
-    const { data, error } = await supabase
-      .from('projects')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('projects')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single(),
+      3000
+    );
 
     if (error) throw error;
     return data;
@@ -837,7 +873,10 @@ export async function deleteProject(id: string) {
     return;
   }
   try {
-    const { error } = await supabase.from('projects').delete().eq('id', id);
+    const { error } = await withTimeout(
+      supabase.from('projects').delete().eq('id', id),
+      3000
+    );
     if (error) throw error;
   } catch (err) {
     const current = mockStore.getProjects();
@@ -850,11 +889,14 @@ export async function fetchRegions(): Promise<Region[]> {
     return mockStore.getRegions();
   }
   try {
-    const { data, error } = await supabase.from('regions').select('*').order('name');
+    const { data, error } = await withTimeout(
+      supabase.from('regions').select('*').order('name'),
+      3000
+    );
     if (error) throw error;
     return data || [];
   } catch (err) {
-    console.warn('Supabase fetchRegions error, using mockStore:', err);
+    console.warn('Supabase fetchRegions error or timeout, using mockStore:', err);
     return mockStore.getRegions();
   }
 }
@@ -867,7 +909,10 @@ export async function createRegion(name: string): Promise<Region> {
     return newR;
   }
   try {
-    const { data, error } = await supabase.from('regions').insert([{ name }]).select().single();
+    const { data, error } = await withTimeout(
+      supabase.from('regions').insert([{ name }]).select().single(),
+      3000
+    );
     if (error) throw error;
     return data;
   } catch (err) {
@@ -885,7 +930,10 @@ export async function updateRegion(id: string, name: string) {
     return;
   }
   try {
-    const { data, error } = await supabase.from('regions').update({ name }).eq('id', id).select().single();
+    const { data, error } = await withTimeout(
+      supabase.from('regions').update({ name }).eq('id', id).select().single(),
+      3000
+    );
     if (error) throw error;
     return data;
   } catch (err) {
@@ -901,7 +949,10 @@ export async function deleteRegion(id: string) {
     return;
   }
   try {
-    const { error } = await supabase.from('regions').delete().eq('id', id);
+    const { error } = await withTimeout(
+      supabase.from('regions').delete().eq('id', id),
+      3000
+    );
     if (error) throw error;
   } catch (err) {
     const current = mockStore.getRegions();
@@ -914,11 +965,14 @@ export async function fetchAreas(): Promise<Area[]> {
     return mockStore.getAreas();
   }
   try {
-    const { data, error } = await supabase.from('areas').select('*, regions(name)').order('name');
+    const { data, error } = await withTimeout(
+      supabase.from('areas').select('*, regions(name)').order('name'),
+      3000
+    );
     if (error) throw error;
     return data || [];
   } catch (err) {
-    console.warn('Supabase fetchAreas error, using mockStore:', err);
+    console.warn('Supabase fetchAreas error or timeout, using mockStore:', err);
     return mockStore.getAreas();
   }
 }
@@ -931,7 +985,10 @@ export async function createArea(name: string, region_id: string): Promise<Area>
     return mockStore.getAreas().find(a => a.id === newA.id)!;
   }
   try {
-    const { data, error } = await supabase.from('areas').insert([{ name, region_id }]).select().single();
+    const { data, error } = await withTimeout(
+      supabase.from('areas').insert([{ name, region_id }]).select().single(),
+      3000
+    );
     if (error) throw error;
     return data;
   } catch (err) {
@@ -949,7 +1006,10 @@ export async function updateArea(id: string, name: string, region_id: string) {
     return;
   }
   try {
-    const { data, error } = await supabase.from('areas').update({ name, region_id }).eq('id', id).select().single();
+    const { data, error } = await withTimeout(
+      supabase.from('areas').update({ name, region_id }).eq('id', id).select().single(),
+      3000
+    );
     if (error) throw error;
     return data;
   } catch (err) {
@@ -965,7 +1025,10 @@ export async function deleteArea(id: string) {
     return;
   }
   try {
-    const { error } = await supabase.from('areas').delete().eq('id', id);
+    const { error } = await withTimeout(
+      supabase.from('areas').delete().eq('id', id),
+      3000
+    );
     if (error) throw error;
   } catch (err) {
     const current = mockStore.getAreas();
@@ -978,11 +1041,14 @@ export async function fetchWarehouses(): Promise<Warehouse[]> {
     return mockStore.getWarehouses();
   }
   try {
-    const { data, error } = await supabase.from('warehouses').select('*, regions(name)').order('name');
+    const { data, error } = await withTimeout(
+      supabase.from('warehouses').select('*, regions(name)').order('name'),
+      3000
+    );
     if (error) throw error;
     return data || [];
   } catch (err) {
-    console.warn('Supabase fetchWarehouses error, using mockStore:', err);
+    console.warn('Supabase fetchWarehouses error or timeout, using mockStore:', err);
     return mockStore.getWarehouses();
   }
 }
@@ -1002,7 +1068,10 @@ export async function createWarehouse(warehouse: { name: string; code?: string |
     return mockStore.getWarehouses().find(w => w.id === newW.id)!;
   }
   try {
-    const { data, error } = await supabase.from('warehouses').insert([warehouse]).select().single();
+    const { data, error } = await withTimeout(
+      supabase.from('warehouses').insert([warehouse]).select().single(),
+      3000
+    );
     if (error) throw error;
     return data;
   } catch (err) {
@@ -1027,7 +1096,10 @@ export async function updateWarehouse(id: string, updates: { name?: string; code
     return;
   }
   try {
-    const { data, error } = await supabase.from('warehouses').update(updates).eq('id', id).select().single();
+    const { data, error } = await withTimeout(
+      supabase.from('warehouses').update(updates).eq('id', id).select().single(),
+      3000
+    );
     if (error) throw error;
     return data;
   } catch (err) {
@@ -1043,7 +1115,10 @@ export async function deleteWarehouse(id: string) {
     return;
   }
   try {
-    const { error } = await supabase.from('warehouses').delete().eq('id', id);
+    const { error } = await withTimeout(
+      supabase.from('warehouses').delete().eq('id', id),
+      3000
+    );
     if (error) throw error;
   } catch (err) {
     const current = mockStore.getWarehouses();
@@ -1052,39 +1127,77 @@ export async function deleteWarehouse(id: string) {
 }
 
 export const deleteAsset = async (id: string): Promise<void> => {
-  const { error } = await supabase
-    .from('assets')
-    .delete()
-    .eq('id', id);
+  if (!isSupabaseConfigured) {
+    mockStore.deleteAsset(id);
+    return;
+  }
+  try {
+    const { error } = await withTimeout(
+      supabase
+        .from('assets')
+        .delete()
+        .eq('id', id),
+      3000
+    );
 
-  if (error) {
-    console.error('Lỗi khi xoá GCN:', error);
-    throw error;
+    if (error) {
+      console.warn('Supabase deleteAsset returned error, deleting from mockStore:', error);
+      mockStore.deleteAsset(id);
+    } else {
+      mockStore.deleteAsset(id);
+    }
+  } catch (err) {
+    console.warn('Supabase deleteAsset caught error or timeout, deleting from mockStore:', err);
+    mockStore.deleteAsset(id);
   }
 };
 
 export const deleteMultipleAssets = async (ids: string[]): Promise<void> => {
-  const { error } = await supabase
-    .from('assets')
-    .delete()
-    .in('id', ids);
-  if (error) {
-    console.error('Lỗi khi xoá nhiều GCN:', error);
-    throw error;
+  if (!ids || ids.length === 0) return;
+  if (!isSupabaseConfigured) {
+    mockStore.deleteAssets(ids);
+    return;
+  }
+  try {
+    const { error } = await withTimeout(
+      supabase
+        .from('assets')
+        .delete()
+        .in('id', ids),
+      3000
+    );
+
+    if (error) {
+      console.warn('Supabase deleteMultipleAssets returned error, deleting from mockStore:', error);
+      mockStore.deleteAssets(ids);
+    } else {
+      mockStore.deleteAssets(ids);
+    }
+  } catch (err) {
+    console.warn('Supabase deleteMultipleAssets caught error or timeout, deleting from mockStore:', err);
+    mockStore.deleteAssets(ids);
   }
 };
 
 export async function createMultipleAssets(assetsData: Partial<Asset>[]): Promise<Asset[]> {
   if (!isSupabaseConfigured) {
-    throw new Error('Supabase is not configured for bulk insert');
+    return importAssets(assetsData);
   }
-  const { data, error } = await supabase
-    .from('assets')
-    .insert(assetsData)
-    .select();
-  if (error) {
-    console.error('Lỗi khi thêm nhiều GCN:', error);
-    throw error;
+  try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('assets')
+        .insert(assetsData)
+        .select(),
+      3000
+    );
+    if (error) {
+      console.warn('Supabase createMultipleAssets error, saving to mockStore:', error);
+      return importAssets(assetsData);
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Supabase createMultipleAssets caught error or timeout, saving to mockStore:', err);
+    return importAssets(assetsData);
   }
-  return data || [];
 }

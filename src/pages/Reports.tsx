@@ -6,6 +6,8 @@ import { formatPlotCode } from '../lib/assetIdentifier';
 import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
+import { LoadingFallback } from '../components/LoadingFallback';
+import { mockStore } from '../lib/mockStore';
 
 export const Reports: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -445,9 +447,17 @@ export const Reports: React.FC = () => {
             <tbody className="divide-y divide-gray-200 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={27} className="px-4 py-16 text-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-amber-600 mx-auto" />
-                    <p className="mt-2 text-xs text-gray-500 font-semibold">Đang tổng hợp dữ liệu báo cáo...</p>
+                  <td colSpan={27} className="p-8">
+                    <LoadingFallback
+                      message="Đang tổng hợp dữ liệu báo cáo..."
+                      onRetry={() => loadData()}
+                      onForceLocal={() => {
+                        setAssets(mockStore.getAssets());
+                        setProjects(mockStore.getProjects());
+                        setLoading(false);
+                        toast.success('Đã tải dữ liệu báo cáo cục bộ');
+                      }}
+                    />
                   </td>
                 </tr>
               ) : filteredAssets.length === 0 ? (

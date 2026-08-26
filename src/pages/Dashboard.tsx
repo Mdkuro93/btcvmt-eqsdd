@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchDashboardAssetStats } from '../api/assets';
+import { fetchDashboardAssetStats, fetchWarehouses } from '../api/assets';
 import { fetchTransactions } from '../api/transactions';
 import { generateDemoData } from '../api/demo';
 import { DashboardSummaryCard, DashboardSummaryData } from '../components/DashboardSummaryCard';
-import { Asset } from '../types';
+import { Asset, Warehouse as WarehouseType } from '../types';
+import { getResponsibleWarehouseId } from '../lib/warehouseRouting';
 import { 
   Files, 
   Warehouse, 
@@ -52,9 +53,10 @@ export const Dashboard: React.FC = () => {
   const loadStats = useCallback(async () => {
     setLoading(true);
     try {
-      const [assetStats, txs] = await Promise.all([
+      const [assetStats, txs, warehouses] = await Promise.all([
         fetchDashboardAssetStats(),
         fetchTransactions(),
+        fetchWarehouses(),
       ]);
 
       let pendingTotal = 0;
@@ -67,6 +69,16 @@ export const Dashboard: React.FC = () => {
         sale_update: 0,
       };
 
+      const warehousePendingMap: Record<string, { warehouseId: string; warehouseName: string; count: number; isCentral?: boolean }> = {};
+      (warehouses || []).forEach(w => {
+        warehousePendingMap[w.id] = {
+          warehouseId: w.id,
+          warehouseName: w.name,
+          count: 0,
+          isCentral: w.is_central,
+        };
+      });
+
       if (txs) {
         const now = new Date();
         txs.forEach((tx: any) => {
@@ -77,7 +89,14 @@ export const Dashboard: React.FC = () => {
               if (typeCounts[t] !== undefined) {
                 typeCounts[t]++;
               }
-              const created = new Date(item.created_at);
+
+              // Responsible warehouse grouping
+              const responsibleWhId = getResponsibleWarehouseId(item, item.type || tx.type);
+              if (responsibleWhId && warehousePendingMap[responsibleWhId]) {
+                warehousePendingMap[responsibleWhId].count++;
+              }
+
+              const created = new Date(item.created_at || tx.created_at);
               const diffMs = now.getTime() - created.getTime();
               const diffHours = diffMs / (1000 * 60 * 60);
               if (diffHours > 24) overdueCount++; // SLA 24h
@@ -93,6 +112,7 @@ export const Dashboard: React.FC = () => {
         pendingRequests: pendingTotal,
         overdueRequests: overdueCount,
         pendingByType: typeCounts,
+        pendingByWarehouse: Object.values(warehousePendingMap),
         assetsInUse: (assetStats.checkedOut || 0) + (assetStats.mortgaged || 0),
         checkedOutCount: assetStats.checkedOut || 0,
         mortgagedCount: assetStats.mortgaged || 0,

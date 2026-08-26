@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 
 export async function fetchActivityLogs(params?: any): Promise<any[]> {
@@ -21,11 +21,11 @@ export async function fetchActivityLogs(params?: any): Promise<any[]> {
     if (assetId) query = query.eq('asset_id', assetId);
     if (actionType) query = query.eq('action_type', actionType);
 
-    const { data, error } = await query;
+    const { data, error } = await withTimeout(query, 3000);
     if (error) throw error;
     return data || [];
   } catch (err) {
-    console.warn('Supabase fetchActivityLogs error, using mockStore:', err);
+    console.warn('Supabase fetchActivityLogs error or timeout, using mockStore:', err);
     return mockStore.getLogs(params);
   }
 }
@@ -40,9 +40,15 @@ export async function logActivity(logData: {
   notes?: string;
   performedBy?: string;
 }) {
+  const warehouses = mockStore.getWarehouses();
+  const whObj = logData.warehouseId ? warehouses.find(w => w.id === logData.warehouseId) : undefined;
+  
   const newLog = {
     id: 'log-' + Date.now(),
     asset_id: logData.assetId || null,
+    warehouse_id: logData.warehouseId || null,
+    warehouse: whObj ? { name: whObj.name } : undefined,
+    notes: logData.notes || null,
     log_date: new Date().toISOString(),
     action_type: logData.actionType,
     document_no: logData.documentNo || 'CT-' + Math.floor(Math.random() * 1000),
@@ -52,27 +58,36 @@ export async function logActivity(logData: {
     performer: { full_name: 'Quản trị viên (BTC VMT)', email: 'admin@btcvmt.vn' },
   };
 
+  if (!isSupabaseConfigured) {
+    const logs = mockStore.getLogs();
+    mockStore.saveLogs([newLog, ...logs]);
+    return newLog;
+  }
+
   try {
-    const { data, error } = await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          asset_id: logData.assetId || null,
-          action_type: logData.actionType,
-          document_no: logData.documentNo || null,
-          description: logData.description || null,
-          used_by: logData.usedBy || null,
-          warehouse_id: logData.warehouseId || null,
-          notes: logData.notes || null,
-          performed_by: logData.performedBy || null,
-        },
-      ])
-      .select()
-      .single();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('activity_logs')
+        .insert([
+          {
+            asset_id: logData.assetId || null,
+            action_type: logData.actionType,
+            document_no: logData.documentNo || null,
+            description: logData.description || null,
+            used_by: logData.usedBy || null,
+            warehouse_id: logData.warehouseId || null,
+            notes: logData.notes || null,
+            performed_by: logData.performedBy || null,
+          },
+        ])
+        .select()
+        .single(),
+      3000
+    );
 
     if (!error && data) return data;
   } catch (err) {
-    console.warn('Supabase logActivity error, saving to mockStore:', err);
+    console.warn('Supabase logActivity error or timeout, saving to mockStore:', err);
   }
 
   const logs = mockStore.getLogs();

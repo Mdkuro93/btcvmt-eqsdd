@@ -30,6 +30,12 @@ export interface DashboardSummaryData {
     split: number;
     sale_update: number;
   };
+  pendingByWarehouse?: Array<{
+    warehouseId: string;
+    warehouseName: string;
+    count: number;
+    isCentral?: boolean;
+  }>;
 
   assetsInUse: number;
   checkedOutCount: number;
@@ -218,6 +224,28 @@ export const DashboardSummaryCard: React.FC<DashboardSummaryCardProps> = ({
                   <span className="font-semibold text-slate-800">{data.pendingByType.split + data.pendingByType.checkin}</span>
                 </div>
               </div>
+
+              {/* Breakdown by Responsible Warehouse */}
+              {data.pendingByWarehouse && data.pendingByWarehouse.some(w => w.count > 0) && (
+                <div className="mt-2 pt-2 border-t border-slate-100">
+                  <span className="text-[11px] font-semibold text-slate-700 block mb-1.5">
+                    Phân bổ theo kho chịu trách nhiệm:
+                  </span>
+                  <div className="space-y-1">
+                    {data.pendingByWarehouse.filter(w => w.count > 0).map(wh => (
+                      <div key={wh.warehouseId} className="flex items-center justify-between py-0.5 text-[11px]">
+                        <span className="text-slate-600 truncate flex items-center gap-1">
+                          <Warehouse className="w-3 h-3 text-slate-400 shrink-0" />
+                          {wh.warehouseName} {wh.isCentral ? '(TT)' : ''}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-900">
+                          {wh.count} phiếu
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

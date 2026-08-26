@@ -144,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Direct role sign-in fallback
     const roleNames: Record<Role, string> = {
       btc_manager: 'Quản trị viên (BTC VMT)',
+      warehouse_manager: 'Trần Văn Thủ Kho (Kho Trung Tâm & Bình Dương)',
       capital_dept: 'Chuyên viên Ban Nguồn Vốn',
       project_dept: 'Chuyên viên Ban DAĐT',
       re_dept: 'Chuyên viên Ban KD BĐS',
@@ -160,6 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       region_id: null,
       area_id: null,
       project_ids: null,
+      managed_warehouse_ids: role === 'warehouse_manager' ? ['wh-01', 'wh-02'] : null,
       permissions: DEFAULT_PERMISSIONS_BY_ROLE[role],
       status: 'active',
     };
@@ -194,9 +196,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateRole = async (newRole: Role) => {
     if (!profile) return;
+    const roleNames: Record<Role, string> = {
+      btc_manager: 'Quản trị viên (BTC VMT)',
+      warehouse_manager: 'Trần Văn Thủ Kho (Kho Trung Tâm & Bình Dương)',
+      capital_dept: 'Chuyên viên Ban Nguồn Vốn',
+      project_dept: 'Chuyên viên Ban DAĐT',
+      re_dept: 'Chuyên viên Ban KD BĐS',
+      viewer: 'Người xem tra cứu',
+      super_admin: 'Quản trị viên cấp cao',
+      admin: 'Quản trị hệ thống',
+    };
     const updated: Profile = {
       ...profile,
+      full_name: roleNames[newRole] || profile.full_name,
       role: newRole,
+      managed_warehouse_ids: newRole === 'warehouse_manager' ? (profile.managed_warehouse_ids?.length ? profile.managed_warehouse_ids : ['wh-01', 'wh-02']) : profile.managed_warehouse_ids,
       permissions: DEFAULT_PERMISSIONS_BY_ROLE[newRole],
     };
     setProfile(updated);
@@ -205,7 +219,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await supabase
           .from('profiles')
-          .update({ role: newRole, permissions: DEFAULT_PERMISSIONS_BY_ROLE[newRole] })
+          .update({
+            role: newRole,
+            permissions: DEFAULT_PERMISSIONS_BY_ROLE[newRole],
+            managed_warehouse_ids: updated.managed_warehouse_ids,
+          })
           .eq('id', user.id);
       } catch (err) {
         console.warn('Could not persist role update to Supabase:', err);

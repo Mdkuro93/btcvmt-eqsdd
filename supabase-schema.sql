@@ -171,7 +171,7 @@ create table assets (
   area numeric,
   owner_name text,
 
-  custody_status text not null default 'in_stock' check (custody_status in ('in_stock','checked_out')),
+  custody_status text not null default 'in_stock' check (custody_status in ('in_stock','checked_out','in_transit')),
   lifecycle_status text not null default 'active' check (lifecycle_status in ('active','split','invalidated')),
   sale_status text not null default 'not_ready' check (sale_status in ('not_ready','ready_for_sale','sold')),
   mortgage_status text not null default 'none' check (mortgage_status in ('none','mortgaged')),

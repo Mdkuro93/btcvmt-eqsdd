@@ -26,6 +26,7 @@ export const StatusBadges: React.FC<Props> = ({
     switch (status) {
       case 'in_stock': return { label: 'Trong kho', color: 'bg-green-100 text-green-800 border-green-200' };
       case 'checked_out': return { label: 'Đang mượn/xuất', color: 'bg-amber-100 text-amber-800 border-amber-200' };
+      case 'in_transit': return { label: 'Đang luân chuyển', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
       default: return { label: status, color: 'bg-gray-100 text-gray-800 border-gray-200' };
     }
   };

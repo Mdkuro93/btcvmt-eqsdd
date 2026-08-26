@@ -1,4 +1,4 @@
-export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer' | 'super_admin' | 'admin';
+export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer' | 'super_admin' | 'admin' | 'warehouse_manager';
 
 export interface Region {
   id: string;
@@ -48,13 +48,42 @@ export interface Profile {
   region_id: string | null;      // NULL = không giới hạn vùng (all)
   area_id: string | null;         // NULL = toàn vùng
   project_ids: string[] | null;   // NULL = không giới hạn theo dự án cụ thể
+  managed_warehouse_ids?: string[] | null; // Danh sách ID kho Thủ kho phụ trách
   permissions: string[] | null;   // NULL = dùng mặc định theo role; có giá trị = ghi đè chi tiết
   status: 'active' | 'inactive' | 'disabled';
   regions?: { name: string };
   areas?: { name: string };
 }
 
-export type CustodyStatus = 'in_stock' | 'checked_out';
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: 'request_approved' | 'request_approved_with_changes' | 'request_rejected' | string;
+  title: string;
+  body: string;
+  transaction_item_id?: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface TransactionItem {
+  id: string;
+  transaction_id: string;
+  asset_id: string;
+  confirmed_asset_id?: string | null;
+  type: TransactionType;
+  status: TransactionStatus;
+  details?: any;
+  requested_details?: any;
+  voucher_code?: string | null;
+  decision_notes?: string | null;
+  decided_at?: string | null;
+  decided_by?: { full_name?: string; email?: string } | null;
+  asset?: Asset;
+  confirmed_asset?: Asset;
+}
+
+export type CustodyStatus = 'in_stock' | 'checked_out' | 'in_transit';
 export type LifecycleStatus = 'active' | 'split' | 'invalidated';
 export type SaleStatus = 'not_ready' | 'ready_for_sale' | 'sold';
 export type MortgageStatus = 'none' | 'mortgaged';
@@ -104,6 +133,7 @@ export interface Asset {
   mortgage_unit_2?: string | null;               // Đơn vị vay 2
   mortgage_valuation?: number | null;            // Giá trị định giá
   collateral_ratio?: number | null;              // Tỷ lệ đảm bảo (%)
+  credit_grant_rate?: number | null;             // Tỷ lệ cấp tín dụng (%)
   collateral_value?: number | null;              // Giá trị đảm bảo (VNĐ)
   mortgage_expected_release_date?: string | null;// Ngày dự kiến giải chấp
 
@@ -124,7 +154,7 @@ export interface Asset {
   mortgage_status: MortgageStatus;
   warehouse_id: string | null;
   location_id?: string | null;
-  current_holder_dept: string | null;
+  current_holder_dept?: string | null;
   created_at: string;
   updated_at?: string | null;
   updated_by?: string | null;
