@@ -5,6 +5,8 @@ export interface ReportFilters {
   selectedProjectId: string;
   selectedMortgageStatus: string;
   searchTerm: string;
+  warehouseId?: string;
+  allowedWarehouseIds?: string[];
 }
 
 export interface ReportSummary {
@@ -20,6 +22,18 @@ export interface ReportSummary {
 
 export function computeReportSummary(assets: Asset[], filters: ReportFilters): ReportSummary {
   const filteredAssets = assets.filter((asset) => {
+    // Scoping by allowed warehouses (e.g. for warehouse managers)
+    if (filters.allowedWarehouseIds && filters.allowedWarehouseIds.length > 0) {
+      if (!asset.warehouse_id || !filters.allowedWarehouseIds.includes(asset.warehouse_id)) {
+        return false;
+      }
+    }
+
+    // Filter by specific warehouse
+    if (filters.warehouseId && asset.warehouse_id !== filters.warehouseId) {
+      return false;
+    }
+
     // Filter by Region name matching
     if (filters.selectedRegion && filters.selectedRegion !== 'Tất cả vùng') {
       const regionName = asset.projects?.areas?.regions?.name || (asset.warehouses as any)?.regions?.name || '';

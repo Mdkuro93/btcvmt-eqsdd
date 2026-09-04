@@ -180,26 +180,26 @@ export const Dashboard: React.FC = () => {
     <div className="space-y-6">
       <Toaster position="top-right" />
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tổng quan Quản lý GCN QSDĐ & TSĐB</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Xin chào, <span className="font-semibold text-[#1E3A8A]">{profile?.full_name || profile?.email}</span> ({profile?.role.replace('_', ' ')})
-          </p>
-        </div>
-
-        {profile?.role === 'btc_manager' && (
-          <button
-            onClick={handleGenerateDemo}
-            disabled={generatingDemo}
-            className="inline-flex items-center px-4 py-2 border border-blue-300 text-xs font-semibold rounded-lg shadow-xs text-[#1E3A8A] bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+      {/* Viewer Welcome Card */}
+      {profile?.role === 'viewer' && (
+        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/30 text-blue-200 border border-blue-400/30">
+              <Sparkles className="w-3.5 h-3.5" /> Quyền Tra Cứu Khách (Viewer)
+            </div>
+            <h2 className="text-lg font-bold text-white">Bạn đang có quyền tra cứu thông tin GCN theo kho</h2>
+            <p className="text-xs text-blue-200 max-w-xl">
+              Hệ thống cho phép bạn kiểm tra mã số sổ, tình trạng pháp lý, phân khu và tình trạng thế chấp của các Giấy chứng nhận trong các kho đã được phê duyệt.
+            </p>
+          </div>
+          <Link
+            to="/lookup"
+            className="whitespace-nowrap px-5 py-2.5 bg-white hover:bg-blue-50 text-[#1E3A8A] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
           >
-            {generatingDemo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2 text-blue-600" />}
-            Tạo dữ liệu thử nghiệm
-          </button>
-        )}
-      </div>
+            <Search className="w-4 h-4" /> Bắt đầu tra cứu ngay
+          </Link>
+        </div>
+      )}
 
       {/* Real-time Summary Card Component */}
       <DashboardSummaryCard

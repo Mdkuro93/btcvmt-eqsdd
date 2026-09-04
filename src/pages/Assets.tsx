@@ -34,9 +34,14 @@ import {
   Check,
   CheckSquare,
   History,
+  Database,
+  RefreshCw,
+  Info,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, supabaseUrl } from '../lib/supabase';
 
 import { LoadingFallback } from '../components/LoadingFallback';
 import { mockStore } from '../lib/mockStore';
@@ -47,6 +52,12 @@ export const Assets: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Supabase Data Source & Error tracking
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<'supabase' | 'mock'>(isSupabaseConfigured ? 'supabase' : 'mock');
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   
   // Filters
   const [search, setSearch] = useState('');
@@ -112,8 +123,9 @@ export const Assets: React.FC = () => {
 
   const loadAssets = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
-      const { data, totalCount: total } = await fetchAssets({
+      const res = await fetchAssets({
         search: debouncedSearch,
         collateralType: collateralType || undefined,
         projectId,
@@ -124,15 +136,31 @@ export const Assets: React.FC = () => {
         warehouseId,
         subdivision: debouncedSubdivision,
       }, page, pageSize);
-      setAssets(data || []);
-      setTotalCount(total || 0);
-    } catch (error) {
+
+      setAssets(res.data || []);
+      setTotalCount(res.totalCount || 0);
+      setDataSource(res.source || (isSupabaseConfigured ? 'supabase' : 'mock'));
+
+      if (res.error) {
+        setFetchError(res.error);
+      }
+    } catch (error: any) {
       console.error('Failed to load assets', error);
-      toast.error('Lỗi tải danh sách GCN');
+      const errMsg = error?.message || 'Không thể kết nối hoặc truy vấn dữ liệu từ Supabase';
+      setFetchError(errMsg);
+      setDataSource('mock');
+      toast.error('Lỗi truy vấn Supabase: ' + errMsg);
     } finally {
       setLoading(false);
     }
   }, [debouncedSearch, debouncedSubdivision, collateralType, projectId, custodyStatus, lifecycleStatus, saleStatus, mortgageStatus, warehouseId, page, pageSize]);
+
+  const handleRetryConnection = async () => {
+    setIsRetrying(true);
+    await loadAssets();
+    setIsRetrying(false);
+    toast.success('Đã thử lại truy vấn Supabase');
+  };
 
   // Reset to page 1 when any filter changes
   useEffect(() => {
@@ -288,11 +316,27 @@ export const Assets: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold text-gray-900">Quản Lý GCN QSDĐ & TSĐB</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
               {totalCount} tài sản
             </span>
+
+            {/* Supabase Connection Status Badge */}
+            {isSupabaseConfigured && !fetchError ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <Database className="w-3 h-3" /> Supabase Live
+              </span>
+            ) : fetchError ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                <XCircle className="w-3 h-3 text-red-500" /> Lỗi Supabase
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                <Info className="w-3 h-3 text-amber-500" /> Demo Mode (Chưa có .env Supabase)
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-500 mt-1">
             Định danh tự động theo vùng/loại TSĐB (VMT_BDS_xxxxx) · Quản lý phân khu riêng biệt & kiểm tra trùng lặp
@@ -329,6 +373,73 @@ export const Assets: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Supabase Error Alert Notification if fetch or connection fails */}
+      {fetchError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl shadow-xs text-xs text-red-900 animate-fadeIn">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold text-red-900 text-sm">Lỗi kết nối / truy vấn Supabase</h4>
+                <p className="mt-1 text-red-700">
+                  Hệ thống không thể tải dữ liệu từ bảng <code className="px-1 py-0.5 bg-red-100 rounded text-red-900 font-mono">assets</code> trong Supabase. Đang tự động chuyển sang dữ liệu dự phòng (Mock Store).
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRetryConnection}
+                    disabled={isRetrying}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors shadow-xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRetrying ? 'animate-spin' : ''}`} />
+                    {isRetrying ? 'Đang thử lại...' : 'Thử kết nối lại Supabase'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowErrorDetails(!showErrorDetails)}
+                    className="px-3 py-1.5 bg-white border border-red-300 hover:bg-red-50 text-red-800 font-medium rounded-lg transition-colors"
+                  >
+                    {showErrorDetails ? 'Ẩn chi tiết kỹ thuật' : 'Xem chi tiết lỗi'}
+                  </button>
+                </div>
+
+                {showErrorDetails && (
+                  <div className="mt-3 p-3 bg-white border border-red-200 rounded-lg text-red-950 font-mono text-[11px] overflow-x-auto leading-relaxed">
+                    <div className="font-bold text-gray-700 mb-1">Chi tiết thông báo lỗi (Error Details):</div>
+                    <pre className="whitespace-pre-wrap">{fetchError}</pre>
+                    <div className="mt-2 text-gray-500 border-t border-red-100 pt-1.5">
+                      Gợi ý: Kiểm tra biến môi trường <code className="text-gray-800 font-bold">VITE_SUPABASE_URL</code> và <code className="text-gray-800 font-bold">VITE_SUPABASE_ANON_KEY</code> trong cài đặt hoặc bảng <code className="text-gray-800 font-bold">assets</code> trong Supabase database.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setFetchError(null)}
+              className="text-red-400 hover:text-red-700 p-1 rounded-md"
+              title="Đóng thông báo"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Supabase Not Configured Info Notice (if .env keys not provided) */}
+      {!isSupabaseConfigured && !fetchError && (
+        <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+            <div>
+              <span className="font-bold text-blue-950">Chưa cấu hình Supabase:</span> Ứng dụng đang hiển thị dữ liệu mẫu từ Mock Store. Cấu hình biến môi trường <code className="px-1.5 py-0.5 bg-blue-100/80 rounded font-mono text-blue-950">VITE_SUPABASE_URL</code> và <code className="px-1.5 py-0.5 bg-blue-100/80 rounded font-mono text-blue-950">VITE_SUPABASE_ANON_KEY</code> để đồng bộ dữ liệu thực tế.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters Bar */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">

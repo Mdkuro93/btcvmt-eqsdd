@@ -55,7 +55,7 @@ export async function logActivity(logData: {
     description: logData.description || '',
     used_by: logData.usedBy || '',
     performed_by: logData.performedBy || null,
-    performer: { full_name: 'Quản trị viên (BTC VMT)', email: 'admin@btcvmt.vn' },
+    performer: { full_name: 'Quản trị viên (BTC VMT)', email: 'quantri@btcvmt.vn' },
   };
 
   if (!isSupabaseConfigured) {

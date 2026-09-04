@@ -1,5 +1,6 @@
 import { Asset, Region, Area, Warehouse, Project, Profile, Role, AuditLog } from '../types';
 import { DEFAULT_PERMISSIONS_BY_ROLE } from './permissions';
+import { DEMO_PROFILES } from './demoProfiles';
 
 export const MOCK_REGIONS: Region[] = [
   { id: 'reg-01', name: 'Miền Nam' },
@@ -547,80 +548,7 @@ export const MOCK_ASSETS: Asset[] = [
   },
 ];
 
-export const MOCK_PROFILES: Profile[] = [
-  {
-    id: '00000000-0000-0000-0000-000000000001',
-    email: 'admin@btcvmt.vn',
-    full_name: 'Nguyễn Văn Quản Trị',
-    role: 'super_admin',
-    region_id: null,
-    area_id: null,
-    project_ids: null,
-    managed_warehouse_ids: null,
-    permissions: DEFAULT_PERMISSIONS_BY_ROLE['super_admin'],
-    status: 'active',
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000002',
-    email: 'warehouse@btcvmt.vn',
-    full_name: 'Lê Hoàng Nam (Thủ Kho Trung Tâm)',
-    role: 'warehouse_manager',
-    region_id: 'reg-01',
-    area_id: 'area-01',
-    project_ids: null,
-    managed_warehouse_ids: ['wh-01', 'wh-02', 'wh-03', 'wh-04'],
-    permissions: DEFAULT_PERMISSIONS_BY_ROLE['warehouse_manager'],
-    status: 'active',
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000003',
-    email: 'capital@btcvmt.vn',
-    full_name: 'Phạm Minh Đức (Ban Nguồn Vốn)',
-    role: 'capital_dept',
-    region_id: null,
-    area_id: null,
-    project_ids: null,
-    managed_warehouse_ids: null,
-    permissions: DEFAULT_PERMISSIONS_BY_ROLE['capital_dept'],
-    status: 'active',
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000004',
-    email: 're_dept@btcvmt.vn',
-    full_name: 'Trần Thị Bích (Ban Kinh Doanh BĐS)',
-    role: 're_dept',
-    region_id: null,
-    area_id: null,
-    project_ids: null,
-    managed_warehouse_ids: null,
-    permissions: DEFAULT_PERMISSIONS_BY_ROLE['re_dept'],
-    status: 'active',
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000005',
-    email: 'project@btcvmt.vn',
-    full_name: 'Vũ Quốc Hùng (Ban Quản Lý Dự Án)',
-    role: 'project_dept',
-    region_id: null,
-    area_id: null,
-    project_ids: null,
-    managed_warehouse_ids: null,
-    permissions: DEFAULT_PERMISSIONS_BY_ROLE['project_dept'],
-    status: 'active',
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000006',
-    email: 'viewer@btcvmt.vn',
-    full_name: 'Chuyên viên Tra Cứu Hồ Sơ',
-    role: 'viewer',
-    region_id: null,
-    area_id: null,
-    project_ids: null,
-    managed_warehouse_ids: null,
-    permissions: DEFAULT_PERMISSIONS_BY_ROLE['viewer'],
-    status: 'active',
-  },
-];
+export const MOCK_PROFILES: Profile[] = DEMO_PROFILES;
 
 export const MOCK_TRANSACTIONS: any[] = [
   {
@@ -719,7 +647,7 @@ export const MOCK_TRANSACTIONS: any[] = [
         details: { saleStatus: 'ready_for_sale' },
         requested_details: { saleStatus: 'ready_for_sale' },
         decided_at: '2026-02-19T09:00:00Z',
-        decided_by: { full_name: 'Nguyễn Văn Quản Trị', email: 'admin@btcvmt.vn' },
+        decided_by: { full_name: 'Nguyễn Văn Quản Trị', email: 'quantri@btcvmt.vn' },
         decision_notes: 'Đã hoàn tất hạ tầng kỹ thuật và đủ điều kiện pháp lý mở bán theo Thông báo số 128/SXD-QLN.',
       },
     ],
@@ -744,7 +672,7 @@ export const MOCK_TRANSACTIONS: any[] = [
           mortgage_valuation: null,
         },
         decided_at: '2026-02-12T16:00:00Z',
-        decided_by: { full_name: 'Nguyễn Văn Quản Trị', email: 'admin@btcvmt.vn' },
+        decided_by: { full_name: 'Nguyễn Văn Quản Trị', email: 'quantri@btcvmt.vn' },
         decision_notes: 'Đã đối soát biên bản thanh lý hợp đồng thế chấp và xóa đăng ký giao dịch bảo đảm tại VPĐKĐĐ.',
       },
     ],
@@ -806,7 +734,7 @@ export const MOCK_ACTIVITY_LOGS: any[] = [
     document_no: 'GC-2026/045',
     description: 'Ghi nhận xóa thế chấp ngân hàng BIDV cho GCN-ĐNG-2023-00567',
     used_by: 'Ban Nguồn Vốn',
-    performer: { full_name: 'Nguyễn Văn Quản Trị', email: 'admin@btcvmt.vn' },
+    performer: { full_name: 'Nguyễn Văn Quản Trị', email: 'quantri@btcvmt.vn' },
     warehouse_id: 'wh-05',
     warehouse: { name: 'Kho Chi Nhánh Miền Trung - Đà Nẵng' },
     notes: 'Đã hoàn tất thủ tục đăng ký biến động giải chấp.',
@@ -837,7 +765,7 @@ export const MOCK_AUDIT_LOGS: AuditLog[] = [
     profiles: {
       id: '00000000-0000-0000-0000-000000000001',
       full_name: 'Nguyễn Văn Quản Trị',
-      email: 'admin@btcvmt.vn',
+      email: 'quantri@btcvmt.vn',
     },
   },
   {
@@ -857,7 +785,7 @@ export const MOCK_AUDIT_LOGS: AuditLog[] = [
     profiles: {
       id: '00000000-0000-0000-0000-000000000001',
       full_name: 'Nguyễn Văn Quản Trị',
-      email: 'admin@btcvmt.vn',
+      email: 'quantri@btcvmt.vn',
     },
   },
 ];
@@ -885,6 +813,160 @@ export const MOCK_NOTIFICATIONS: any[] = [
   },
 ];
 
+export const MOCK_ACCESS_REQUESTS: any[] = [
+  {
+    id: 'req-01',
+    full_name: 'Đặng Thanh Tâm',
+    email: 'tam.dang@vietcombank.com.vn',
+    phone: '0908123456',
+    organization: 'Ngân hàng TMCP Ngoại Thương VN (Vietcombank) - P. Thẩm định TSĐB',
+    purpose: 'Tra cứu thông tin pháp lý & tình trạng thế chấp GCN QSDĐ dự án Spana Riverside phục vụ giải ngân gói tín dụng',
+    warehouse_id: 'wh-03',
+    status: 'pending',
+    created_at: '2026-02-24T08:15:00Z',
+    warehouses: { name: 'Kho Dự Án Spana Riverside Bình Dương', code: '003', is_central: false },
+  },
+  {
+    id: 'req-02',
+    full_name: 'Hoàng Nhật Minh',
+    email: 'minh.hn@investvmt.vn',
+    phone: '0912889977',
+    organization: 'Công ty Cổ phần Đầu tư Đối tác VMT (Đơn vị liên kết phát triển DA)',
+    purpose: 'Khảo sát hiện trạng lưu trữ và số lượng sổ đỏ tại chi nhánh Miền Trung để chuẩn bị lập hồ sơ M&A',
+    warehouse_id: 'wh-05',
+    status: 'pending',
+    created_at: '2026-02-25T10:30:00Z',
+    warehouses: { name: 'Kho Chi Nhánh Miền Trung - Đà Nẵng', code: '005', is_central: false },
+  },
+  {
+    id: 'req-03',
+    full_name: 'Trần Văn Long',
+    email: 'long.tv@auditing.vn',
+    phone: '0988776655',
+    organization: 'Công ty Kiểm toán Ernst & Young (EY Việt Nam)',
+    purpose: 'Kiểm toán độc lập định kỳ hồ sơ pháp lý tài sản đảm bảo niên độ 2025-2026',
+    warehouse_id: 'wh-01',
+    status: 'approved',
+    reviewed_by: '00000000-0000-0000-0000-000000000001',
+    reviewed_at: '2026-02-20T16:00:00Z',
+    created_at: '2026-02-20T09:00:00Z',
+    reviewer: { full_name: 'Nguyễn Văn Quản Trị', email: 'quantri@btcvmt.vn' },
+    warehouses: { name: 'Kho Tổng Trung Tâm Tập Đoàn VMT', code: '001', is_central: true },
+  },
+];
+
+export const MOCK_VIEWER_WAREHOUSE_ACCESS: any[] = [
+  {
+    id: 'vwa-01',
+    user_id: '00000000-0000-0000-0000-000000000006',
+    warehouse_id: 'wh-01',
+    approved_by: '00000000-0000-0000-0000-000000000001',
+    approved_at: '2026-02-01T08:00:00Z',
+    expires_at: '2026-05-01T23:59:59Z',
+    notes: 'Cấp quyền tra cứu 90 ngày phục vụ đối soát định kỳ',
+    profiles: { full_name: 'Chuyên viên Tra Cứu Hồ Sơ', email: 'viewer@btcvmt.vn' },
+    warehouses: { name: 'Kho Tổng Trung Tâm Tập Đoàn VMT', code: '001', is_central: true },
+  },
+  {
+    id: 'vwa-02',
+    user_id: '00000000-0000-0000-0000-000000000006',
+    warehouse_id: 'wh-02',
+    approved_by: '00000000-0000-0000-0000-000000000001',
+    approved_at: '2026-02-01T08:00:00Z',
+    expires_at: '2026-08-01T23:59:59Z',
+    notes: 'Cấp quyền tra cứu 180 ngày kho Miền Nam',
+    profiles: { full_name: 'Chuyên viên Tra Cứu Hồ Sơ', email: 'viewer@btcvmt.vn' },
+    warehouses: { name: 'Kho Lưu Trữ Miền Nam - TP.HCM', code: '002', is_central: false },
+  },
+];
+
+export const MOCK_ACCESS_LOGS: any[] = [
+  {
+    id: 'alog-01',
+    user_id: '00000000-0000-0000-0000-000000000006',
+    action: 'login',
+    resource_table: null,
+    resource_id: null,
+    details: { method: 'otp', email: 'viewer@btcvmt.vn' },
+    ip_address: '14.232.180.12',
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0',
+    created_at: '2026-02-26T08:30:00Z',
+    profiles: { full_name: 'Chuyên viên Tra Cứu Hồ Sơ', email: 'viewer@btcvmt.vn' },
+  },
+  {
+    id: 'alog-02',
+    user_id: '00000000-0000-0000-0000-000000000006',
+    action: 'view_asset',
+    resource_table: 'assets',
+    resource_id: 'asset-01',
+    details: { certificate_no: 'GCN-HCM-2024-00189', warehouse_id: 'wh-01' },
+    ip_address: '14.232.180.12',
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0',
+    created_at: '2026-02-26T08:32:15Z',
+    profiles: { full_name: 'Chuyên viên Tra Cứu Hồ Sơ', email: 'viewer@btcvmt.vn' },
+  },
+  {
+    id: 'alog-03',
+    user_id: '00000000-0000-0000-0000-000000000003',
+    action: 'export',
+    resource_table: 'assets',
+    resource_id: null,
+    details: { format: 'xlsx', rowCount: 15, query: 'mortgaged' },
+    ip_address: '113.161.45.89',
+    user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    created_at: '2026-02-25T14:10:00Z',
+    profiles: { full_name: 'Phạm Minh Đức', email: 'capital@btcvmt.vn' },
+  },
+];
+
+export const MOCK_APP_USERS = [
+  {
+    id: 'app-user-01',
+    username: 'tracuuvien01',
+    password: 'password123',
+    role: 'user',
+    status: 'pending',
+    access_expires_at: null,
+    created_at: '2026-03-01T08:30:00Z',
+  },
+  {
+    id: 'app-user-02',
+    username: 'chuyenvien_nganhang',
+    password: 'password123',
+    role: 'user',
+    status: 'approved',
+    access_expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+    created_at: '2026-02-28T10:15:00Z',
+  },
+  {
+    id: 'app-user-03',
+    username: 'congtacvien_hanoi',
+    password: 'password123',
+    role: 'user',
+    status: 'pending',
+    access_expires_at: null,
+    created_at: '2026-03-02T14:20:00Z',
+  },
+  {
+    id: 'app-user-04',
+    username: 'thuky_phaply',
+    password: 'password123',
+    role: 'user',
+    status: 'expired',
+    access_expires_at: '2026-03-01T12:00:00Z',
+    created_at: '2026-02-20T09:00:00Z',
+  },
+  {
+    id: 'app-user-05',
+    username: 'admin',
+    password: 'password123',
+    role: 'admin',
+    status: 'approved',
+    access_expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    created_at: '2026-01-01T00:00:00Z',
+  },
+];
+
 const STORAGE_KEYS = {
   REGIONS: 'btcvmt_std_regions_v3',
   AREAS: 'btcvmt_std_areas_v3',
@@ -894,8 +976,12 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'btcvmt_std_transactions_v3',
   LOGS: 'btcvmt_std_activity_logs_v3',
   PROFILES: 'btcvmt_std_profiles_v3',
+  APP_USERS: 'btcvmt_std_app_users_v3',
   AUDIT_LOGS: 'btcvmt_std_audit_logs_v3',
   NOTIFICATIONS: 'btcvmt_std_notifications_v3',
+  ACCESS_REQUESTS: 'btcvmt_std_access_requests_v3',
+  VIEWER_WAREHOUSE_ACCESS: 'btcvmt_std_viewer_warehouse_access_v3',
+  ACCESS_LOGS: 'btcvmt_std_access_logs_v3',
 };
 
 function getStored<T>(key: string, defaultData: T): T {
@@ -1133,6 +1219,98 @@ export const mockStore = {
   getProfiles: (): Profile[] => getStored(STORAGE_KEYS.PROFILES, MOCK_PROFILES),
   saveProfiles: (data: Profile[]) => setStored(STORAGE_KEYS.PROFILES, data),
 
+  // app_users management
+  getAppUsers: (): any[] => getStored(STORAGE_KEYS.APP_USERS, MOCK_APP_USERS),
+  saveAppUsers: (data: any[]) => setStored(STORAGE_KEYS.APP_USERS, data),
+
+  registerAppUser: (p_username: string, p_password: string): any => {
+    const cleanUsername = p_username.trim().toLowerCase();
+    const users = mockStore.getAppUsers();
+    const existing = users.find(u => u.username.toLowerCase() === cleanUsername);
+    if (existing) {
+      throw new Error(`Tên đăng nhập "${cleanUsername}" đã tồn tại trên hệ thống.`);
+    }
+    const newUser = {
+      id: `app-user-${Date.now()}`,
+      username: cleanUsername,
+      password: p_password,
+      role: 'user',
+      status: 'pending',
+      access_expires_at: null,
+      created_at: new Date().toISOString(),
+    };
+    users.unshift(newUser);
+    mockStore.saveAppUsers(users);
+
+    // Also sync to mock profiles for backwards compatibility
+    const profiles = mockStore.getProfiles();
+    profiles.unshift({
+      id: newUser.id,
+      username: cleanUsername,
+      email: `${cleanUsername}@btcvmt.vn`,
+      full_name: cleanUsername,
+      role: 'user',
+      status: 'pending',
+      access_expires_at: null,
+      permissions: ['asset.lookup'],
+      region_id: null,
+      area_id: null,
+      project_ids: null,
+      managed_warehouse_ids: null,
+      created_at: newUser.created_at,
+    });
+    mockStore.saveProfiles(profiles);
+
+    return newUser;
+  },
+
+  loginAppUser: (p_username: string, p_password: string): any => {
+    const cleanUsername = p_username.trim().toLowerCase();
+    const users = mockStore.getAppUsers();
+    const user = users.find(u => u.username.toLowerCase() === cleanUsername);
+    if (!user) {
+      return null;
+    }
+    // Check password (in mock demo, also accept password123 or 123456 or exact match)
+    if (user.password && user.password !== p_password && p_password !== '123456' && p_password !== 'password123') {
+      return null;
+    }
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role || 'user',
+      status: user.status || 'pending',
+      access_expires_at: user.access_expires_at || null,
+      full_name: user.full_name || user.username,
+    };
+  },
+
+  approveAppUser: (id: string, accessExpiresAt: string): any => {
+    const users = mockStore.getAppUsers();
+    const updated = users.map(u => u.id === id ? { ...u, status: 'approved', access_expires_at: accessExpiresAt } : u);
+    mockStore.saveAppUsers(updated);
+
+    // Sync to profiles
+    const profiles = mockStore.getProfiles();
+    const updatedProfiles = profiles.map(p => p.id === id || p.username === id ? { ...p, status: 'approved' as const, access_expires_at: accessExpiresAt } : p);
+    mockStore.saveProfiles(updatedProfiles);
+
+    return updated.find(u => u.id === id);
+  },
+
+  rejectAppUser: (id: string): any => {
+    const users = mockStore.getAppUsers();
+    const updated = users.map(u => u.id === id ? { ...u, status: 'rejected' } : u);
+    mockStore.saveAppUsers(updated);
+
+    // Sync to profiles
+    const profiles = mockStore.getProfiles();
+    const updatedProfiles = profiles.map(p => p.id === id ? { ...p, status: 'rejected' as const } : p);
+    mockStore.saveProfiles(updatedProfiles);
+
+    return updated.find(u => u.id === id);
+  },
+
   getAuditLogs: (recordId?: string): AuditLog[] => {
     let logs: AuditLog[] = getStored(STORAGE_KEYS.AUDIT_LOGS, MOCK_AUDIT_LOGS);
     const profiles = mockStore.getProfiles();
@@ -1197,6 +1375,111 @@ export const mockStore = {
     setStored(STORAGE_KEYS.NOTIFICATIONS, updated);
   },
 
+  // Access Requests
+  getAccessRequests: (): any[] => {
+    const reqs = getStored(STORAGE_KEYS.ACCESS_REQUESTS, MOCK_ACCESS_REQUESTS);
+    const warehouses = mockStore.getWarehouses();
+    const profiles = mockStore.getProfiles();
+    return reqs.map(r => ({
+      ...r,
+      warehouses: warehouses.find(w => w.id === r.warehouse_id) || r.warehouses,
+      reviewer: profiles.find(p => p.id === r.reviewed_by) || r.reviewer,
+    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+  saveAccessRequests: (data: any[]) => setStored(STORAGE_KEYS.ACCESS_REQUESTS, data),
+  addAccessRequest: (req: any): any => {
+    const reqs = getStored<any[]>(STORAGE_KEYS.ACCESS_REQUESTS, MOCK_ACCESS_REQUESTS);
+    const newReq = {
+      ...req,
+      id: req.id || `req-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    };
+    reqs.unshift(newReq);
+    setStored(STORAGE_KEYS.ACCESS_REQUESTS, reqs);
+    return newReq;
+  },
+  updateAccessRequest: (id: string, updates: any) => {
+    const reqs = getStored<any[]>(STORAGE_KEYS.ACCESS_REQUESTS, MOCK_ACCESS_REQUESTS);
+    const updated = reqs.map(r => r.id === id ? { ...r, ...updates } : r);
+    setStored(STORAGE_KEYS.ACCESS_REQUESTS, updated);
+  },
+
+  // Viewer Warehouse Access
+  getViewerWarehouseAccess: (userId?: string): any[] => {
+    const accessList = getStored(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, MOCK_VIEWER_WAREHOUSE_ACCESS);
+    const warehouses = mockStore.getWarehouses();
+    const profiles = mockStore.getProfiles();
+    const enriched = accessList.map(a => ({
+      ...a,
+      warehouses: warehouses.find(w => w.id === a.warehouse_id) || a.warehouses,
+      profiles: profiles.find(p => p.id === a.user_id) || a.profiles,
+      approver: profiles.find(p => p.id === a.approved_by) || a.approver,
+    }));
+    if (userId) {
+      return enriched.filter(a => a.user_id === userId);
+    }
+    return enriched;
+  },
+  saveViewerWarehouseAccess: (data: any[]) => setStored(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, data),
+  grantViewerWarehouseAccess: (entry: any) => {
+    const accessList = getStored<any[]>(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, MOCK_VIEWER_WAREHOUSE_ACCESS);
+    const existingIndex = accessList.findIndex(a => a.user_id === entry.user_id && a.warehouse_id === entry.warehouse_id);
+    const newEntry = {
+      ...entry,
+      id: entry.id || `vwa-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      approved_at: new Date().toISOString(),
+    };
+    if (existingIndex >= 0) {
+      accessList[existingIndex] = { ...accessList[existingIndex], ...newEntry };
+    } else {
+      accessList.unshift(newEntry);
+    }
+    setStored(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, accessList);
+    return newEntry;
+  },
+  deleteViewerWarehouseAccess: (id: string) => {
+    const accessList = getStored<any[]>(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, MOCK_VIEWER_WAREHOUSE_ACCESS);
+    setStored(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, accessList.filter(a => a.id !== id));
+  },
+  extendViewerWarehouseAccess: (id: string, newExpiresAt: string | null) => {
+    const accessList = getStored<any[]>(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, MOCK_VIEWER_WAREHOUSE_ACCESS);
+    const updated = accessList.map(a => a.id === id ? { ...a, expires_at: newExpiresAt } : a);
+    setStored(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, updated);
+  },
+
+  // Access Logs
+  getAccessLogs: (filters?: any): any[] => {
+    let logs = getStored(STORAGE_KEYS.ACCESS_LOGS, MOCK_ACCESS_LOGS);
+    const profiles = mockStore.getProfiles();
+    logs = logs.map(l => ({
+      ...l,
+      profiles: profiles.find(p => p.id === l.user_id) || l.profiles,
+    }));
+    if (filters?.userId) {
+      logs = logs.filter(l => l.user_id === filters.userId);
+    }
+    if (filters?.action) {
+      logs = logs.filter(l => l.action === filters.action);
+    }
+    return logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+  saveAccessLogs: (data: any[]) => setStored(STORAGE_KEYS.ACCESS_LOGS, data),
+  addAccessLog: (log: any) => {
+    const logs = getStored<any[]>(STORAGE_KEYS.ACCESS_LOGS, MOCK_ACCESS_LOGS);
+    const profiles = mockStore.getProfiles();
+    const prof = profiles.find(p => p.id === log.user_id);
+    const newLog = {
+      ...log,
+      id: log.id || `alog-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      created_at: new Date().toISOString(),
+      profiles: prof ? { full_name: prof.full_name, email: prof.email } : null,
+    };
+    logs.unshift(newLog);
+    setStored(STORAGE_KEYS.ACCESS_LOGS, logs);
+    return newLog;
+  },
+
   resetToStandardData: () => {
     if (typeof window !== 'undefined') {
       (window as any)._mockStoreCache = {};
@@ -1211,6 +1494,9 @@ export const mockStore = {
     setStored(STORAGE_KEYS.PROFILES, MOCK_PROFILES);
     setStored(STORAGE_KEYS.AUDIT_LOGS, MOCK_AUDIT_LOGS);
     setStored(STORAGE_KEYS.NOTIFICATIONS, MOCK_NOTIFICATIONS);
+    setStored(STORAGE_KEYS.ACCESS_REQUESTS, MOCK_ACCESS_REQUESTS);
+    setStored(STORAGE_KEYS.VIEWER_WAREHOUSE_ACCESS, MOCK_VIEWER_WAREHOUSE_ACCESS);
+    setStored(STORAGE_KEYS.ACCESS_LOGS, MOCK_ACCESS_LOGS);
   },
 
   resetDemoData: () => {

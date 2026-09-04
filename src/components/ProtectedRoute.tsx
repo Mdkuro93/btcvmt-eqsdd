@@ -1,7 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth, Role } from '../contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldAlert } from 'lucide-react';
 
 interface ProtectedRouteProps {
   allowedRoles?: Role[];
@@ -13,29 +13,48 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-[#1E3A8A]" />
+          <p className="text-sm text-gray-500 font-medium">Đang kiểm tra quyền truy cập hệ thống...</p>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
+  // Chưa đăng nhập -> Chuyển về login
+  if (!user || !profile) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
-    // If user has a profile but their role is not allowed, redirect to dashboard
-    return <Navigate to="/" replace />;
+  // Tài khoản bị khóa, từ chối hoặc ngừng hoạt động
+  if (profile.status === 'disabled' || profile.status === 'rejected' || profile.status === 'inactive') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg border border-red-200 text-center">
+          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            {profile.status === 'rejected' ? 'Tài khoản đã bị từ chối' : 'Tài khoản đang bị tạm khóa'}
+          </h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Tài khoản của bạn ({profile.email}) hiện có trạng thái <strong>{profile.status}</strong>. Vui lòng liên hệ Ban Quản Trị hoặc Thủ kho phụ trách để được hỗ trợ.
+          </p>
+          <a
+            href="/login"
+            className="inline-flex items-center justify-center px-4 py-2 bg-[#1E3A8A] text-white rounded-lg font-medium text-sm hover:bg-blue-800 transition"
+          >
+            Quay lại trang Đăng nhập
+          </a>
+        </div>
+      </div>
+    );
   }
 
-  // If user doesn't have a profile yet but is logged in, wait or show error?
-  // We'll just let them through and if profile is null, they might see limited things, 
-  // but usually profile loads with session.
-  if (allowedRoles && !profile) {
-      return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
-          <p className="text-red-600">Lỗi tải thông tin tài khoản. Vui lòng liên hệ Admin.</p>
-        </div>
-      );
+  // Kiểm tra phân quyền theo vai trò (Role-Based Access)
+  if (allowedRoles && !allowedRoles.includes(profile.role)) {
+    const fallbackPath = (profile.role === 'viewer' || profile.role === 'user') ? '/lookup' : '/';
+    return <Navigate to={fallbackPath} replace />;
   }
 
   return <Outlet />;

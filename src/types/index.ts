@@ -1,4 +1,4 @@
-export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer' | 'super_admin' | 'admin' | 'warehouse_manager';
+export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer' | 'super_admin' | 'admin' | 'warehouse_manager' | 'user';
 
 export interface Region {
   id: string;
@@ -40,8 +40,32 @@ export interface Project {
   areas?: { name: string; region_id?: string; regions?: { name: string } };
 }
 
+export interface AppUser {
+  id: string;
+  username: string;
+  role: Role | string;
+  status: 'pending' | 'approved' | 'rejected' | 'disabled' | 'active' | 'inactive';
+  access_expires_at: string | null;
+  created_at?: string;
+  full_name?: string;
+  phone?: string | null;
+  organization?: string | null;
+  purpose?: string | null;
+}
+
+export interface AppUserSession {
+  id: string;
+  username: string;
+  role: Role | string;
+  status: 'pending' | 'approved' | 'rejected' | 'disabled' | 'active' | 'inactive';
+  access_expires_at: string | null;
+  created_at?: string;
+  full_name?: string;
+}
+
 export interface Profile {
   id: string;
+  username?: string;
   email?: string;
   full_name?: string;
   role: Role;
@@ -50,7 +74,12 @@ export interface Profile {
   project_ids: string[] | null;   // NULL = không giới hạn theo dự án cụ thể
   managed_warehouse_ids?: string[] | null; // Danh sách ID kho Thủ kho phụ trách
   permissions: string[] | null;   // NULL = dùng mặc định theo role; có giá trị = ghi đè chi tiết
-  status: 'active' | 'inactive' | 'disabled';
+  status: 'active' | 'inactive' | 'disabled' | 'pending' | 'approved' | 'rejected';
+  access_expires_at?: string | null; // Thời gian hết hạn tra cứu tạm thời (ISO timestamp)
+  phone?: string | null;
+  organization?: string | null;
+  purpose?: string | null;
+  created_at?: string;
   regions?: { name: string };
   areas?: { name: string };
 }
@@ -193,3 +222,51 @@ export interface AuditLog {
 
 export type TransactionType = 'checkout' | 'checkin' | 'split' | 'mortgage' | 'sale_update';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+
+export interface AccessRequest {
+  id: string;
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  organization?: string | null;
+  purpose?: string | null;
+  warehouse_id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  reject_reason?: string | null;
+  created_at: string;
+  reviewer?: { full_name?: string; email?: string } | null;
+  warehouse?: Warehouse;
+  warehouses?: { name: string; code?: string; is_central?: boolean };
+}
+
+export interface ViewerWarehouseAccess {
+  id: string;
+  user_id: string;
+  warehouse_id: string;
+  approved_by: string;
+  approved_at: string;
+  expires_at: string | null;
+  notes?: string | null;
+  user?: Profile;
+  warehouse?: Warehouse;
+  approver?: Profile;
+  profiles?: { full_name?: string; email?: string };
+  warehouses?: { name: string; code?: string; is_central?: boolean };
+}
+
+export interface AccessLog {
+  id: string;
+  user_id: string;
+  action: 'login' | 'view_asset' | 'search' | 'export' | string;
+  resource_table?: string | null;
+  resource_id?: string | null;
+  details?: Record<string, any> | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at: string;
+  user?: { full_name?: string; email?: string } | null;
+  profiles?: { full_name?: string; email?: string } | null;
+}
+

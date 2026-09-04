@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { Navigate, Link } from 'react-router-dom';
 import { lookupAssets, fetchProjects } from '../api/assets';
 import { Project } from '../types';
 import { StatusBadges } from '../components/StatusBadges';
-import { Search, Loader2, FileSearch } from 'lucide-react';
+import { Search, Loader2, FileSearch, Clock, AlertTriangle, ShieldCheck, RefreshCw, LogOut, Settings, User } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
+import { checkLookupAccess } from '../lib/accessGuard';
+import { format } from 'date-fns';
 
 export const Lookup: React.FC = () => {
+  const { profile, refreshProfile, signOut } = useAuth();
   const [queryText, setQueryText] = useState('');
   const [projectId, setProjectId] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
@@ -18,10 +23,32 @@ export const Lookup: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Kiểm tra nếu người dùng chưa đăng nhập -> Chuyển về trang Login
+  if (!profile) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const accessCheck = checkLookupAccess(profile);
 
   useEffect(() => {
-    loadProjects();
-  }, []);
+    if (accessCheck.allowed) {
+      loadProjects();
+    }
+  }, [accessCheck.allowed]);
+
+  const handleRefreshStatus = async () => {
+    setRefreshing(true);
+    try {
+      await refreshProfile();
+      toast.success('Đã cập nhật trạng thái mới nhất!');
+    } catch {
+      toast.error('Không thể làm mới trạng thái');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const loadProjects = async () => {
     try {
@@ -33,6 +60,13 @@ export const Lookup: React.FC = () => {
   };
 
   const executeSearch = async (pageNum: number, isLoadMore = false) => {
+    // Re-verify lookup access before executing search
+    const currentAccess = checkLookupAccess(profile);
+    if (!currentAccess.allowed) {
+      toast.error(currentAccess.message || 'Tài khoản của bạn chưa có quyền tra cứu dữ liệu.');
+      return;
+    }
+
     const queries = queryText
       .split('\n')
       .map(q => q.trim())
@@ -85,12 +119,125 @@ export const Lookup: React.FC = () => {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <Toaster position="top-right" />
+
+      {/* Header thanh người dùng & Điều hướng */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-gray-200">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-[#1E3A8A] text-white flex items-center justify-center font-bold font-mono text-sm shadow-xs">
+            {profile?.username ? profile.username.charAt(0).toUpperCase() : 'U'}
+          </div>
+          <div>
+            <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+              <span>{profile?.username || profile?.full_name || profile?.email}</span>
+              <span className="px-2 py-0.2 rounded text-[10px] font-semibold bg-blue-50 text-[#1E3A8A] border border-blue-200">
+                {profile?.role || 'user'}
+              </span>
+            </div>
+            <div className="text-[11px] text-gray-500">
+              Trạng thái:{' '}
+              <span className={`font-semibold ${
+                profile?.status === 'approved' ? 'text-emerald-700' : profile?.status === 'pending' ? 'text-amber-700' : 'text-red-700'
+              }`}>
+                {profile?.status === 'approved' ? 'Đã duyệt (approved)' : profile?.status === 'pending' ? 'Chờ duyệt (pending)' : 'Bị từ chối (rejected)'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          {(profile?.role === 'admin' || profile?.role === 'super_admin') && (
+            <Link
+              to="/admin"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#1E3A8A] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Quản trị hệ thống</span>
+            </Link>
+          )}
+
+          <button
+            type="button"
+            onClick={signOut}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition cursor-pointer"
+            title="Đăng xuất khỏi tài khoản"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Đăng xuất</span>
+          </button>
+        </div>
+      </div>
+
       <div className="text-center">
         <FileSearch className="w-10 h-10 text-[#1E3A8A] mx-auto mb-2" />
         <h1 className="text-2xl font-bold text-gray-900">Tra cứu tình trạng GCN</h1>
         <p className="text-sm text-gray-500 mt-1">Dán danh sách GCN (mỗi mã một dòng) hoặc tên phân khu để kiểm tra</p>
       </div>
 
+      {/* Thông báo điều kiện quyền tra cứu */}
+      {!accessCheck.allowed ? (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-6 text-center space-y-3 shadow-xs">
+          <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+            <Clock className="w-7 h-7 animate-pulse" />
+          </div>
+          <div>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-200 text-amber-900 mb-2">
+              {profile?.status === 'pending' ? 'Trạng thái: Chờ phê duyệt (pending)' : 'Trạng thái: Chưa đủ điều kiện tra cứu'}
+            </span>
+            <h3 className="text-xl font-extrabold text-amber-950">
+              Tài khoản của bạn đang chờ Admin phê duyệt hoặc đã hết hạn tra cứu
+            </h3>
+          </div>
+          <p className="text-sm text-amber-900 max-w-lg mx-auto leading-relaxed">
+            {profile?.status === 'pending' ? (
+              <>
+                Tài khoản <strong>{profile?.username || profile?.email}</strong> hiện có trạng thái <strong>pending</strong>. Quản trị viên (Admin) cần phê duyệt (status: approved) và cấp hạn tra cứu (access_expires_at) để bạn có thể xem dữ liệu GCN.
+              </>
+            ) : (
+              <>
+                Tài khoản <strong>{profile?.username || profile?.email}</strong> chưa được phê duyệt hoặc thời hạn tra cứu đã hết {profile?.access_expires_at ? `(hết hạn lúc ${format(new Date(profile.access_expires_at), 'dd/MM/yyyy HH:mm')})` : ''}. Vui lòng liên hệ Admin để được gia hạn.
+              </>
+            )}
+          </p>
+          <div className="pt-2 flex justify-center gap-3">
+            <button
+              onClick={handleRefreshStatus}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] hover:bg-blue-800 text-white rounded-xl text-sm font-semibold shadow-xs transition cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Đang kiểm tra...' : 'Kiểm tra lại trạng thái duyệt'}</span>
+            </button>
+          </div>
+        </div>
+      ) : profile?.access_expires_at ? (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-emerald-900 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <span>Tài khoản đã được duyệt tra cứu • </span>
+              <strong className="text-emerald-950">Thời hạn còn lại: {accessCheck.remainingText}</strong>
+              <span className="text-emerald-700"> (hết hạn lúc {format(new Date(profile.access_expires_at), 'HH:mm dd/MM/yyyy')})</span>
+            </div>
+          </div>
+          <button
+            onClick={handleRefreshStatus}
+            disabled={refreshing}
+            className="text-emerald-800 hover:text-emerald-950 font-medium flex items-center gap-1 shrink-0 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Đồng bộ hạn</span>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-900 shadow-xs">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Tài khoản đã được duyệt: <strong>Không giới hạn thời gian tra cứu</strong></span>
+          </div>
+        </div>
+      )}
+
+      {/* Lookup Form */}
       <form onSubmit={handleSearch} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 space-y-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
@@ -98,7 +245,8 @@ export const Lookup: React.FC = () => {
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="block w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500"
+              disabled={!accessCheck.allowed}
+              className="block w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
             >
               <option value="">Tất cả dự án</option>
               {projects.map(p => (
@@ -113,15 +261,20 @@ export const Lookup: React.FC = () => {
               <textarea
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
-                placeholder="GCN-VMT-0001&#10;GCN-VMT-0002&#10;Khu A..."
+                disabled={!accessCheck.allowed}
+                placeholder={accessCheck.allowed ? "GCN-VMT-0001\nGCN-VMT-0002\nKhu A..." : "Bạn cần được duyệt tài khoản để tra cứu"}
                 rows={3}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500"
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
               />
             </div>
           </div>
         </div>
         <div className="flex justify-end">
-          <button type="submit" disabled={loading} className="px-5 py-2.5 text-sm font-semibold rounded-md text-white bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 flex items-center gap-2">
+          <button 
+            type="submit" 
+            disabled={loading || !accessCheck.allowed} 
+            className="px-5 py-2.5 text-sm font-semibold rounded-md text-white bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+          >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             Tra cứu
           </button>

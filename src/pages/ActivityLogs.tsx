@@ -237,15 +237,18 @@ export const ActivityLogs: React.FC = () => {
             decided_at: selectedVoucherLog.log_date,
             notes: selectedVoucherLog.notes,
             asset: {
-              certificate_no: selectedVoucherLog.description || 'GCN QSDĐ',
+              certificate_no: selectedVoucherLog.description?.includes('GCN') 
+                ? (selectedVoucherLog.description.match(/GCN-[A-Za-z0-9-]+/)?.[0] || selectedVoucherLog.description)
+                : 'GCN QSDĐ',
               subdivision: '',
               lot_no: '',
-              owner_name: selectedVoucherLog.used_by || '',
+              owner_name: 'Công ty Cổ phần Tập đoàn VMT',
               area: 0,
             },
             details: {
               reason: selectedVoucherLog.description,
-              department: selectedVoucherLog.used_by,
+              department: selectedVoucherLog.used_by || 'Ban Tài chính (BTC VMT)',
+              receiverName: selectedVoucherLog.used_by || 'Người nhận bàn giao',
             },
           }}
           transaction={{

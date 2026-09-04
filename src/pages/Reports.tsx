@@ -1,21 +1,35 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { fetchAssets, fetchProjects } from '../api/assets';
-import { Asset, Project } from '../types';
+import { fetchAssets, fetchProjects, fetchWarehouses } from '../api/assets';
+import { Asset, Project, Warehouse } from '../types';
 import { computeReportSummary } from '../lib/reportEngine';
 import { formatPlotCode } from '../lib/assetIdentifier';
-import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle, Warehouse as WarehouseIcon, ShieldAlert } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import { LoadingFallback } from '../components/LoadingFallback';
 import { mockStore } from '../lib/mockStore';
+import { useAuth } from '../contexts/AuthContext';
 
 export const Reports: React.FC = () => {
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+
+  // Warehouse scoping for warehouse_manager
+  const isWarehouseManager = profile?.role === 'warehouse_manager';
+  const managedWarehouseIds = useMemo(() => {
+    if (!isWarehouseManager) return undefined;
+    if (profile?.managed_warehouse_ids && profile.managed_warehouse_ids.length > 0) {
+      return profile.managed_warehouse_ids;
+    }
+    return undefined;
+  }, [profile, isWarehouseManager]);
 
   // Filters
   const [selectedRegion, setSelectedRegion] = useState<string>('Tất cả vùng');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedMortgageStatus, setSelectedMortgageStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -31,17 +45,19 @@ export const Reports: React.FC = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [selectedRegion, selectedProjectId, selectedMortgageStatus, searchTerm, reportPeriod]);
+  }, [selectedRegion, selectedWarehouseId, selectedProjectId, selectedMortgageStatus, searchTerm, reportPeriod]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [assetsResult, allProjects] = await Promise.all([
+      const [assetsResult, allProjects, allWarehouses] = await Promise.all([
         fetchAssets({}, 1, 10000),
-        fetchProjects()
+        fetchProjects(),
+        fetchWarehouses()
       ]);
       setAssets(assetsResult.data || []);
       setProjects(allProjects);
+      setWarehouses(allWarehouses);
     } catch (error) {
       toast.error('Lỗi tải dữ liệu báo cáo');
       console.error(error);
@@ -50,15 +66,23 @@ export const Reports: React.FC = () => {
     }
   };
 
+  // Available warehouses for dropdown based on user role
+  const availableWarehouses = useMemo(() => {
+    if (!isWarehouseManager || !managedWarehouseIds) return warehouses;
+    return warehouses.filter(w => managedWarehouseIds.includes(w.id));
+  }, [warehouses, isWarehouseManager, managedWarehouseIds]);
+
   // Filtered Assets and Statistics
   const { filteredAssets, stats } = useMemo(() => {
     return computeReportSummary(assets, {
       selectedRegion,
       selectedProjectId,
       selectedMortgageStatus,
-      searchTerm
+      searchTerm,
+      warehouseId: selectedWarehouseId,
+      allowedWarehouseIds: managedWarehouseIds
     });
-  }, [assets, selectedRegion, selectedProjectId, selectedMortgageStatus, searchTerm]);
+  }, [assets, selectedRegion, selectedProjectId, selectedMortgageStatus, searchTerm, selectedWarehouseId, managedWarehouseIds]);
 
   const displayAssets = useMemo(() => {
     return filteredAssets.slice((page - 1) * pageSize, page * pageSize);
@@ -263,8 +287,28 @@ export const Reports: React.FC = () => {
           </div>
         </div>
 
+        {/* WAREHOUSE SCOPE NOTICE FOR WAREHOUSE MANAGERS */}
+        {isWarehouseManager && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between gap-3 text-xs text-amber-900">
+            <div className="flex items-center gap-2">
+              <WarehouseIcon className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>
+                <strong>Phạm vi dữ liệu Thủ kho:</strong> Báo cáo tự động giới hạn hiển thị các GCN thuộc các kho do bạn phụ trách{' '}
+                {availableWarehouses.length > 0 ? (
+                  <span className="font-bold text-amber-950">({availableWarehouses.map(w => w.name).join(', ')})</span>
+                ) : (
+                  <span className="italic">(Toàn bộ kho được phân công)</span>
+                )}
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold bg-amber-200/60 text-amber-800 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+              Quyền Thủ Kho
+            </span>
+          </div>
+        )}
+
         {/* CONTROLS & FILTERS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 pt-1">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Chọn Vùng Báo Cáo</label>
             <select
@@ -276,6 +320,20 @@ export const Reports: React.FC = () => {
               <option value="Vùng Miền Trung">Vùng Miền Trung</option>
               <option value="Vùng Miền Nam">Vùng Miền Nam</option>
               <option value="Vùng Miền Bắc">Vùng Miền Bắc</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Kho Lưu Trữ</label>
+            <select
+              value={selectedWarehouseId}
+              onChange={(e) => setSelectedWarehouseId(e.target.value)}
+              className="w-full text-xs px-3 py-2 border border-blue-200 rounded-md bg-blue-50/40 text-blue-900 font-medium"
+            >
+              <option value="">-- {isWarehouseManager ? 'Tất cả kho phụ trách' : 'Tất cả các kho'} --</option>
+              {availableWarehouses.map(w => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
             </select>
           </div>
 

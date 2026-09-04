@@ -6,30 +6,35 @@ import {
   Files, 
   CheckSquare, 
   BarChart3, 
-  Upload,
-  LogOut,
-  User,
-  Settings,
-  BookText,
-  FileSearch,
-  Bell,
-  Check,
-  Store,
-  Clock,
-  ExternalLink,
-  ChevronRight
+  Upload, 
+  LogOut, 
+  User, 
+  Settings, 
+  BookText, 
+  FileSearch, 
+  Bell, 
+  Check, 
+  Store, 
+  Clock, 
+  ChevronRight,
+  ShieldCheck,
+  Users
 } from 'lucide-react';
 import { fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api/notifications';
+import { fetchAccessRequests } from '../api/accessRequests';
+import { fetchProfiles } from '../api/users';
 import { Notification } from '../types';
 import { format } from 'date-fns';
 
 export const MainLayout: React.FC = () => {
-  const { profile, signOut, user, updateRole } = useAuth();
+  const { profile, signOut, user } = useAuth();
   const location = useLocation();
 
   // Notifications state
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [pendingAccessCount, setPendingAccessCount] = useState<number>(0);
+  const [pendingUserCount, setPendingUserCount] = useState<number>(0);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const loadNotifications = async () => {
@@ -41,11 +46,35 @@ export const MainLayout: React.FC = () => {
     }
   };
 
+  const loadPendingAccessCount = async () => {
+    if (profile?.role === 'btc_manager' || profile?.role === 'warehouse_manager' || profile?.role === 'admin' || profile?.role === 'super_admin') {
+      try {
+        const reqs = await fetchAccessRequests('pending');
+        let count = reqs.length;
+        if (profile.role === 'warehouse_manager' && profile.managed_warehouse_ids) {
+          count = reqs.filter(r => profile.managed_warehouse_ids?.includes(r.warehouse_id)).length;
+        }
+        setPendingAccessCount(count);
+
+        // Fetch pending users
+        const users = await fetchProfiles();
+        const pendingUsers = (users || []).filter(u => u.status === 'pending');
+        setPendingUserCount(pendingUsers.length);
+      } catch (err) {
+        console.warn('Load pending count error:', err);
+      }
+    }
+  };
+
   useEffect(() => {
     loadNotifications();
-    const timer = setInterval(loadNotifications, 15000); // Polling every 15s
+    loadPendingAccessCount();
+    const timer = setInterval(() => {
+      loadNotifications();
+      loadPendingAccessCount();
+    }, 15000); // Polling every 15s
     return () => clearInterval(timer);
-  }, [user?.id]);
+  }, [user?.id, profile?.role]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -80,14 +109,68 @@ export const MainLayout: React.FC = () => {
   };
 
   const navigation = [
-    { name: 'Tổng quan', href: '/', icon: LayoutDashboard, roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'viewer'] },
-    { name: 'Danh sách GCN', href: '/assets', icon: Files, roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept'] },
-    { name: 'Tra cứu tình trạng', href: '/lookup', icon: FileSearch, roles: ['viewer'] },
-    { name: profile?.role === 'btc_manager' || profile?.role === 'warehouse_manager' ? 'Duyệt yêu cầu & Kho' : 'Yêu cầu của tôi', href: '/requests', icon: CheckSquare, roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept'] },
-    { name: 'Nhật ký biến động', href: '/activity-logs', icon: BookText, roles: ['btc_manager', 'warehouse_manager'] },
-    { name: 'Báo cáo', href: '/reports', icon: BarChart3, roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept'] },
-    { name: 'Quản trị', href: '/admin', icon: Settings, roles: ['btc_manager'] },
-    { name: 'Import dữ liệu', href: '/import', icon: Upload, roles: ['btc_manager'] },
+    { 
+      name: 'Tổng quan', 
+      href: '/', 
+      icon: LayoutDashboard, 
+      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin'] 
+    },
+    { 
+      name: 'Tra cứu tình trạng', 
+      href: '/lookup', 
+      icon: FileSearch, 
+      roles: ['viewer', 'user'] 
+    },
+    { 
+      name: 'Quản lý người dùng', 
+      href: '/user-management', 
+      icon: Users, 
+      roles: ['admin', 'super_admin', 'warehouse_manager', 'btc_manager'],
+      badge: pendingUserCount > 0 ? pendingUserCount : undefined
+    },
+    { 
+      name: 'Danh sách GCN', 
+      href: '/assets', 
+      icon: Files, 
+      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin'] 
+    },
+    { 
+      name: profile?.role === 'btc_manager' || profile?.role === 'warehouse_manager' ? 'Duyệt yêu cầu & Kho' : 'Yêu cầu của tôi', 
+      href: '/requests', 
+      icon: CheckSquare, 
+      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin'] 
+    },
+    { 
+      name: 'Duyệt truy cập kho', 
+      href: '/access-requests', 
+      icon: ShieldCheck, 
+      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'],
+      badge: pendingAccessCount > 0 ? pendingAccessCount : undefined
+    },
+    { 
+      name: 'Nhật ký biến động', 
+      href: '/activity-logs', 
+      icon: BookText, 
+      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'] 
+    },
+    { 
+      name: 'Báo cáo', 
+      href: '/reports', 
+      icon: BarChart3, 
+      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'] 
+    },
+    { 
+      name: 'Quản trị', 
+      href: '/admin', 
+      icon: Settings, 
+      roles: ['btc_manager', 'admin', 'super_admin'] 
+    },
+    { 
+      name: 'Import dữ liệu', 
+      href: '/import', 
+      icon: Upload, 
+      roles: ['btc_manager', 'admin', 'super_admin'] 
+    },
   ];
 
   const allowedNav = navigation.filter(item => 
@@ -99,14 +182,15 @@ export const MainLayout: React.FC = () => {
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
         <div className="h-16 flex items-center px-6 border-b border-gray-200 gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#1E3A8A] text-white font-black flex items-center justify-center text-sm">
+          <div className="w-8 h-8 rounded-lg bg-[#1E3A8A] text-white font-black flex items-center justify-center text-sm shadow-sm">
             VMT
           </div>
           <div>
-            <h1 className="text-sm font-bold text-[#1E3A8A] leading-none">GCN QSDĐ</h1>
-            <p className="text-[10px] text-gray-500 mt-0.5">Quản trị kho & tài sản</p>
+            <h1 className="text-sm font-bold text-[#1E3A8A] leading-none">eQSDĐ & TSĐB</h1>
+            <p className="text-[10px] text-gray-500 mt-0.5">Ban Tài Chính Tập Đoàn</p>
           </div>
         </div>
+        
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
           {allowedNav.map((item) => {
             const isActive = location.pathname === item.href;
@@ -114,14 +198,21 @@ export const MainLayout: React.FC = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
                   isActive 
-                    ? 'bg-[#EBF5FF] text-[#1E3A8A]' 
+                    ? 'bg-blue-50 text-[#1E3A8A] font-semibold' 
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <item.icon className={`mr-3 h-5 w-5 ${isActive ? 'text-[#1E3A8A]' : 'text-gray-400'}`} />
-                {item.name}
+                <div className="flex items-center">
+                  <item.icon className={`mr-3 h-5 w-5 ${isActive ? 'text-[#1E3A8A]' : 'text-gray-400'}`} />
+                  <span>{item.name}</span>
+                </div>
+                {item.badge !== undefined && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-slate-950">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -131,25 +222,8 @@ export const MainLayout: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Topbar */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-end px-6 shadow-sm z-20 shrink-0">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-end px-6 shadow-xs z-20 shrink-0">
           <div className="flex items-center space-x-3">
-            
-            {/* Quick Test Role Switcher */}
-            <div className="mr-3 flex items-center text-sm border-r border-gray-200 pr-4">
-              <span className="text-gray-500 mr-2 text-xs font-medium">Chuyển vai trò:</span>
-              <select 
-                value={profile?.role || ''} 
-                onChange={(e) => updateRole && updateRole(e.target.value as any)}
-                className="text-xs border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 py-1 bg-gray-50"
-              >
-                <option value="btc_manager">Ban TC (Quản lý)</option>
-                <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
-                <option value="capital_dept">Ban Nguồn Vốn</option>
-                <option value="project_dept">Ban DAĐT</option>
-                <option value="re_dept">Ban KD BĐS</option>
-                <option value="viewer">Viewer</option>
-              </select>
-            </div>
 
             {/* Notification Bell Dropdown */}
             <div className="relative" ref={notifRef}>
@@ -240,7 +314,7 @@ export const MainLayout: React.FC = () => {
 
             {/* Profile Info */}
             <div className="flex flex-col items-end pl-2">
-              <span className="text-sm font-medium text-gray-900">{user?.email}</span>
+              <span className="text-sm font-semibold text-gray-900">{profile?.full_name || user?.email}</span>
               <span className="text-xs text-gray-500 capitalize flex items-center gap-1">
                 {profile?.role === 'warehouse_manager' ? (
                   <span className="text-amber-700 font-semibold flex items-center gap-0.5">

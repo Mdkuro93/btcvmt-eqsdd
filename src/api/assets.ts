@@ -20,13 +20,13 @@ function getDifferences(oldData: Record<string, any>, newData: Record<string, an
   return { oldDiff, newDiff };
 }
 
-export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promise<{ data: Asset[], totalCount: number }> {
+export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promise<{ data: Asset[], totalCount: number, source?: 'supabase' | 'mock', error?: any }> {
   if (!isSupabaseConfigured) {
     const allFiltered = mockStore.getAssets(filters);
     const totalCount = allFiltered.length;
     const startIndex = (page - 1) * pageSize;
     const data = allFiltered.slice(startIndex, startIndex + pageSize);
-    return { data, totalCount };
+    return { data, totalCount, source: 'mock' };
   }
   try {
     const from = (page - 1) * pageSize;
@@ -76,20 +76,26 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     // Apply Server-side Sort & Range Pagination
     query = query.order('created_at', { ascending: false }).range(from, to);
 
-    const { data, count, error } = await withTimeout(query, 3000);
+    const { data, count, error } = await withTimeout(query, 5000);
     if (error) throw error;
     
     return { 
       data: (data || []) as unknown as Asset[], 
-      totalCount: count ?? (data?.length || 0) 
+      totalCount: count ?? (data?.length || 0),
+      source: 'supabase'
     };
-  } catch (err) {
+  } catch (err: any) {
     console.warn('Supabase fetchAssets error or timeout, using mockStore fallback:', err);
     const allFiltered = mockStore.getAssets(filters);
     const totalCount = allFiltered.length;
     const startIndex = (page - 1) * pageSize;
     const data = allFiltered.slice(startIndex, startIndex + pageSize);
-    return { data, totalCount };
+    return { 
+      data, 
+      totalCount, 
+      source: 'mock',
+      error: err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+    };
   }
 }
 
