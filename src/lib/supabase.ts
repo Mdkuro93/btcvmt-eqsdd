@@ -3,28 +3,21 @@ import { Profile, AppUser, AppUserSession } from '../types';
 import { canLookupData, checkLookupAccess } from './accessGuard';
 import { mockStore } from './mockStore';
 
-// Read configuration from Vite environment variables (.env.local / .env)
-export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Direct Supabase configuration to prevent ERR_NAME_NOT_RESOLVED
+const SUPABASE_URL = 'https://dkzfjwrrlnupdflrxxao.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRremZqd3JybG51cGRmbHJ4eGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTgxNTgsImV4cCI6MjEwMzk5NDE1OH0.gaOgF8u-_rkg2qNsT2jePAFrjDyTHyXK58hZHwTGvRQ';
 
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  !supabaseUrl.includes('placeholder.supabase.co') &&
-  supabaseUrl.startsWith('https://')
-);
+export const supabaseUrl = SUPABASE_URL;
+export const supabaseAnonKey = SUPABASE_ANON_KEY;
+export const isSupabaseConfigured = true;
 
 // Initialize Supabase Client
-export const supabase = createClient(
-  isSupabaseConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
-  isSupabaseConfigured ? supabaseAnonKey : 'placeholder-anon-key',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  }
-);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
 
 export const APP_USER_SESSION_KEY = 'app_user_session';
 
