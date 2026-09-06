@@ -5,9 +5,6 @@ import {
   withTimeout, 
   loginUser, 
   registerUser, 
-  getStoredAppUserSession, 
-  saveAppUserSession, 
-  clearAppUserSession 
 } from '../lib/supabase';
 import { Profile, Role, AppUserSession } from '../types';
 import { mockStore } from '../lib/mockStore';
@@ -15,10 +12,28 @@ import { logAccessEvent } from '../api/accessLogs';
 
 export type { Role };
 
+export const CANONICAL_ROLES = [
+  'admin',
+  'warehouse_manager',
+  'capital_dept',
+  'project_dept',
+  're_dept',
+  'supervisor',
+  'investor',
+  'viewer'
+];
+
 interface AuthContextType {
-  user: { id: string; email: string } | null;
+  user: { id: string; email: string; role?: string } | null;
   profile: Profile | null;
   loading: boolean;
+  effectiveRole: string;
+  originalRole: string;
+  availableRoles: string[];
+  isSimulating: boolean;
+  setEffectiveRole: (role: string) => void;
+  resetRole: () => void;
+  refreshRoles: () => Promise<void>;
   signInWithPassword: (accountOrEmail: string, password: string) => Promise<{ success: boolean; profile: Profile }>;
   signInWithOtp: (accountOrEmail: string) => Promise<{ success: boolean; message?: string }>;
   verifyOtp: (accountOrEmail: string, token: string) => Promise<{ success: boolean; profile: Profile }>;
@@ -38,9 +53,84 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string; role?: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [effectiveRole, setEffectiveRoleState] = useState<string>('');
+  const [availableRoles, setAvailableRoles] = useState<string[]>(CANONICAL_ROLES);
+
+  // Xác định vai trò gốc thực tế của tài khoản (VD: admin, super_admin, btc_manager,...)
+  const originalRole = (profile?.originalRole || user?.role || profile?.role || '') as string;
+  const isAdmin = originalRole === 'admin' || originalRole === 'super_admin';
+  const isSimulating = Boolean(isAdmin && effectiveRole && effectiveRole !== originalRole);
+
+  // Tự động đồng bộ vai trò khi người dùng đăng nhập
+  useEffect(() => {
+    if (!profile) {
+      setEffectiveRoleState('');
+      return;
+    }
+
+    const realRole = (profile.originalRole || profile.role) as string;
+    const isUserAdmin = realRole === 'admin' || realRole === 'super_admin';
+
+    if (isUserAdmin) {
+      const savedEffectiveRole = typeof window !== 'undefined' ? sessionStorage.getItem('btcvmt_effective_role') : null;
+      if (savedEffectiveRole) {
+        setEffectiveRoleState(savedEffectiveRole);
+        if (profile.role !== savedEffectiveRole) {
+          setProfile(prev => prev ? ({ ...prev, originalRole: realRole as Role, role: savedEffectiveRole as Role }) : null);
+        }
+      } else {
+        setEffectiveRoleState(realRole);
+        if (profile.role !== realRole) {
+          setProfile(prev => prev ? ({ ...prev, originalRole: realRole as Role, role: realRole as Role }) : null);
+        }
+      }
+    } else {
+      setEffectiveRoleState(realRole);
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('btcvmt_effective_role');
+      }
+    }
+  }, [profile?.id, profile?.originalRole]);
+
+  const setEffectiveRole = (newRole: string) => {
+    const target = newRole.trim();
+    if (!target) return;
+    setEffectiveRoleState(target);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('btcvmt_effective_role', target);
+    }
+    setProfile(prev => {
+      if (!prev) return prev;
+      const realRole = prev.originalRole || prev.role;
+      return {
+        ...prev,
+        originalRole: realRole,
+        role: target as Role,
+      };
+    });
+  };
+
+  const resetRole = () => {
+    const target = originalRole || 'admin';
+    setEffectiveRoleState(target);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('btcvmt_effective_role');
+    }
+    setProfile(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        role: (prev.originalRole || target) as Role,
+      };
+    });
+  };
+
+  const refreshRoles = async () => {
+    setAvailableRoles(CANONICAL_ROLES);
+  };
 
   // Helper: Resolve Username or Email to actual Profile and Email
   const resolveToProfileAndEmail = async (accountInput: string): Promise<{ profile: Profile | null; email: string }> => {
@@ -142,7 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (prof.status === 'disabled' || prof.status === 'inactive' || prof.status === 'rejected') {
             return null;
           }
-          return prof as Profile;
+          return { ...prof, originalRole: (prof as any).originalRole || prof.role } as Profile;
         }
 
         const { data: profByEmail } = await supabase
@@ -155,7 +245,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (profByEmail.status === 'disabled' || profByEmail.status === 'inactive' || profByEmail.status === 'rejected') {
             return null;
           }
-          return profByEmail as Profile;
+          return { ...profByEmail, originalRole: (profByEmail as any).originalRole || profByEmail.role } as Profile;
         }
       } catch (err) {
         console.warn('Error validating Supabase profile:', err);
@@ -184,66 +274,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let mounted = true;
 
     async function initAuth() {
-      // 1. Kiểm tra session của app_user từ RPC (được lưu trong Local/SessionStorage)
-      const appUserSession = getStoredAppUserSession();
-      if (appUserSession && mounted) {
-        let currentStatus = appUserSession.status;
-        let currentExpiresAt = appUserSession.access_expires_at;
-
-        if (isSupabaseConfigured) {
-          try {
-            const { data: latestData } = await supabase
-              .from('app_users')
-              .select('id, username, role, status, access_expires_at')
-              .eq('id', appUserSession.id)
-              .maybeSingle();
-
-            if (latestData) {
-              currentStatus = latestData.status;
-              currentExpiresAt = latestData.access_expires_at;
-              appUserSession.status = latestData.status;
-              appUserSession.access_expires_at = latestData.access_expires_at;
-              saveAppUserSession(appUserSession);
-            }
-          } catch (err) {
-            console.warn('Lỗi kiểm tra app_users:', err);
-          }
-        } else {
-          const mockUsers = mockStore.getAppUsers();
-          const found = mockUsers.find(u => u.id === appUserSession.id || u.username === appUserSession.username);
-          if (found) {
-            currentStatus = found.status;
-            currentExpiresAt = found.access_expires_at;
-            appUserSession.status = found.status;
-            appUserSession.access_expires_at = found.access_expires_at;
-            saveAppUserSession(appUserSession);
-          }
-        }
-
-        const appProfile: Profile = {
-          id: appUserSession.id,
-          username: appUserSession.username,
-          email: appUserSession.username.includes('@') ? appUserSession.username : `${appUserSession.username}@btcvmt.vn`,
-          full_name: appUserSession.full_name || appUserSession.username,
-          role: (appUserSession.role as any) || 'user',
-          status: currentStatus as any,
-          access_expires_at: currentExpiresAt,
-          permissions: ['asset.lookup'],
-          region_id: null,
-          area_id: null,
-          project_ids: null,
-          managed_warehouse_ids: null,
-        };
-
-        if (mounted) {
-          setUser({ id: appUserSession.id, email: appProfile.email });
-          setProfile(appProfile);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // 2. Nếu không có app_user session, kiểm tra Supabase Auth chuẩn
       if (isSupabaseConfigured) {
         try {
           const { data: { session }, error } = await supabase.auth.getSession();
@@ -254,7 +284,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const validProfile = await loadAndValidateProfile(session.user.id, email);
 
             if (validProfile && mounted) {
-              setUser({ id: session.user.id, email });
+              setUser({ id: session.user.id, email, role: validProfile.role });
               setProfile(validProfile);
             } else if (mounted) {
               setUser(null);
@@ -275,7 +305,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (mounted) setLoading(false);
         }
       } else {
-        // Local mode session recovery (dev only)
         const isDevMode = import.meta.env.MODE !== 'production' || import.meta.env.VITE_ENABLE_DEMO_ACCOUNTS === 'true';
         if (isDevMode) {
           const storedUserId = typeof window !== 'undefined' ? localStorage.getItem('btcvmt_auth_user_id') : null;
@@ -283,7 +312,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const mockProfiles = mockStore.getProfiles();
             const p = mockProfiles.find(item => item.id === storedUserId && item.status === 'active');
             if (p && mounted) {
-              setUser({ id: p.id, email: p.email || '' });
+              setUser({ id: p.id, email: p.email || '', role: p.role });
               setProfile(p);
               setLoading(false);
               return;
@@ -300,15 +329,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isSupabaseConfigured) {
       const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (!mounted) return;
-        if (getStoredAppUserSession()) {
-          // app_user session takes precedence
-          return;
-        }
+        
         if (session?.user) {
           const email = session.user.email || '';
           const validProfile = await loadAndValidateProfile(session.user.id, email);
           if (validProfile && mounted) {
-            setUser({ id: session.user.id, email });
+            setUser({ id: session.user.id, email, role: validProfile.role });
             setProfile(validProfile);
           } else if (mounted) {
             setUser(null);
@@ -331,50 +357,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshProfile = async () => {
     if (!user) return;
-
-    // Kiểm tra và làm mới trạng thái cho tài khoản app_users (RPC)
-    const appSession = getStoredAppUserSession();
-    if (appSession && (appSession.id === user.id || appSession.username === user.email.replace('@btcvmt.vn', ''))) {
-      if (isSupabaseConfigured) {
-        try {
-          const { data: latestData } = await supabase
-            .from('app_users')
-            .select('id, username, role, status, access_expires_at')
-            .eq('id', appSession.id)
-            .maybeSingle();
-
-          if (latestData) {
-            appSession.status = latestData.status;
-            appSession.access_expires_at = latestData.access_expires_at;
-            saveAppUserSession(appSession);
-            setProfile(prev => prev ? ({
-              ...prev,
-              status: latestData.status as any,
-              access_expires_at: latestData.access_expires_at,
-            }) : null);
-            return;
-          }
-        } catch (err) {
-          console.warn('Lỗi refresh app_users:', err);
-        }
-      } else {
-        const mockUsers = mockStore.getAppUsers();
-        const found = mockUsers.find(u => u.id === appSession.id || u.username === appSession.username);
-        if (found) {
-          appSession.status = found.status;
-          appSession.access_expires_at = found.access_expires_at;
-          saveAppUserSession(appSession);
-          setProfile(prev => prev ? ({
-            ...prev,
-            status: found.status as any,
-            access_expires_at: found.access_expires_at,
-          }) : null);
-          return;
-        }
-      }
-    }
-
-    // Làm mới thông tin từ profiles (dành cho tài khoản nội bộ / Supabase Auth)
     const p = await loadAndValidateProfile(user.id, user.email);
     if (p) {
       setProfile(p);
@@ -409,7 +391,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           created_at: new Date().toISOString(),
         };
 
-        setUser({ id: appSession.id, email: appProfile.email });
+        setUser({ id: appSession.id, email: appProfile.email, role: appProfile.role });
         setProfile(appProfile);
 
         await logAccessEvent({
@@ -457,7 +439,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
         }
 
-        setUser({ id: data.user.id, email: resolvedEmail });
+        setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
         setProfile(validProfile);
 
         await logAccessEvent({
@@ -498,7 +480,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
     }
 
-    setUser({ id: localProfile.id, email: resolvedEmail });
+    setUser({ id: localProfile.id, email: resolvedEmail, role: localProfile.role });
     setProfile(localProfile);
     if (typeof window !== 'undefined') {
       localStorage.setItem('btcvmt_auth_user_id', localProfile.id);
@@ -591,7 +573,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
         }
 
-        setUser({ id: data.user.id, email: resolvedEmail });
+        setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
         setProfile(validProfile);
 
         await logAccessEvent({
@@ -625,7 +607,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Mã OTP không chính xác hoặc đã hết hạn.');
     }
 
-    setUser({ id: targetProfile.id, email: resolvedEmail });
+    setUser({ id: targetProfile.id, email: resolvedEmail, role: targetProfile.role });
     setProfile(targetProfile);
     if (typeof window !== 'undefined') {
       localStorage.setItem('btcvmt_auth_user_id', targetProfile.id);
@@ -785,7 +767,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Đăng xuất an toàn
    */
   const signOut = async () => {
-    clearAppUserSession();
     if (isSupabaseConfigured) {
       try {
         await supabase.auth.signOut();
@@ -795,7 +776,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     if (typeof window !== 'undefined') {
       localStorage.removeItem('btcvmt_auth_user_id');
+      sessionStorage.removeItem('btcvmt_effective_role');
     }
+    setEffectiveRoleState('');
     setUser(null);
     setProfile(null);
   };
@@ -806,6 +789,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         loading,
+        effectiveRole: effectiveRole || originalRole || 'user',
+        originalRole,
+        availableRoles,
+        isSimulating,
+        setEffectiveRole,
+        resetRole,
+        refreshRoles,
         signInWithPassword,
         signInWithOtp,
         verifyOtp,

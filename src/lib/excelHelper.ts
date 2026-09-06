@@ -27,6 +27,8 @@ export interface ExcelAssetRow {
   'Kho Lưu Giữ'?: string;
   'Người Cập Nhật Cuối'?: string;
   'Thời Gian Cập Nhật Cuối'?: string;
+  'Mã công ty sở hữu'?: string;
+  'Phân loại'?: string;
 }
 
 export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_QSDD_VMT') {
@@ -58,7 +60,7 @@ export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_Q
       'Số Tờ Bản Đồ': a.map_sheet_no || '',
       'Mã Lô Kinh Doanh': a.business_plot_code || '',
       'Diện Tích (m²)': a.area || 0,
-      'Chủ Sở Hữu': a.owner_name || 'Công ty Cổ phần Đầu tư VMT',
+      'Chủ Sở Hữu': a.owner_name || '-',
       'Loại Tài Sản': a.asset_type || 'Đất nền',
       'Mục Đích Sử Dụng': a.land_use_purpose || a.usage_purpose || '',
       'Thời Hạn Sử Dụng': a.land_use_term || a.usage_term || '',
@@ -70,6 +72,8 @@ export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_Q
       'Kho Lưu Giữ': a.warehouses?.name || '',
       'Người Cập Nhật Cuối': a.updater?.full_name || a.updater?.email || (a.updated_by ? 'Người dùng hệ thống' : ''),
       'Thời Gian Cập Nhật Cuối': a.updated_at ? format(new Date(a.updated_at), 'dd/MM/yyyy HH:mm') : (a.created_at ? format(new Date(a.created_at), 'dd/MM/yyyy HH:mm') : ''),
+      'Mã công ty sở hữu': a.current_owner_entity?.company_code || '',
+      'Phân loại': a.current_owner_role === 'cdt' ? 'CĐT' : (a.current_owner_role === 'ndt' ? 'NĐT' : ''),
     };
   });
 
@@ -101,6 +105,8 @@ export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_Q
     { wch: 24 }, // Kho
     { wch: 24 }, // Người cập nhật
     { wch: 20 }, // TG cập nhật
+    { wch: 22 }, // Mã công ty sở hữu
+    { wch: 12 }, // Phân loại
   ];
   worksheet['!cols'] = colWidths;
 
@@ -126,7 +132,7 @@ export function downloadExcelTemplate() {
       'Số Tờ Bản Đồ': '04',
       'Mã Lô Kinh Doanh': 'PALM-A01',
       'Diện Tích (m²)': 450.5,
-      'Chủ Sở Hữu': 'Công ty Cổ phần Đầu tư VMT',
+      'Chủ Sở Hữu': '-',
       'Loại Tài Sản': 'Biệt thự',
       'Mục Đích Sử Dụng': 'Đất ở tại đô thị (ODT)',
       'Thời Hạn Sử Dụng': 'Lâu dài',
@@ -135,7 +141,9 @@ export function downloadExcelTemplate() {
       'Trạng Thái Kinh Doanh': 'Sẵn sàng bán',
       'Trạng Thái Thế Chấp': 'Không thế chấp',
       'Ngân Hàng Thế Chấp': '',
-      'Kho Lưu Giữ': 'Kho Trung Tâm BTC',
+      'Kho Lưu Giữ': '-',
+      'Mã công ty sở hữu': 'VMT_HOLDINGS',
+      'Phân loại': 'CĐT',
     },
     {
       'ID Hệ Thống': '',
@@ -150,7 +158,7 @@ export function downloadExcelTemplate() {
       'Số Tờ Bản Đồ': '08',
       'Mã Lô Kinh Doanh': 'SP-SH-02',
       'Diện Tích (m²)': 120.0,
-      'Chủ Sở Hữu': 'Công ty Cổ phần Đầu tư VMT',
+      'Chủ Sở Hữu': '-',
       'Loại Tài Sản': 'Shophouse',
       'Mục Đích Sử Dụng': 'Đất ở tại đô thị (ODT)',
       'Thời Hạn Sử Dụng': 'Lâu dài',
@@ -160,6 +168,8 @@ export function downloadExcelTemplate() {
       'Trạng Thái Thế Chấp': 'Đang thế chấp',
       'Ngân Hàng Thế Chấp': 'BIDV Chi nhánh TP.HCM',
       'Kho Lưu Giữ': 'Kho Dự Án Bình Dương',
+      'Mã công ty sở hữu': '',
+      'Phân loại': '',
     },
   ];
 
@@ -167,4 +177,107 @@ export function downloadExcelTemplate() {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Mẫu_Cap_Nhat_GCN');
   XLSX.writeFile(workbook, 'Mau_Nhap_Cap_Nhat_GCN_QSDD_VMT.xlsx');
+}
+
+export function exportInventoryAuditToExcel(
+  audit: any,
+  discrepancyOnly: boolean = false
+) {
+  const items = audit.items || [];
+  const warehouseName = audit.warehouses?.name || audit.warehouse?.name || 'Kho VMT';
+  const performerName = audit.performer?.full_name || audit.profiles?.full_name || 'Thủ kho';
+  const startedDateStr = audit.started_at ? format(new Date(audit.started_at), 'dd/MM/yyyy HH:mm') : '-';
+  const completedDateStr = audit.completed_at ? format(new Date(audit.completed_at), 'dd/MM/yyyy HH:mm') : 'Chưa hoàn tất';
+
+  // 1. Data for Discrepancy Sheet (Chênh lệch: Thiếu hoặc Sai vị trí)
+  const discrepancyItems = items.filter(
+    (i: any) => i.finding_status === 'missing' || i.finding_status === 'misplaced'
+  );
+
+  const discrepancyRows = discrepancyItems.map((i: any, index: number) => {
+    const a = i.asset || {};
+    let statusText = 'Khớp';
+    if (i.finding_status === 'missing') statusText = '❌ KHÔNG TÌM THẤY (THIẾU)';
+    if (i.finding_status === 'misplaced') statusText = '⚠️ SAI VỊ TRÍ';
+
+    return {
+      'STT': index + 1,
+      'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
+      'Mã Tài Sản / TSĐB': a.asset_code || '-',
+      'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
+      'Phân Khu': a.subdivision || '-',
+      'Số Lô / Thửa': a.lot_no || a.land_lot_no || '-',
+      'Chủ Sở Hữu': a.owner_name || '-',
+      'Diện Tích (m²)': a.area || 0,
+      'Hiện Trạng Kiểm Kê': statusText,
+      'Vị Trí Dự Kiến': i.expected_location || '-',
+      'Vị Trí Thực Tế': i.actual_location || (i.finding_status === 'missing' ? 'Không xác định' : '-'),
+      'Ghi Chú Chi Tiết': i.note || '',
+      'Thời Gian Kiểm': i.audited_at ? format(new Date(i.audited_at), 'dd/MM/yyyy HH:mm') : '-',
+    };
+  });
+
+  // 2. Data for All Items Sheet (Toàn bộ danh sách)
+  const allRows = items.map((i: any, index: number) => {
+    const a = i.asset || {};
+    let statusText = 'Chưa kiểm';
+    if (i.finding_status === 'matched') statusText = '✅ Đã tìm thấy - Đúng vị trí';
+    if (i.finding_status === 'misplaced') statusText = '⚠️ Tìm thấy - Sai vị trí';
+    if (i.finding_status === 'missing') statusText = '❌ Không tìm thấy';
+
+    return {
+      'STT': index + 1,
+      'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
+      'Mã Tài Sản / TSĐB': a.asset_code || '-',
+      'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
+      'Phân Khu': a.subdivision || '-',
+      'Số Lô / Thửa': a.lot_no || a.land_lot_no || '-',
+      'Chủ Sở Hữu': a.owner_name || '-',
+      'Diện Tích (m²)': a.area || 0,
+      'Kết Quả Kiểm Kê': statusText,
+      'Tìm Thấy Thực Tế': i.actual_found ? 'Có' : 'Không',
+      'Vị Trí Dự Kiến': i.expected_location || '-',
+      'Vị Trí Thực Tế': i.actual_location || '-',
+      'Ghi Chú': i.note || '',
+      'Thời Gian Kiểm': i.audited_at ? format(new Date(i.audited_at), 'dd/MM/yyyy HH:mm') : '-',
+    };
+  });
+
+  const workbook = XLSX.utils.book_new();
+
+  // Summary header table
+  const summaryData = [
+    { 'Chỉ tiêu': 'Đợt kiểm kê', 'Giá trị': audit.id },
+    { 'Chỉ tiêu': 'Kho kiểm kê', 'Giá trị': warehouseName },
+    { 'Chỉ tiêu': 'Người thực hiện', 'Giá trị': performerName },
+    { 'Chỉ tiêu': 'Thời gian bắt đầu', 'Giá trị': startedDateStr },
+    { 'Chỉ tiêu': 'Thời gian hoàn tất', 'Giá trị': completedDateStr },
+    { 'Chỉ tiêu': 'Trạng thái đợt kiểm', 'Giá trị': audit.status === 'completed' ? 'Đã hoàn tất' : 'Đang thực hiện' },
+    { 'Chỉ tiêu': 'Tổng số GCN dự kiến', 'Giá trị': audit.total_expected || items.length },
+    { 'Chỉ tiêu': 'Số GCN tìm thấy', 'Giá trị': audit.total_found || 0 },
+    { 'Chỉ tiêu': 'Số GCN khuyết thiếu', 'Giá trị': audit.total_missing || 0 },
+    { 'Chỉ tiêu': 'Số GCN sai vị trí', 'Giá trị': audit.total_misplaced || 0 },
+    { 'Chỉ tiêu': 'Tỷ lệ khớp đúng vị trí', 'Giá trị': `${audit.total_expected > 0 ? Math.round(((audit.total_found - audit.total_misplaced) / audit.total_expected) * 100) : 0}%` },
+    { 'Chỉ tiêu': 'Ghi chú tổng kết', 'Giá trị': audit.notes || '-' },
+  ];
+
+  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Tổng_Quan_Dot_Kiem_Ke');
+
+  if (discrepancyRows.length > 0 || discrepancyOnly) {
+    const discrepancySheet = XLSX.utils.json_to_sheet(discrepancyRows.length > 0 ? discrepancyRows : [{ 'Thông báo': 'Không có chênh lệch nào trong đợt kiểm kê này.' }]);
+    XLSX.utils.book_append_sheet(workbook, discrepancySheet, 'Danh_Sach_Chenh_Lech');
+  }
+
+  if (!discrepancyOnly) {
+    const allSheet = XLSX.utils.json_to_sheet(allRows);
+    XLSX.utils.book_append_sheet(workbook, allSheet, 'Toan_Bo_Ket_Qua');
+  }
+
+  const cleanWarehouseName = warehouseName.replace(/[^a-zA-Z0-9_\u00C0-\u024F\u1E00-\u1EFF]/g, '_');
+  const fileName = discrepancyOnly 
+    ? `Bao_Cao_Chenh_Lech_Kiem_Ke_${cleanWarehouseName}_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`
+    : `Bien_Ban_Kiem_Ke_Kho_${cleanWarehouseName}_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+
+  XLSX.writeFile(workbook, fileName);
 }

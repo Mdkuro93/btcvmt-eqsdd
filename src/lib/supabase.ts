@@ -242,26 +242,20 @@ export async function loginUser(p_username: string, p_password: string): Promise
  */
 export async function fetchAppUsers(filters?: { status?: string }): Promise<AppUser[]> {
   if (isSupabaseConfigured) {
-    try {
-      let query = supabase
-        .from('app_users')
-        .select('*')
-        .order('created_at', { ascending: false });
+    let query = supabase
+      .from('app_users')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (filters?.status) {
-        query = query.eq('status', filters.status);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        console.warn('Lỗi lấy danh sách app_users từ Supabase:', error);
-        return mockStore.getAppUsers();
-      }
-      return (data as AppUser[]) || [];
-    } catch (err) {
-      console.warn('Lỗi kết nối khi lấy app_users:', err);
-      return mockStore.getAppUsers();
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
     }
+
+    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+    if (error) {
+      throw new Error(error.message || 'Lỗi lấy danh sách app_users từ Supabase.');
+    }
+    return (data as AppUser[]) || [];
   }
 
   let users = mockStore.getAppUsers();
@@ -276,8 +270,8 @@ export async function fetchAppUsers(filters?: { status?: string }): Promise<AppU
  */
 export async function approveAppUser(userId: string, accessExpiresAt: string): Promise<{ success: boolean; data?: any }> {
   if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
+    const { data, error } = await withTimeout(
+      supabase
         .from('app_users')
         .update({
           status: 'approved',
@@ -285,21 +279,20 @@ export async function approveAppUser(userId: string, accessExpiresAt: string): P
         })
         .eq('id', userId)
         .select()
-        .single();
+        .single(),
+      DEFAULT_WRITE_TIMEOUT
+    );
 
-      if (error) {
-        console.warn('Lỗi khi cập nhật app_users trên Supabase:', error);
-      }
-
-      // Cập nhật cả mockStore để đồng bộ ngay lập tức trên UI
-      mockStore.approveAppUser(userId, accessExpiresAt);
-
-      return { success: !error, data: data || { id: userId, status: 'approved', access_expires_at: accessExpiresAt } };
-    } catch (err) {
-      console.warn('Ngoại lệ khi gọi approveAppUser:', err);
-      mockStore.approveAppUser(userId, accessExpiresAt);
-      return { success: true };
+    if (error) {
+      throw new Error(error.message || 'Lỗi khi cập nhật app_users trên Supabase.');
     }
+
+    // Cập nhật cả mockStore để đồng bộ ngay lập tức trên UI
+    try {
+      mockStore.approveAppUser(userId, accessExpiresAt);
+    } catch {}
+
+    return { success: true, data: data || { id: userId, status: 'approved', access_expires_at: accessExpiresAt } };
   }
 
   const updated = mockStore.approveAppUser(userId, accessExpiresAt);
@@ -311,26 +304,26 @@ export async function approveAppUser(userId: string, accessExpiresAt: string): P
  */
 export async function rejectAppUser(userId: string): Promise<{ success: boolean; data?: any }> {
   if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
+    const { data, error } = await withTimeout(
+      supabase
         .from('app_users')
         .update({
           status: 'rejected',
         })
         .eq('id', userId)
         .select()
-        .single();
+        .single(),
+      DEFAULT_WRITE_TIMEOUT
+    );
 
-      if (error) {
-        console.warn('Lỗi khi từ chối app_users trên Supabase:', error);
-      }
-
-      mockStore.rejectAppUser(userId);
-      return { success: !error, data };
-    } catch (err) {
-      mockStore.rejectAppUser(userId);
-      return { success: true };
+    if (error) {
+      throw new Error(error.message || 'Lỗi khi từ chối app_users trên Supabase.');
     }
+
+    try {
+      mockStore.rejectAppUser(userId);
+    } catch {}
+    return { success: true, data };
   }
 
   const updated = mockStore.rejectAppUser(userId);
@@ -575,19 +568,23 @@ export async function testSupabaseConnection(): Promise<{ ok: boolean; message: 
   }
 }
 
+export const DEFAULT_READ_TIMEOUT = 5000;
+export const DEFAULT_WRITE_TIMEOUT = 8000;
+
 /**
  * Timeout wrapper for Supabase queries.
- * Rejects if the promise takes longer than `timeoutMs` (default 5000ms).
+ * Rejects if the promise takes longer than `timeoutMs`.
+ * Default timeout is 5000ms for reads and 8000ms for write operations.
  */
 export async function withTimeout<T>(
   promise: Promise<T> | PromiseLike<T>,
-  timeoutMs: number = 5000,
-  fallbackMsg: string = 'Quá thời gian phản hồi từ Supabase (Timeout 5s)'
+  timeoutMs: number = DEFAULT_READ_TIMEOUT,
+  fallbackMsg?: string
 ): Promise<T> {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      reject(new Error(fallbackMsg));
+      reject(new Error(fallbackMsg || `Quá thời gian phản hồi từ Supabase (Timeout ${timeoutMs / 1000}s)`));
     }, timeoutMs);
   });
 
@@ -602,29 +599,25 @@ export async function withTimeout<T>(
 }
 
 /**
- * Safe Supabase query executor with timeout and fallback support
+ * Safe Supabase query executor with timeout.
+ * mockStore fallback is ONLY used when isSupabaseConfigured === false.
+ * When isSupabaseConfigured === true, any error or timeout is thrown immediately.
  */
 export async function safeSupabaseQuery<T>(
   queryPromise: PromiseLike<{ data: T | null; error: any; count?: number | null }>,
   fallbackFn: () => T | Promise<T>,
-  timeoutMs: number = 5000
+  timeoutMs: number = DEFAULT_READ_TIMEOUT
 ): Promise<{ data: T; count?: number }> {
   if (!isSupabaseConfigured) {
     const fallbackData = await fallbackFn();
     return { data: fallbackData };
   }
 
-  try {
-    const res = await withTimeout(queryPromise, timeoutMs);
-    if (res.error) throw res.error;
-    return {
-      data: res.data as T,
-      count: res.count !== undefined && res.count !== null ? res.count : undefined,
-    };
-  } catch (err) {
-    console.warn(`Supabase query failed or timed out (${timeoutMs}ms), falling back to mockStore:`, err);
-    const fallbackData = await fallbackFn();
-    return { data: fallbackData };
-  }
+  const res = await withTimeout(queryPromise, timeoutMs);
+  if (res.error) throw res.error;
+  return {
+    data: res.data as T,
+    count: res.count !== undefined && res.count !== null ? res.count : undefined,
+  };
 }
 

@@ -18,6 +18,7 @@ export const ImportExcelModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, 
   const [error, setError] = useState<string | null>(null);
   const [rawRows, setRawRows] = useState<any[]>([]);
   const [importMode, setImportMode] = useState<'update_or_create' | 'update_only' | 'create_only'>('update_or_create');
+  const [recordHistory, setRecordHistory] = useState(false);
   const [resultSummary, setResultSummary] = useState<{ updatedCount: number; createdCount: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +63,7 @@ export const ImportExcelModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, 
     setLoading(true);
     setError(null);
     try {
-      const result = await importExcelAndUpdateAssets(rawRows, currentUser, importMode);
+      const result = await importExcelAndUpdateAssets(rawRows, currentUser, importMode, recordHistory);
       setResultSummary(result);
       if (result.errors.length === 0) {
         toast.success(`Nhập Excel thành công: ${result.updatedCount} cập nhật, ${result.createdCount} tạo mới!`);
@@ -227,6 +228,22 @@ export const ImportExcelModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, 
                     </div>
                   </label>
                 </div>
+              </div>
+
+              {/* History Backfill Checkbox */}
+              <div className="border border-indigo-100 rounded-xl p-4 bg-indigo-50/30">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={recordHistory}
+                    onChange={(e) => setRecordHistory(e.target.checked)}
+                    className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-indigo-900">Đây là dữ liệu lịch sử, ghi nhận lịch sử chuyển nhượng nếu có chênh lệch với chủ sở hữu gốc của dự án</div>
+                    <div className="text-[10px] text-indigo-700/80 mt-1">Khi bật, nếu pháp nhân sở hữu trong file khác với pháp nhân gốc của dự án, hệ thống sẽ tự động tạo một giao dịch chuyển nhượng trong lịch sử.</div>
+                  </div>
+                </label>
               </div>
 
               {/* Data Preview */}

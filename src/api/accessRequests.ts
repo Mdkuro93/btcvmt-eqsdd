@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { AccessRequest } from '../types';
 import { grantViewerWarehouseAccess } from './viewerAccess';
@@ -32,23 +32,26 @@ export async function submitAccessRequests(payload: CreateAccessRequestPayload):
     status: 'pending',
   }));
 
-  if (isSupabaseConfigured) {
-    try {
-      const { error } = await withTimeout(
-        supabase.from('access_requests').insert(rows),
-        5000
-      );
-      if (error) throw error;
-      return { success: true, count: rows.length };
-    } catch (err) {
-      console.warn('Supabase submitAccessRequests error or timeout, saving to mockStore:', err);
+  if (!isSupabaseConfigured) {
+    // Fallback / Mock
+    for (const row of rows) {
+      mockStore.addAccessRequest(row);
     }
+    return { success: true, count: rows.length };
   }
 
-  // Fallback / Mock
-  for (const row of rows) {
-    mockStore.addAccessRequest(row);
-  }
+  const { error } = await withTimeout(
+    supabase.from('access_requests').insert(rows),
+    DEFAULT_WRITE_TIMEOUT
+  );
+  if (error) throw error;
+  
+  try {
+    for (const row of rows) {
+      mockStore.addAccessRequest(row);
+    }
+  } catch {}
+  
   return { success: true, count: rows.length };
 }
 
@@ -56,34 +59,30 @@ export async function submitAccessRequests(payload: CreateAccessRequestPayload):
  * Lấy danh sách yêu cầu truy cập kho (Có áp dụng RLS hoặc filter theo role)
  */
 export async function fetchAccessRequests(statusFilter?: 'pending' | 'approved' | 'rejected' | 'all'): Promise<AccessRequest[]> {
-  if (isSupabaseConfigured) {
-    try {
-      let query = supabase
-        .from('access_requests')
-        .select(`
-          *,
-          reviewer:profiles!access_requests_reviewed_by_fkey(full_name, email),
-          warehouses:warehouses(id, name, code, is_central)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (statusFilter && statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
-      }
-
-      const { data, error } = await withTimeout(query, 4000);
-      if (error) throw error;
-      return (data || []) as AccessRequest[];
-    } catch (err) {
-      console.warn('Supabase fetchAccessRequests error, fallback to mockStore:', err);
+  if (!isSupabaseConfigured) {
+    let reqs = mockStore.getAccessRequests();
+    if (statusFilter && statusFilter !== 'all') {
+      reqs = reqs.filter(r => r.status === statusFilter);
     }
+    return reqs as AccessRequest[];
   }
 
-  let reqs = mockStore.getAccessRequests();
+  let query = supabase
+    .from('access_requests')
+    .select(`
+      *,
+      reviewer:profiles!access_requests_reviewed_by_fkey(full_name, email),
+      warehouses:warehouses(id, name, code, is_central)
+    `)
+    .order('created_at', { ascending: false });
+
   if (statusFilter && statusFilter !== 'all') {
-    reqs = reqs.filter(r => r.status === statusFilter);
+    query = query.eq('status', statusFilter);
   }
-  return reqs as AccessRequest[];
+
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) throw error;
+  return (data || []) as AccessRequest[];
 }
 
 /**
@@ -97,124 +96,119 @@ export async function approveAccessRequest(params: {
 }): Promise<any> {
   const { requestId, reviewerId, expiresAt, notes } = params;
 
-  if (isSupabaseConfigured) {
-    try {
-      // 1. Thử gọi RPC duyệt an toàn
-      const { data, error } = await withTimeout(
-        supabase.rpc('approve_viewer_access_request', {
-          p_request_id: requestId,
-          p_expires_at: expiresAt || null,
-          p_notes: notes || null,
-        }),
-        5000
-      );
+  if (!isSupabaseConfigured) {
+    // Local Mock Logic
+    const allReqs = mockStore.getAccessRequests();
+    const targetReq = allReqs.find(r => r.id === requestId);
+    if (!targetReq) throw new Error('Không tìm thấy yêu cầu cần duyệt');
 
-      if (!error) {
-        return data;
+    let profiles = mockStore.getProfiles();
+    let userProfile = profiles.find(p => p.email?.toLowerCase() === targetReq.email.toLowerCase());
+    const derivedUsername = targetReq.email.split('@')[0].toLowerCase();
+
+    if (!userProfile) {
+      userProfile = {
+        id: `usr-viewer-${Date.now()}`,
+        username: derivedUsername,
+        email: targetReq.email.toLowerCase(),
+        full_name: targetReq.full_name,
+        role: 'viewer',
+        status: 'active',
+        permissions: ['asset.view'],
+        region_id: null,
+        area_id: null,
+        project_ids: null,
+        managed_warehouse_ids: null,
+      };
+      mockStore.saveProfiles([userProfile, ...profiles]);
+    } else {
+      userProfile.status = 'active';
+      if (!userProfile.username) {
+        userProfile.username = derivedUsername;
       }
-      console.warn('RPC approve_viewer_access_request failed, trying direct table update:', error);
-
-      // 2. Direct query fallback if RPC is not deployed yet
-      const { data: reqData, error: reqErr } = await supabase
-        .from('access_requests')
-        .select('*')
-        .eq('id', requestId)
-        .single();
-      if (reqErr || !reqData) throw reqErr || new Error('Không tìm thấy yêu cầu');
-
-      // Find or create profile
-      let targetUserId: string;
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('email', reqData.email)
-        .maybeSingle();
-
-      if (existingProfile) {
-        targetUserId = existingProfile.id;
-        await supabase.from('profiles').update({ status: 'active' }).eq('id', targetUserId);
-      } else {
-        const { data: newProf, error: pErr } = await supabase.from('profiles').insert([{
-          email: reqData.email.toLowerCase(),
-          full_name: reqData.full_name,
-          role: 'viewer',
-          status: 'active',
-          permissions: ['asset.view'],
-        }]).select().single();
-        if (pErr) throw pErr;
-        targetUserId = newProf.id;
-      }
-
-      // Upsert into viewer_warehouse_access
-      await supabase.from('viewer_warehouse_access').upsert({
-        user_id: targetUserId,
-        warehouse_id: reqData.warehouse_id,
-        approved_by: reviewerId,
-        approved_at: new Date().toISOString(),
-        expires_at: expiresAt || null,
-        notes: notes || null,
-      }, { onConflict: 'user_id,warehouse_id' });
-
-      // Update access_requests status
-      await supabase.from('access_requests').update({
-        status: 'approved',
-        reviewed_by: reviewerId,
-        reviewed_at: new Date().toISOString(),
-      }).eq('id', requestId);
-
-      return { success: true };
-    } catch (err) {
-      console.warn('Supabase approveAccessRequest error, fallback to mockStore:', err);
+      mockStore.saveProfiles([...profiles]);
     }
+
+    // Grant warehouse access
+    grantViewerWarehouseAccess({
+      user_id: userProfile.id,
+      warehouse_id: targetReq.warehouse_id,
+      approved_by: reviewerId,
+      expires_at: expiresAt || null,
+      notes: notes || null,
+    });
+
+    // Update request state
+    mockStore.updateAccessRequest(requestId, {
+      status: 'approved',
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+    });
+
+    return { success: true };
   }
 
-  // Local Mock Logic
-  const allReqs = mockStore.getAccessRequests();
-  const targetReq = allReqs.find(r => r.id === requestId);
-  if (!targetReq) throw new Error('Không tìm thấy yêu cầu cần duyệt');
+  // 1. Thử gọi RPC duyệt an toàn
+  const { data, error } = await withTimeout(
+    supabase.rpc('approve_viewer_access_request', {
+      p_request_id: requestId,
+      p_expires_at: expiresAt || null,
+      p_notes: notes || null,
+    }),
+    DEFAULT_WRITE_TIMEOUT
+  );
 
-  let profiles = mockStore.getProfiles();
-  let userProfile = profiles.find(p => p.email?.toLowerCase() === targetReq.email.toLowerCase());
-  const derivedUsername = targetReq.email.split('@')[0].toLowerCase();
+  if (error) {
+    console.warn('RPC approve_viewer_access_request failed, trying direct table update:', error);
 
-  if (!userProfile) {
-    userProfile = {
-      id: `usr-viewer-${Date.now()}`,
-      username: derivedUsername,
-      email: targetReq.email.toLowerCase(),
-      full_name: targetReq.full_name,
-      role: 'viewer',
-      status: 'active',
-      permissions: ['asset.view'],
-      region_id: null,
-      area_id: null,
-      project_ids: null,
-      managed_warehouse_ids: null,
-    };
-    mockStore.saveProfiles([userProfile, ...profiles]);
-  } else {
-    userProfile.status = 'active';
-    if (!userProfile.username) {
-      userProfile.username = derivedUsername;
+    // 2. Direct query fallback if RPC is not deployed yet
+    const { data: reqData, error: reqErr } = await supabase
+      .from('access_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+    if (reqErr || !reqData) throw reqErr || new Error('Không tìm thấy yêu cầu');
+
+    // Find or create profile
+    let targetUserId: string;
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('email', reqData.email)
+      .maybeSingle();
+
+    if (existingProfile) {
+      targetUserId = existingProfile.id;
+      await supabase.from('profiles').update({ status: 'active' }).eq('id', targetUserId);
+    } else {
+      const { data: newProf, error: pErr } = await supabase.from('profiles').insert([{
+        email: reqData.email.toLowerCase(),
+        full_name: reqData.full_name,
+        role: 'viewer',
+        status: 'active',
+        permissions: ['asset.view'],
+      }]).select().single();
+      if (pErr) throw pErr;
+      targetUserId = newProf.id;
     }
-    mockStore.saveProfiles([...profiles]);
+
+    // Upsert into viewer_warehouse_access
+    await supabase.from('viewer_warehouse_access').upsert({
+      user_id: targetUserId,
+      warehouse_id: reqData.warehouse_id,
+      approved_by: reviewerId,
+      approved_at: new Date().toISOString(),
+      expires_at: expiresAt || null,
+      notes: notes || null,
+    }, { onConflict: 'user_id,warehouse_id' });
+
+    // Update access_requests status
+    await supabase.from('access_requests').update({
+      status: 'approved',
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+    }).eq('id', requestId);
   }
-
-  // Grant warehouse access
-  grantViewerWarehouseAccess({
-    user_id: userProfile.id,
-    warehouse_id: targetReq.warehouse_id,
-    approved_by: reviewerId,
-    expires_at: expiresAt || null,
-    notes: notes || null,
-  });
-
-  // Update request state
-  mockStore.updateAccessRequest(requestId, {
-    status: 'approved',
-    reviewed_by: reviewerId,
-    reviewed_at: new Date().toISOString(),
-  });
 
   return { success: true };
 }
@@ -229,33 +223,39 @@ export async function rejectAccessRequest(params: {
 }): Promise<any> {
   const { requestId, reviewerId, rejectReason } = params;
 
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await withTimeout(
-        supabase
-          .from('access_requests')
-          .update({
-            status: 'rejected',
-            reject_reason: rejectReason,
-            reviewed_by: reviewerId,
-            reviewed_at: new Date().toISOString(),
-          })
-          .eq('id', requestId)
-          .select(),
-        4000
-      );
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      console.warn('Supabase rejectAccessRequest error, fallback to mockStore:', err);
-    }
+  if (!isSupabaseConfigured) {
+    mockStore.updateAccessRequest(requestId, {
+      status: 'rejected',
+      reject_reason: rejectReason,
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+    });
+    return { success: true };
   }
 
-  mockStore.updateAccessRequest(requestId, {
-    status: 'rejected',
-    reject_reason: rejectReason,
-    reviewed_by: reviewerId,
-    reviewed_at: new Date().toISOString(),
-  });
-  return { success: true };
+  const { data, error } = await withTimeout(
+    supabase
+      .from('access_requests')
+      .update({
+        status: 'rejected',
+        reject_reason: rejectReason,
+        reviewed_by: reviewerId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', requestId)
+      .select(),
+    DEFAULT_WRITE_TIMEOUT
+  );
+  if (error) throw error;
+  
+  try {
+    mockStore.updateAccessRequest(requestId, {
+      status: 'rejected',
+      reject_reason: rejectReason,
+      reviewed_by: reviewerId,
+      reviewed_at: new Date().toISOString(),
+    });
+  } catch {}
+
+  return data;
 }

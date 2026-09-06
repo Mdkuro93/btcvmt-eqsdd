@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, Plus, Trash2, FileCode2 } from 'lucide-react';
 import { Role } from '../contexts/AuthContext';
 import { TransactionType, Asset } from '../types';
+import { DEFAULT_WAREHOUSE_SLA_DAYS } from '../lib/constants';
 import { previewVoucherCode } from '../lib/voucherEngine';
 
 interface Props {
@@ -22,6 +23,7 @@ export const RequestModal: React.FC<Props> = ({
   warehouses
 }) => {
   const [type, setType] = useState<TransactionType | ''>('');
+  const [desiredReceiveDate, setDesiredReceiveDate] = useState('');
   const [loading, setLoading] = useState(false);
   
   // Checkout fields
@@ -211,6 +213,23 @@ export const RequestModal: React.FC<Props> = ({
               ))}
             </select>
           </div>
+
+          {type && (
+            <div className="pt-4 border-t border-gray-100">
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Ngày mong muốn nhận GCN (Tùy chọn)
+              </label>
+              <input
+                type="date"
+                value={desiredReceiveDate}
+                onChange={(e) => setDesiredReceiveDate(e.target.value)}
+                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                SLA mặc định xử lý tại kho là {DEFAULT_WAREHOUSE_SLA_DAYS} ngày kể từ lúc tạo yêu cầu nếu không chọn.
+              </p>
+            </div>
+          )}
 
           {type === 'checkout' && (
             <div className="space-y-4">

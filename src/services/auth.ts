@@ -21,87 +21,45 @@ export interface AppUserRegisterResult {
 
 /**
  * 1. Đăng ký tài khoản:
- * Gọi supabase.rpc('register_user', { p_username, p_password }).
- * Trả về JSON: { success: boolean, message: string }
- * Khi đăng ký thành công, bản ghi được tạo trong public.app_users với status = 'pending'.
+ * Sử dụng supabase.auth.signUp()
  */
 export async function registerUser(p_username: string, p_password: string): Promise<AppUserRegisterResult> {
   const cleanUsername = p_username.trim().toLowerCase();
 
   if (!cleanUsername) {
-    throw new Error('Vui lòng nhập Tên đăng nhập.');
+    throw new Error('Vui lòng nhập Tên đăng nhập hoặc Email.');
   }
   if (!p_password || p_password.length < 6) {
     throw new Error('Mật khẩu phải có ít nhất 6 ký tự.');
   }
 
+  const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@btcvmt.internal`;
+
   if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase.rpc('register_user', {
-        p_username: cleanUsername,
-        p_password: p_password,
-      });
-
-      if (error) {
-        console.error('Lỗi gọi RPC register_user:', error);
-        if (
-          error.message?.includes('tồn tại') || 
-          error.message?.includes('already exists') || 
-          error.message?.includes('duplicate') ||
-          error.code === '23505'
-        ) {
-          throw new Error('Tên đăng nhập này đã tồn tại trong hệ thống.');
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: p_password,
+      options: {
+        data: {
+          username: cleanUsername,
+          role: 'user',
+          status: 'pending',
         }
-        throw new Error(error.message || 'Đăng ký tài khoản thất bại.');
       }
+    });
 
-      const result: AppUserRegisterResult = typeof data === 'string' ? JSON.parse(data) : data;
-      if (result && result.success === false) {
-        throw new Error(result.message || 'Đăng ký tài khoản thất bại.');
+    if (error) {
+      console.error('Lỗi đăng ký tài khoản Supabase Auth:', error);
+      if (error.message?.toLowerCase().includes('already registered')) {
+        throw new Error('Tên đăng nhập (hoặc email) này đã tồn tại trong hệ thống.');
       }
-
-      return {
-        success: true,
-        message: result?.message || 'Đăng ký tài khoản thành công! Hồ sơ đang chờ Quản trị viên phê duyệt.',
-      };
-    } catch (err: any) {
-      if (err?.message?.includes('function') || err?.code === 'PGRST202') {
-        // Fallback: nếu RPC chưa được tạo trên Supabase, chèn trực tiếp vào public.app_users
-        console.warn('RPC register_user chưa được tạo, chèn trực tiếp vào public.app_users:', err);
-        const { data: existingUser } = await supabase
-          .from('app_users')
-          .select('id')
-          .eq('username', cleanUsername)
-          .maybeSingle();
-
-        if (existingUser) {
-          throw new Error('Tên đăng nhập này đã tồn tại trong hệ thống.');
-        }
-
-        const { error: insertError } = await supabase
-          .from('app_users')
-          .insert({
-            username: cleanUsername,
-            password: p_password,
-            role: 'user',
-            status: 'pending',
-            access_expires_at: null,
-          });
-
-        if (insertError) {
-          if (insertError.message?.includes('duplicate') || insertError.code === '23505') {
-            throw new Error('Tên đăng nhập này đã tồn tại trong hệ thống.');
-          }
-          throw new Error(insertError.message || 'Không thể tạo tài khoản.');
-        }
-
-        return {
-          success: true,
-          message: 'Đăng ký tài khoản thành công! Hồ sơ đang chờ Quản trị viên phê duyệt.',
-        };
-      }
-      throw err instanceof Error ? err : new Error('Không thể tạo tài khoản.');
+      throw new Error(error.message || 'Đăng ký tài khoản thất bại.');
     }
+
+    return {
+      success: true,
+      message: 'Đăng ký tài khoản thành công! Hồ sơ đang chờ Quản trị viên phê duyệt.',
+    };
   }
 
   // Fallback Dev / Mock mode
@@ -128,89 +86,70 @@ export async function registerUser(p_username: string, p_password: string): Prom
 
 /**
  * 2. Đăng nhập:
- * Gọi supabase.rpc('login_user', { p_username, p_password }).
- * Trả về JSON: { success: boolean, message?: string, id, username, role, status, access_expires_at }
- * Khi thành công (success = true), lưu thông tin trả về vào Context/LocalStorage để quản lý phiên làm việc.
+ * Sử dụng supabase.auth.signInWithPassword()
  */
 export async function loginUser(p_username: string, p_password: string): Promise<AppUserSession> {
   const cleanUsername = p_username.trim().toLowerCase();
 
   if (!cleanUsername) {
-    throw new Error('Vui lòng nhập Tên đăng nhập.');
+    throw new Error('Vui lòng nhập Tên đăng nhập hoặc Email.');
   }
   if (!p_password) {
     throw new Error('Vui lòng nhập Mật khẩu.');
   }
 
   let session: AppUserSession | null = null;
+  const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@btcvmt.internal`;
 
   if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase.rpc('login_user', {
-        p_username: cleanUsername,
-        p_password: p_password,
-      });
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password: p_password,
+    });
 
-      if (error) {
-        console.error('Lỗi gọi RPC login_user:', error);
-        if (error.message?.includes('không chính xác') || error.message?.includes('invalid')) {
-          throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
-        }
-        throw new Error(error.message || 'Đăng nhập không thành công.');
-      }
-
-      if (!data) {
-        throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
-      }
-
-      const res: AppUserLoginResult = typeof data === 'string' ? JSON.parse(data) : data;
-
-      if (res.success === false) {
-        throw new Error(res.message || 'Tên đăng nhập hoặc mật khẩu không chính xác.');
-      }
-
-      if (!res.id && !res.username) {
-        throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
-      }
-
-      session = {
-        id: String(res.id || cleanUsername),
-        username: res.username || cleanUsername,
-        role: (res.role as Role) || 'user',
-        status: (res.status as any) || 'pending',
-        access_expires_at: res.access_expires_at || null,
-        full_name: res.username || cleanUsername,
-      };
-    } catch (err: any) {
-      if (err?.message?.includes('function') || err?.code === 'PGRST202') {
-        // Fallback: nếu RPC chưa được tạo trên Supabase, truy vấn trực tiếp bảng app_users
-        console.warn('RPC login_user chưa sẵn sàng, select từ public.app_users:', err);
-        const { data: userData, error: userError } = await supabase
-          .from('app_users')
-          .select('id, username, role, status, access_expires_at, password')
-          .eq('username', cleanUsername)
-          .maybeSingle();
-
-        if (userError || !userData) {
-          throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
-        }
-
-        if (userData.password && userData.password !== p_password) {
-          throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
-        }
-
-        session = {
-          id: String(userData.id),
-          username: userData.username,
-          role: userData.role || 'user',
-          status: userData.status || 'pending',
-          access_expires_at: userData.access_expires_at || null,
-          full_name: userData.username,
-        };
-      } else {
-        throw err instanceof Error ? err : new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
-      }
+    if (authError || !authData.user) {
+      console.error('Lỗi đăng nhập Supabase Auth:', authError);
+      throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
     }
+
+    // Lấy thông tin profile để kiểm tra quyền và trạng thái
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      throw new Error('Không thể tải thông tin hồ sơ người dùng.');
+    }
+
+    if (profile.status === 'pending') {
+      await supabase.auth.signOut();
+      throw new Error('Tài khoản của bạn đang chờ quản trị viên duyệt.');
+    }
+
+    if (profile.status === 'rejected') {
+      await supabase.auth.signOut();
+      throw new Error('Tài khoản của bạn đã bị từ chối.');
+    }
+
+    if (profile.status === 'disabled' || profile.status === 'inactive') {
+      await supabase.auth.signOut();
+      throw new Error('Tài khoản của bạn đã bị vô hiệu hóa.');
+    }
+
+    if (profile.access_expires_at && new Date(profile.access_expires_at) < new Date()) {
+      await supabase.auth.signOut();
+      throw new Error('Tài khoản của bạn đã hết hạn tra cứu.');
+    }
+
+    session = {
+      id: profile.id,
+      username: profile.username || cleanUsername,
+      role: profile.role,
+      status: profile.status,
+      access_expires_at: profile.access_expires_at,
+    };
   } else {
     // Fallback Dev / Mock mode
     const appUsers = mockStore.getAppUsers();
@@ -240,7 +179,6 @@ export async function loginUser(p_username: string, p_password: string): Promise
 
   return session;
 }
-
 /**
  * Lưu thông tin phiên đăng nhập vào LocalStorage & SessionStorage
  */

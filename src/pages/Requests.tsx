@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems } from '../api/transactions';
+import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems  } from '../api/transactions';
+import { fetchOverdueAssets } from '../api/assets';
 import { fetchWarehouses } from '../api/assets';
 import { DecideRequestModal } from '../components/DecideRequestModal';
 import { BulkDecideModal } from '../components/BulkDecideModal';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
 import { DEFAULT_PERMISSIONS_BY_ROLE } from '../api/users';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw } from 'lucide-react';
+import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw, CalendarX } from 'lucide-react';
 import { format } from 'date-fns';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -67,6 +68,7 @@ function detailsSummary(type: string, details: any) {
 export const Requests: React.FC = () => {
   const { profile, user } = useAuth();
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [overdueAssets, setOverdueAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [decidingItemId, setDecidingItemId] = useState<string | null>(null);
@@ -118,6 +120,8 @@ export const Requests: React.FC = () => {
     setLoading(true);
     try {
       const data = await fetchTransactions();
+      const overdue = await fetchOverdueAssets();
+      setOverdueAssets(overdue);
       setTransactions(data || []);
       // Auto expand the first 3
       if (data && data.length > 0) {
@@ -269,7 +273,26 @@ export const Requests: React.FC = () => {
       <Toaster position="top-right" />
 
       {/* Header & Role Indicator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      
+      {overdueAssets.length > 0 && isApprover && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 md:p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarX className="w-5 h-5 text-red-600" />
+            <h3 className="text-sm font-bold text-red-900 uppercase">Cảnh báo: {overdueAssets.length} GCN đang quá hạn trả</h3>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {overdueAssets.map(asset => (
+              <div key={asset.id} className="bg-white rounded-lg p-3 border border-red-100 shadow-xs flex flex-col min-w-[200px]">
+                <span className="font-bold text-red-900 text-sm">{asset.certificate_no}</span>
+                <span className="text-xs text-red-800 font-medium mt-1">Mượn bởi: {asset.current_holder_dept || 'Chưa rõ'}</span>
+                <span className="text-xs text-gray-500 mt-0.5">Hạn trả: {asset.expected_return_date ? new Date(asset.expected_return_date).toLocaleDateString('vi-VN') : '-'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             {isApprover ? 'Duyệt phiếu & Quản lý Kho' : 'Phiếu yêu cầu của tôi'}
@@ -429,6 +452,7 @@ export const Requests: React.FC = () => {
                             {(tx.items || []).map((item: any) => {
                               const effectiveAsset = item.confirmed_asset || item.asset;
                               const whId = getResponsibleWarehouseId(item, tx.type);
+                              const isOverdueSLA = item.status === 'pending' && tx.details?.desiredReceiveDate && new Date(tx.details.desiredReceiveDate) < new Date(new Date().setHours(0, 0, 0, 0));
                               const warehouseObj = warehouses.find(w => w.id === whId);
 
                               return (
@@ -454,8 +478,14 @@ export const Requests: React.FC = () => {
                                         </span>
                                       )}
                                     </div>
-                                    <div className="text-[11px] text-gray-500">
-                                      Số vào sổ: {effectiveAsset?.registry_no || '-'}
+                                    
+                                    <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-2 mt-0.5">
+                                      <span>Số vào sổ: {effectiveAsset?.registry_no || '-'}</span>
+                                      {isOverdueSLA && (
+                                        <span className="text-red-700 font-bold bg-red-100 border border-red-300 px-1.5 py-0.5 rounded text-[10px] animate-pulse">
+                                          ⚠️ Quá hạn xử lý (SLA)
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
                                   <td className="py-2.5 pr-4">

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Save, AlertTriangle, Building2, MapPin, ShieldCheck, FileText, CheckCircle2 } from 'lucide-react';
+import { X, Loader2, Save, AlertTriangle, Building2, MapPin, ShieldCheck, FileText, CheckCircle2, ArrowLeftRight } from 'lucide-react';
 import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { updateAsset, fetchAssets } from '../api/assets';
 import { logActivity } from '../api/activityLogs';
 import { COLLATERAL_TYPES, PROPERTY_TYPES, checkAssetDuplicate, resolveRegionCode, generateNextAssetCode } from '../lib/assetIdentifier';
+import { DocumentUploadField } from './DocumentUploadField';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
+import { AssetTransferModal } from './AssetTransferModal';
+import { canTransferAsset } from '../lib/permissions';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -27,6 +31,7 @@ export const EditAssetModal: React.FC<Props> = ({
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [allAssets, setAllAssets] = useState<Asset[]>([]);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
   // Form State
   const [assetCode, setAssetCode] = useState('');
@@ -57,6 +62,7 @@ export const EditAssetModal: React.FC<Props> = ({
   const [usageTermType, setUsageTermType] = useState<'fixed_date' | 'long_term'>('long_term');
   const [usageTermDate, setUsageTermDate] = useState('');
   const [scanFileUrl, setScanFileUrl] = useState('');
+  const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null);
 
   // Mortgage Fields
   const [isMortgaged, setIsMortgaged] = useState(false);
@@ -812,19 +818,18 @@ export const EditAssetModal: React.FC<Props> = ({
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center border-b pb-2">
               <FileText className="w-4 h-4 text-[#1E3A8A] mr-1.5" />
-              5. File Scan & Ghi Chú
+              5. File Scan GCN & Ghi Chú
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Đường dẫn / File Scan GCN (URL)
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  File Scan Giấy Chứng Nhận (PDF, JPG, JPEG, PNG - Tối đa 10MB)
                 </label>
-                <input
-                  type="text"
+                <DocumentUploadField
                   value={scanFileUrl}
-                  onChange={e => setScanFileUrl(e.target.value)}
-                  placeholder="https://storage.example.com/scan-gcn.pdf"
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
+                  onChange={setScanFileUrl}
+                  assetId={asset.id}
+                  onPreview={(url) => setPreviewFileUrl(url)}
                 />
               </div>
 
@@ -845,8 +850,20 @@ export const EditAssetModal: React.FC<Props> = ({
 
           {/* Footer Buttons */}
           <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-xs text-gray-500">
-              Trạng thái: <span className="font-semibold text-gray-800">{asset.custody_status === 'in_stock' ? 'Trong kho' : 'Đang mượn'}</span> · <span className="font-semibold text-gray-800">{asset.lifecycle_status === 'active' ? 'Đang hiệu lực' : 'Đã tách/Đóng sổ'}</span>
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-gray-500">
+                Trạng thái: <span className="font-semibold text-gray-800">{asset.custody_status === 'in_stock' ? 'Trong kho' : 'Đang mượn'}</span> · <span className="font-semibold text-gray-800">{asset.lifecycle_status === 'active' ? 'Đang hiệu lực' : 'Đã tách/Đóng sổ'}</span>
+              </div>
+              {canTransferAsset(profile, asset) && (
+                <button
+                  type="button"
+                  onClick={() => setIsTransferModalOpen(true)}
+                  className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                  <span>Chuyển Nhượng</span>
+                </button>
+              )}
             </div>
             <div className="flex space-x-3">
               <button
@@ -869,6 +886,30 @@ export const EditAssetModal: React.FC<Props> = ({
           </div>
         </form>
       </div>
+
+      {previewFileUrl && (
+        <DocumentPreviewModal
+          isOpen={!!previewFileUrl}
+          onClose={() => setPreviewFileUrl(null)}
+          fileUrlOrPath={previewFileUrl}
+          certificateNo={certificateNo || asset.certificate_no}
+          title="Xem Bản Scan GCN"
+        />
+      )}
+
+      {/* Asset Transfer Modal */}
+      {asset && (
+        <AssetTransferModal
+          isOpen={isTransferModalOpen}
+          onClose={() => setIsTransferModalOpen(false)}
+          assets={[asset]}
+          currentUser={profile}
+          onSuccess={() => {
+            onSuccess();
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 };

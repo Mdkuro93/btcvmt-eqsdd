@@ -18,13 +18,15 @@ import {
   Clock, 
   ChevronRight,
   ShieldCheck,
-  Users
+  Users,
+  ClipboardCheck
 } from 'lucide-react';
 import { fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api/notifications';
 import { fetchAccessRequests } from '../api/accessRequests';
 import { fetchProfiles } from '../api/users';
 import { Notification } from '../types';
 import { format } from 'date-fns';
+import { RoleSwitcher, RoleSimulationBanner } from '../components/RoleSwitcher';
 
 export const MainLayout: React.FC = () => {
   const { profile, signOut, user } = useAuth();
@@ -113,7 +115,7 @@ export const MainLayout: React.FC = () => {
       name: 'Tổng quan', 
       href: '/', 
       icon: LayoutDashboard, 
-      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin'] 
+      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor', 'admin', 'super_admin'] 
     },
     { 
       name: 'Tra cứu tình trạng', 
@@ -132,13 +134,13 @@ export const MainLayout: React.FC = () => {
       name: 'Danh sách GCN', 
       href: '/assets', 
       icon: Files, 
-      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin'] 
+      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor', 'admin', 'super_admin'] 
     },
     { 
       name: profile?.role === 'btc_manager' || profile?.role === 'warehouse_manager' ? 'Duyệt yêu cầu & Kho' : 'Yêu cầu của tôi', 
       href: '/requests', 
       icon: CheckSquare, 
-      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin'] 
+      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor', 'admin', 'super_admin'] 
     },
     { 
       name: 'Duyệt truy cập kho', 
@@ -148,34 +150,47 @@ export const MainLayout: React.FC = () => {
       badge: pendingAccessCount > 0 ? pendingAccessCount : undefined
     },
     { 
+      name: 'Kiểm kê kho', 
+      href: '/inventory-audits', 
+      icon: ClipboardCheck, 
+      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'] 
+    },
+    { 
       name: 'Nhật ký biến động', 
       href: '/activity-logs', 
       icon: BookText, 
-      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'] 
+      roles: ['btc_manager', 'warehouse_manager', 'supervisor', 'admin', 'super_admin'] 
     },
     { 
       name: 'Báo cáo', 
       href: '/reports', 
       icon: BarChart3, 
-      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'] 
+      roles: ['btc_manager', 'warehouse_manager', 'supervisor', 'admin', 'super_admin'] 
     },
     { 
-      name: 'Quản trị', 
+      name: 'Quản trị danh mục', 
       href: '/admin', 
       icon: Settings, 
-      roles: ['btc_manager', 'admin', 'super_admin'] 
+      roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
     },
     { 
       name: 'Import dữ liệu', 
       href: '/import', 
       icon: Upload, 
-      roles: ['btc_manager', 'admin', 'super_admin'] 
+      roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
     },
   ];
 
-  const allowedNav = navigation.filter(item => 
-    profile && item.roles.includes(profile.role)
-  );
+  const allowedNav = navigation.filter(item => {
+    if (!profile) return false;
+    const r = profile.role;
+    if (r === 'admin' || r === 'super_admin') return true;
+    if (item.roles.includes(r)) return true;
+    if (r === 'quan_ly' && (item.roles.includes('warehouse_manager') || item.roles.includes('btc_manager'))) return true;
+    if (r === 'chuyen_vien' && (item.roles.includes('capital_dept') || item.roles.includes('project_dept') || item.roles.includes('re_dept'))) return true;
+    if ((r === 'nguoi_dung' || r === 'user') && item.roles.includes('viewer')) return true;
+    return false;
+  });
 
   return (
     <div className="flex h-screen bg-[#F8F9FA]">
@@ -221,8 +236,15 @@ export const MainLayout: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Role Simulation Warning Banner */}
+        <RoleSimulationBanner />
+
         {/* Topbar */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-end px-6 shadow-xs z-20 shrink-0">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-xs z-20 shrink-0">
+          <div className="flex items-center">
+            <RoleSwitcher />
+          </div>
+
           <div className="flex items-center space-x-3">
 
             {/* Notification Bell Dropdown */}
@@ -342,8 +364,8 @@ export const MainLayout: React.FC = () => {
         </header>
 
         {/* Main scrollable area */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-7xl">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F8F9FA]">
+          <div className="w-full">
             <Outlet />
           </div>
         </main>

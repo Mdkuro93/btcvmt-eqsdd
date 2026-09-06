@@ -4,6 +4,8 @@ import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAssetIdentifierCandidates } from '../api/assets';
 import { COLLATERAL_TYPES, PROPERTY_TYPES, resolveRegionCode, generateNextAssetCode, checkAssetDuplicate } from '../lib/assetIdentifier';
+import { DocumentUploadField } from './DocumentUploadField';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -51,6 +53,7 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
   const [usageTermType, setUsageTermType] = useState<'fixed_date' | 'long_term'>('long_term');
   const [usageTermDate, setUsageTermDate] = useState('');
   const [scanFileUrl, setScanFileUrl] = useState('');
+  const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null);
 
   // Mortgage Fields
   const [isMortgaged, setIsMortgaged] = useState(false);
@@ -763,20 +766,18 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center border-b pb-2">
               <FileText className="w-4 h-4 text-[#1E3A8A] mr-1.5" />
-              5. File Scan & Ghi Chú
+              5. File Scan GCN & Ghi Chú
             </h4>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Đường dẫn / File scan GCN (URL)
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  File scan Giấy chứng nhận (PDF, JPG, JPEG, PNG - Tối đa 10MB)
                 </label>
-                <input
-                  type="text"
+                <DocumentUploadField
                   value={scanFileUrl}
-                  onChange={e => setScanFileUrl(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                  placeholder="https://storage.example.com/scan-gcn.pdf"
+                  onChange={setScanFileUrl}
+                  onPreview={(url) => setPreviewFileUrl(url)}
                 />
               </div>
 
@@ -813,6 +814,16 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
           </div>
         </form>
       </div>
+
+      {previewFileUrl && (
+        <DocumentPreviewModal
+          isOpen={!!previewFileUrl}
+          onClose={() => setPreviewFileUrl(null)}
+          fileUrlOrPath={previewFileUrl}
+          certificateNo={certificateNo}
+          title="Xem Bản Scan GCN"
+        />
+      )}
     </div>
   );
 };

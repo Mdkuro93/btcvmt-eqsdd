@@ -1,8 +1,10 @@
-import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Asset, Region, Area, Warehouse, Project } from '../types';
 import { generateNextAssetCode, resolveRegionCode } from '../lib/assetIdentifier';
 import { createAuditLog } from './auditLogs';
+import { logActivity } from './activityLogs';
+import { fetchInvestorEntities } from './investorEntities';
 
 function getDifferences(oldData: Record<string, any>, newData: Record<string, any>): { oldDiff: Record<string, any>; newDiff: Record<string, any> } {
   const oldDiff: Record<string, any> = {};
@@ -28,75 +30,62 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     const data = allFiltered.slice(startIndex, startIndex + pageSize);
     return { data, totalCount, source: 'mock' };
   }
-  try {
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
 
-    // Optimized select - Only fetch needed relational attributes
-    let query = supabase.from('assets').select(`
-      id, asset_code, collateral_type, certificate_no, subdivision, lot_no, area,
-      owner_name, map_sheet_no, land_lot_no, province, district, ward, address_detail,
-      business_project_name, business_plot_code,
-      land_use_purpose, land_use_term, custody_status, lifecycle_status, sale_status,
-      mortgage_status, mortgage_bank, mortgage_unit, mortgage_bank_2, mortgage_unit_2,
-      mortgage_valuation, collateral_ratio, collateral_value, mortgage_expected_release_date,
-      expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,
-      current_holder_dept, notes, asset_type, registry_no, registry_date, managing_unit,
-      certificate_group, usage_term_type, usage_term_date, parent_asset_id, created_at,
-      updated_at, updated_by,
-      updater:profiles!updated_by(id, full_name, email),
-      projects:projects(name, areas(name, region_id, regions(name))),
-      warehouses:warehouses(name, code, region_code, is_central, regions(name))
-    `, { count: 'exact' });
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-    if (filters) {
-      if (filters.search) {
-        const s = filters.search.trim();
-        query = query.or(`certificate_no.ilike.%${s}%,asset_code.ilike.%${s}%,subdivision.ilike.%${s}%,lot_no.ilike.%${s}%,owner_name.ilike.%${s}%,business_project_name.ilike.%${s}%,business_plot_code.ilike.%${s}%`);
-      }
-      if (filters.collateralType) query = query.eq('collateral_type', filters.collateralType);
-      if (filters.projectId) query = query.eq('project_id', filters.projectId);
-      
-      const custody = filters.custodyStatus || filters.custody_status;
-      if (custody) query = query.eq('custody_status', custody);
-      
-      const lifecycle = filters.lifecycleStatus || filters.lifecycle_status;
-      if (lifecycle) query = query.eq('lifecycle_status', lifecycle);
-      
-      const sale = filters.saleStatus || filters.sale_status;
-      if (sale) query = query.eq('sale_status', sale);
-      
-      const mortgage = filters.mortgageStatus || filters.mortgage_status;
-      if (mortgage) query = query.eq('mortgage_status', mortgage);
-      
-      if (filters.warehouseId) query = query.eq('warehouse_id', filters.warehouseId);
-      if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision.trim()}%`);
+  // Optimized select - Only fetch needed relational attributes
+  let query = supabase.from('assets').select(`
+    id, asset_code, collateral_type, certificate_no, subdivision, lot_no, area,
+    owner_name, map_sheet_no, land_lot_no, province, district, ward, address_detail,
+    business_project_name, business_plot_code,
+    land_use_purpose, land_use_term, custody_status, lifecycle_status, sale_status,
+    mortgage_status, mortgage_bank, mortgage_unit, mortgage_bank_2, mortgage_unit_2,
+    mortgage_valuation, collateral_ratio, collateral_value, mortgage_expected_release_date,
+    expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,
+    current_holder_dept, notes, asset_type, registry_no, registry_date, managing_unit,
+    certificate_group, usage_term_type, usage_term_date, parent_asset_id, created_at,
+    updated_at, updated_by,
+    updater:profiles!updated_by(id, full_name, email),
+    projects:projects(name, areas(name, region_id, regions(name))),
+    warehouses:warehouses(name, code, region_code, is_central, regions(name))
+  `, { count: 'exact' });
+
+  if (filters) {
+    if (filters.search) {
+      const s = filters.search.trim();
+      query = query.or(`certificate_no.ilike.%${s}%,asset_code.ilike.%${s}%,subdivision.ilike.%${s}%,lot_no.ilike.%${s}%,owner_name.ilike.%${s}%,business_project_name.ilike.%${s}%,business_plot_code.ilike.%${s}%`);
     }
-
-    // Apply Server-side Sort & Range Pagination
-    query = query.order('created_at', { ascending: false }).range(from, to);
-
-    const { data, count, error } = await withTimeout(query, 5000);
-    if (error) throw error;
+    if (filters.collateralType) query = query.eq('collateral_type', filters.collateralType);
+    if (filters.projectId) query = query.eq('project_id', filters.projectId);
     
-    return { 
-      data: (data || []) as unknown as Asset[], 
-      totalCount: count ?? (data?.length || 0),
-      source: 'supabase'
-    };
-  } catch (err: any) {
-    console.warn('Supabase fetchAssets error or timeout, using mockStore fallback:', err);
-    const allFiltered = mockStore.getAssets(filters);
-    const totalCount = allFiltered.length;
-    const startIndex = (page - 1) * pageSize;
-    const data = allFiltered.slice(startIndex, startIndex + pageSize);
-    return { 
-      data, 
-      totalCount, 
-      source: 'mock',
-      error: err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err))
-    };
+    const custody = filters.custodyStatus || filters.custody_status;
+    if (custody) query = query.eq('custody_status', custody);
+    
+    const lifecycle = filters.lifecycleStatus || filters.lifecycle_status;
+    if (lifecycle) query = query.eq('lifecycle_status', lifecycle);
+    
+    const sale = filters.saleStatus || filters.sale_status;
+    if (sale) query = query.eq('sale_status', sale);
+    
+    const mortgage = filters.mortgageStatus || filters.mortgage_status;
+    if (mortgage) query = query.eq('mortgage_status', mortgage);
+    
+    if (filters.warehouseId) query = query.eq('warehouse_id', filters.warehouseId);
+    if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision.trim()}%`);
   }
+
+  // Apply Server-side Sort & Range Pagination
+  query = query.order('created_at', { ascending: false }).range(from, to);
+
+  const { data, count, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) throw error;
+  
+  return { 
+    data: (data || []) as unknown as Asset[], 
+    totalCount: count ?? (data?.length || 0),
+    source: 'supabase'
+  };
 }
 
 /**
@@ -106,25 +95,21 @@ export async function fetchAssetIdentifierCandidates(projectId?: string): Promis
   if (!isSupabaseConfigured) {
     return mockStore.getAssets();
   }
-  try {
-    let query = supabase.from('assets').select(`
-      id, asset_code, collateral_type, certificate_no, project_id,
-      subdivision, lot_no, map_sheet_no, land_lot_no, lifecycle_status,
-      business_project_name, business_plot_code,
-      warehouse_id, created_at, projects(name)
-    `).order('created_at', { ascending: false }).limit(2000);
 
-    if (projectId) {
-      query = query.eq('project_id', projectId);
-    }
+  let query = supabase.from('assets').select(`
+    id, asset_code, collateral_type, certificate_no, project_id,
+    subdivision, lot_no, map_sheet_no, land_lot_no, lifecycle_status,
+    business_project_name, business_plot_code,
+    warehouse_id, created_at, projects(name)
+  `).order('created_at', { ascending: false }).limit(2000);
 
-    const { data, error } = await withTimeout(query, 3000);
-    if (error) throw error;
-    return (data || []) as unknown as Asset[];
-  } catch (err) {
-    console.warn('Supabase fetchAssetIdentifierCandidates error or timeout, using mockStore:', err);
-    return mockStore.getAssets();
+  if (projectId) {
+    query = query.eq('project_id', projectId);
   }
+
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) throw error;
+  return (data || []) as unknown as Asset[];
 }
 
 /**
@@ -153,54 +138,39 @@ export async function fetchDashboardAssetStats(): Promise<{
       activeProjectsCount: projSet.size || 1,
     };
   }
-  try {
-    // Perform fast count queries & lightweight area aggregation in parallel with 3s timeout
-    const [totalRes, inStockRes, checkedOutRes, mortgagedRes, soldRes, areaRes] = await withTimeout(
-      Promise.all([
-        supabase.from('assets').select('*', { count: 'exact', head: true }),
-        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'in_stock'),
-        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'checked_out'),
-        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('mortgage_status', 'mortgaged'),
-        supabase.from('assets').select('*', { count: 'exact', head: true }).eq('sale_status', 'sold'),
-        supabase.from('assets').select('area, project_id, business_project_name'),
-      ]),
-      3000
-    );
 
-    let totalArea = 0;
-    const projSet = new Set<string>();
-    if (areaRes.data) {
-      for (const r of areaRes.data) {
-        if (r.area) totalArea += Number(r.area) || 0;
-        if (r.project_id) projSet.add(r.project_id);
-        else if (r.business_project_name) projSet.add(r.business_project_name);
-      }
+  // Perform fast count queries & lightweight area aggregation in parallel with read timeout
+  const [totalRes, inStockRes, checkedOutRes, mortgagedRes, soldRes, areaRes] = await withTimeout(
+    Promise.all([
+      supabase.from('assets').select('*', { count: 'exact', head: true }),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'in_stock'),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'checked_out'),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('mortgage_status', 'mortgaged'),
+      supabase.from('assets').select('*', { count: 'exact', head: true }).eq('sale_status', 'sold'),
+      supabase.from('assets').select('area, project_id, business_project_name'),
+    ]),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  let totalArea = 0;
+  const projSet = new Set<string>();
+  if (areaRes.data) {
+    for (const r of areaRes.data) {
+      if (r.area) totalArea += Number(r.area) || 0;
+      if (r.project_id) projSet.add(r.project_id);
+      else if (r.business_project_name) projSet.add(r.business_project_name);
     }
-
-    return {
-      total: totalRes.count || 0,
-      inStock: inStockRes.count || 0,
-      checkedOut: checkedOutRes.count || 0,
-      mortgaged: mortgagedRes.count || 0,
-      sold: soldRes.count || 0,
-      totalArea,
-      activeProjectsCount: projSet.size || (areaRes.data && areaRes.data.length > 0 ? 1 : 0),
-    };
-  } catch (err) {
-    console.warn('Supabase fetchDashboardAssetStats error or timeout, fallback:', err);
-    const assets = mockStore.getAssets();
-    const projSet = new Set(assets.map(a => a.project_id || a.business_project_name).filter(Boolean));
-    const totalArea = assets.reduce((sum, a) => sum + (Number(a.area) || 0), 0);
-    return {
-      total: assets.length,
-      inStock: assets.filter(a => a.custody_status === 'in_stock').length,
-      checkedOut: assets.filter(a => a.custody_status === 'checked_out').length,
-      mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
-      sold: assets.filter(a => a.sale_status === 'sold').length,
-      totalArea,
-      activeProjectsCount: projSet.size || 1,
-    };
   }
+
+  return {
+    total: totalRes.count || 0,
+    inStock: inStockRes.count || 0,
+    checkedOut: checkedOutRes.count || 0,
+    mortgaged: mortgagedRes.count || 0,
+    sold: soldRes.count || 0,
+    totalArea,
+    activeProjectsCount: projSet.size || (areaRes.data && areaRes.data.length > 0 ? 1 : 0),
+  };
 }
 
 export async function lookupAssets(
@@ -240,46 +210,14 @@ export async function lookupAssets(
     return { data, totalCount };
   }
   
-  try {
-    const q = queries.filter(q => q.trim().length > 0)[0] || '';
-    const { data, error } = await withTimeout(
-      supabase.rpc('lookup_asset_status', { p_query: q }),
-      3000
-    );
-    if (error) throw error;
-    const resData = data || [];
-    return { data: resData, totalCount: resData.length };
-  } catch (err) {
-    console.warn('Supabase lookup_asset_status error or timeout, using mockStore:', err);
-    const allAssets = mockStore.getAssets();
-    const queryList = queries.filter(q => q.trim().length > 0).map(q => q.trim().toLowerCase());
-    
-    let filtered = allAssets;
-    if (projectId) {
-      filtered = filtered.filter(a => a.project_id === projectId);
-    }
-    
-    if (queryList.length > 0) {
-      filtered = filtered.filter(a => {
-        const certNo = (a.certificate_no || '').toLowerCase();
-        const subdiv = (a.subdivision || '').toLowerCase();
-        return queryList.some(q => certNo.includes(q) || subdiv.includes(q));
-      });
-    }
-
-    const totalCount = filtered.length;
-    const startIndex = (page - 1) * pageSize;
-    const data = filtered.slice(startIndex, startIndex + pageSize).map(a => ({
-      certificate_no: a.certificate_no,
-      project_name: a.projects?.name,
-      subdivision: a.subdivision,
-      custody_status: a.custody_status,
-      lifecycle_status: a.lifecycle_status,
-      sale_status: a.sale_status,
-      mortgage_status: a.mortgage_status,
-    }));
-    return { data, totalCount };
-  }
+  const q = queries.filter(q => q.trim().length > 0)[0] || '';
+  const { data, error } = await withTimeout(
+    supabase.rpc('lookup_asset_status', { p_query: q }),
+    DEFAULT_READ_TIMEOUT
+  );
+  if (error) throw error;
+  const resData = data || [];
+  return { data: resData, totalCount: resData.length };
 }
 
 export async function fetchAssetById(id: string): Promise<Asset | null> {
@@ -287,27 +225,22 @@ export async function fetchAssetById(id: string): Promise<Asset | null> {
     const assets = mockStore.getAssets();
     return assets.find(a => a.id === id) || null;
   }
-  try {
-    const { data, error } = await withTimeout(
-      supabase
-        .from('assets')
-        .select(`
-          *,
-          projects(name, areas(name, region_id)),
-          warehouses(name, is_central)
-        `)
-        .eq('id', id)
-        .single(),
-      3000
-    );
 
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn('Supabase fetchAssetById error or timeout, using mockStore:', err);
-    const assets = mockStore.getAssets();
-    return assets.find(a => a.id === id) || null;
-  }
+  const { data, error } = await withTimeout(
+    supabase
+      .from('assets')
+      .select(`
+        *,
+        projects(name, areas(name, region_id)),
+        warehouses(name, is_central)
+      `)
+      .eq('id', id)
+      .single(),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) throw error;
+  return data;
 }
 
 export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
@@ -332,7 +265,7 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     business_project_name: assetData.business_project_name?.trim() || null,
     business_plot_code: assetData.business_plot_code?.trim() || null,
     area: assetData.area || 0,
-    owner_name: assetData.owner_name || 'Công ty Cổ phần Đầu tư VMT',
+    owner_name: assetData.owner_name || '-',
     
     map_sheet_no: assetData.map_sheet_no || null,
     land_lot_no: assetData.land_lot_no || null,
@@ -379,23 +312,23 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     mockStore.saveAssets([fullAsset, ...current]);
     return mockStore.getAssets().find(a => a.id === fullAsset.id)!;
   }
-  try {
-    const { data, error } = await withTimeout(
-      supabase
-        .from('assets')
-        .insert([fullAsset])
-        .select()
-        .single(),
-      3000
-    );
 
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn('Supabase createAsset error or timeout, saving to mockStore:', err);
-    mockStore.saveAssets([fullAsset, ...current]);
-    return mockStore.getAssets().find(a => a.id === fullAsset.id)!;
-  }
+  const { data, error } = await withTimeout(
+    supabase
+      .from('assets')
+      .insert([fullAsset])
+      .select()
+      .single(),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) throw error;
+
+  try {
+    mockStore.saveAssets([data, ...current]);
+  } catch {}
+
+  return data;
 }
 
 export async function updateAsset(
@@ -405,7 +338,7 @@ export async function updateAsset(
   notes?: string
 ): Promise<Asset> {
   const currentAsset = (isSupabaseConfigured 
-    ? (await withTimeout(supabase.from('assets').select('*').eq('id', id).single(), 3000).catch(() => ({ data: null }))).data 
+    ? (await withTimeout(supabase.from('assets').select('*').eq('id', id).single(), DEFAULT_READ_TIMEOUT).catch(() => ({ data: null }))).data 
     : mockStore.getAssets().find(a => a.id === id)) || {};
 
   const payload = {
@@ -424,26 +357,24 @@ export async function updateAsset(
     mockStore.saveAssets(updatedList);
     updatedAsset = mockStore.getAssets().find(a => a.id === id)!;
   } else {
-    try {
-      const { data, error } = await withTimeout(
-        supabase
-          .from('assets')
-          .update(payload)
-          .eq('id', id)
-          .select()
-          .single(),
-        3000
-      );
+    const { data, error } = await withTimeout(
+      supabase
+        .from('assets')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single(),
+      DEFAULT_WRITE_TIMEOUT
+    );
 
-      if (error) throw error;
-      updatedAsset = data;
-    } catch (err) {
-      console.warn('Supabase updateAsset error or timeout, updating in mockStore:', err);
+    if (error) throw error;
+    updatedAsset = data;
+
+    try {
       const current = mockStore.getAssets();
       const updatedList = current.map(a => (a.id === id ? { ...a, ...payload } : a));
       mockStore.saveAssets(updatedList);
-      updatedAsset = mockStore.getAssets().find(a => a.id === id)!;
-    }
+    } catch {}
   }
 
   // Create audit log entry
@@ -486,7 +417,7 @@ export async function bulkUpdateAssets(
   });
 
   const allAssets = isSupabaseConfigured
-    ? (await withTimeout(supabase.from('assets').select('*').in('id', ids), 3000).catch(() => ({ data: [] }))).data || []
+    ? (await withTimeout(supabase.from('assets').select('*').in('id', ids), DEFAULT_READ_TIMEOUT).catch(() => ({ data: [] }))).data || []
     : mockStore.getAssets().filter(a => ids.includes(a.id));
 
   if (!isSupabaseConfigured) {
@@ -499,17 +430,16 @@ export async function bulkUpdateAssets(
     });
     mockStore.saveAssets(updatedList);
   } else {
+    const { error } = await withTimeout(
+      supabase
+        .from('assets')
+        .update(payload)
+        .in('id', ids),
+      DEFAULT_WRITE_TIMEOUT
+    );
+    if (error) throw error;
+
     try {
-      const { error } = await withTimeout(
-        supabase
-          .from('assets')
-          .update(payload)
-          .in('id', ids),
-        3000
-      );
-      if (error) throw error;
-    } catch (err) {
-      console.warn('Supabase bulkUpdateAssets error or timeout, updating in mockStore:', err);
       const current = mockStore.getAssets();
       const updatedList = current.map(a => {
         if (ids.includes(a.id)) {
@@ -518,7 +448,7 @@ export async function bulkUpdateAssets(
         return a;
       });
       mockStore.saveAssets(updatedList);
-    }
+    } catch {}
   }
 
   // Record audit logs for each affected asset
@@ -547,15 +477,17 @@ export async function bulkUpdateAssets(
 export async function importExcelAndUpdateAssets(
   rows: any[],
   user?: { id?: string; email?: string; full_name?: string } | null,
-  mode: 'update_or_create' | 'update_only' | 'create_only' = 'update_or_create'
+  mode: 'update_or_create' | 'update_only' | 'create_only' = 'update_or_create',
+  recordHistory: boolean = false
 ): Promise<{ updatedCount: number; createdCount: number; errors: string[] }> {
   const currentAssets = isSupabaseConfigured 
     ? (await withTimeout(supabase.from('assets').select('*'), 3000).catch(() => ({ data: [] }))).data || []
     : mockStore.getAssets();
 
-  const [projects, warehouses] = await Promise.all([
+  const [projects, warehouses, investorEntities] = await Promise.all([
     fetchProjects(),
     fetchWarehouses(),
+    fetchInvestorEntities(),
   ]);
 
   let updatedCount = 0;
@@ -594,6 +526,25 @@ export async function importExcelAndUpdateAssets(
       const assetType = row.asset_type || row['Loại Tài Sản'] || row['Loại tài sản'];
       const usagePurpose = row.usage_purpose || row['Mục Đích Sử Dụng'] || row['Mục đích sử dụng'];
 
+      const companyCode = (row.company_code || row['Mã công ty sở hữu'] || '').toString().trim().toUpperCase();
+      const rawRole = (row.role || row['Phân loại'] || '').toString().trim().toLowerCase();
+
+      let targetEntityId: string | null = null;
+      let targetRole: 'cdt' | 'ndt' | null = null;
+
+      if (companyCode) {
+        const matchedEntity = investorEntities.find(e => e.company_code === companyCode);
+        if (!matchedEntity) {
+          errors.push(`Dòng "${matchCertNo || matchId || 'N/A'}": Không tìm thấy mã công ty sở hữu "${companyCode}". Vui lòng tạo pháp nhân trước.`);
+          continue; // Skip this row as per requirement "đưa dòng đó vào danh sách cần xử lý thủ công"
+        }
+        targetEntityId = matchedEntity.id;
+        targetRole = (rawRole === 'ndt' || rawRole === 'nhà đầu tư') ? 'ndt' : 'cdt';
+      } else if (matchedProj && matchedProj.default_owner_entity_id) {
+        targetEntityId = matchedProj.default_owner_entity_id;
+        targetRole = 'cdt';
+      }
+
       if (existing && mode !== 'create_only') {
         const updates: Partial<Asset> = {
           updated_at: new Date().toISOString(),
@@ -612,6 +563,12 @@ export async function importExcelAndUpdateAssets(
         if (matchedProj) updates.project_id = matchedProj.id;
         if (matchedWh) updates.warehouse_id = matchedWh.id;
 
+        // Apply ownership
+        if (targetEntityId) {
+          updates.current_owner_entity_id = targetEntityId;
+          updates.current_owner_role = targetRole;
+        }
+
         const { oldDiff, newDiff } = getDifferences(existing, updates);
 
         if (Object.keys(newDiff).length > 0) {
@@ -619,7 +576,32 @@ export async function importExcelAndUpdateAssets(
             const current = mockStore.getAssets();
             mockStore.saveAssets(current.map(a => a.id === existing.id ? { ...a, ...updates } : a));
           } else {
-            await withTimeout(supabase.from('assets').update(updates).eq('id', existing.id), 3000).catch(() => {});
+            const { error } = await withTimeout(supabase.from('assets').update(updates).eq('id', existing.id), DEFAULT_WRITE_TIMEOUT);
+            if (error) throw error;
+          }
+
+          // Handle backfill history
+          if (recordHistory && updates.current_owner_entity_id && matchedProj && updates.current_owner_entity_id !== matchedProj.default_owner_entity_id) {
+             const transferData = {
+                asset_id: existing.id,
+                from_entity_id: matchedProj.default_owner_entity_id || existing.current_owner_entity_id,
+                from_role: 'cdt', // Assuming original role was cdt
+                to_entity_id: updates.current_owner_entity_id,
+                to_role: updates.current_owner_role,
+                transferred_by: null,
+                transferred_at: new Date().toISOString(),
+                note: 'Dữ liệu lịch sử, nhập bổ sung khi triển khai hệ thống'
+             };
+             
+             if (isSupabaseConfigured) {
+                 await supabase.from('asset_ownership_transfers').insert([transferData]);
+             } else {
+                 mockStore.addAssetOwnershipTransfer({
+                     ...transferData,
+                     id: 'trf-' + Date.now(),
+                     created_at: new Date().toISOString()
+                 } as any);
+             }
           }
 
           await createAuditLog({
@@ -650,9 +632,11 @@ export async function importExcelAndUpdateAssets(
           land_lot_no: landLotNo ? String(landLotNo).trim() : null,
           map_sheet_no: mapSheetNo ? String(mapSheetNo).trim() : null,
           area: area && !isNaN(area) ? area : null,
-          owner_name: ownerName ? String(ownerName).trim() : 'Công ty Cổ phần Đầu tư VMT',
+          owner_name: ownerName ? String(ownerName).trim() : '-',
           asset_type: assetType ? String(assetType).trim() : 'Đất nền',
           usage_purpose: usagePurpose ? String(usagePurpose).trim() : null,
+          current_owner_entity_id: targetEntityId,
+          current_owner_role: targetRole,
           custody_status: 'in_stock',
           lifecycle_status: 'active',
           sale_status: 'not_ready',
@@ -662,6 +646,30 @@ export async function importExcelAndUpdateAssets(
         };
 
         const created = await createAsset(newAssetData);
+
+        if (recordHistory && created.current_owner_entity_id && matchedProj && created.current_owner_entity_id !== matchedProj.default_owner_entity_id) {
+           const transferData = {
+              asset_id: created.id,
+              from_entity_id: matchedProj.default_owner_entity_id,
+              from_role: 'cdt',
+              to_entity_id: created.current_owner_entity_id,
+              to_role: created.current_owner_role,
+              transferred_by: null,
+              transferred_at: new Date().toISOString(),
+              note: 'Dữ liệu lịch sử, nhập bổ sung khi triển khai hệ thống'
+           };
+           
+           if (isSupabaseConfigured) {
+               await supabase.from('asset_ownership_transfers').insert([transferData]);
+           } else {
+               mockStore.addAssetOwnershipTransfer({
+                   ...transferData,
+                   id: 'trf-' + Date.now(),
+                   created_at: new Date().toISOString()
+               } as any);
+           }
+        }
+
         await createAuditLog({
           record_id: created.id,
           action: 'CREATE',
@@ -690,33 +698,26 @@ export async function checkDuplicateAssets(certificateNos: string[]): Promise<st
     return certificateNos.filter(no => existingSet.has(no));
   }
   
-  try {
-    const chunkSize = 500;
-    const duplicates: string[] = [];
-    
-    for (let i = 0; i < certificateNos.length; i += chunkSize) {
-      const chunk = certificateNos.slice(i, i + chunkSize);
-      const { data, error } = await withTimeout(
-        supabase
-          .from('assets')
-          .select('certificate_no')
-          .in('certificate_no', chunk),
-        3000
-      );
-        
-      if (error) throw error;
-      if (data) {
-        duplicates.push(...data.map(d => d.certificate_no));
-      }
+  const chunkSize = 500;
+  const duplicates: string[] = [];
+  
+  for (let i = 0; i < certificateNos.length; i += chunkSize) {
+    const chunk = certificateNos.slice(i, i + chunkSize);
+    const { data, error } = await withTimeout(
+      supabase
+        .from('assets')
+        .select('certificate_no')
+        .in('certificate_no', chunk),
+      DEFAULT_READ_TIMEOUT
+    );
+      
+    if (error) throw error;
+    if (data) {
+      duplicates.push(...data.map(d => d.certificate_no));
     }
-    
-    return duplicates;
-  } catch (err) {
-    console.warn('Supabase checkDuplicateAssets error or timeout, using mockStore:', err);
-    const current = mockStore.getAssets();
-    const existingSet = new Set(current.map(a => a.certificate_no));
-    return certificateNos.filter(no => existingSet.has(no));
   }
+  
+  return duplicates;
 }
 
 export async function importAssets(assetsData: any[]) {
@@ -744,7 +745,7 @@ export async function importAssets(assetsData: any[]) {
       business_project_name: a.business_project_name || null,
       business_plot_code: a.business_plot_code || null,
       area: Number(a.area) || 0,
-      owner_name: a.owner_name || 'Công ty Cổ phần Đầu tư VMT',
+      owner_name: a.owner_name || '-',
       asset_type: a.asset_type || 'Đất nền',
       land_lot_no: a.land_lot_no || null,
       map_sheet_no: a.map_sheet_no || null,
@@ -1206,4 +1207,73 @@ export async function createMultipleAssets(assetsData: Partial<Asset>[]): Promis
     console.warn('Supabase createMultipleAssets caught error or timeout, saving to mockStore:', err);
     return importAssets(assetsData);
   }
+}
+
+
+export async function requestExtension(assetId: string, additionalDays: number, reason: string, profile: any) {
+  if (isSupabaseConfigured) {
+    // 1. Fetch current asset to get expected_return_date
+    const { data: asset, error: fetchErr } = await supabase
+      .from('assets')
+      .select('expected_return_date')
+      .eq('id', assetId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    // 2. Calculate new date
+    const currentDate = asset.expected_return_date ? new Date(asset.expected_return_date) : new Date();
+    currentDate.setDate(currentDate.getDate() + additionalDays);
+    const newDateStr = currentDate.toISOString().split('T')[0];
+
+    // 3. Update asset
+    const { error: updateErr } = await supabase
+      .from('assets')
+      .update({ expected_return_date: newDateStr })
+      .eq('id', assetId);
+    if (updateErr) throw updateErr;
+
+    // 4. Log activity
+    await logActivity({
+      assetId,
+      actionType: 'Xin gia hạn GCN',
+      description: `Xin gia hạn thêm ${additionalDays} ngày. Lý do: ${reason}. Hạn mới: ${newDateStr}`,
+      notes: reason,
+      performedBy: profile?.id,
+    });
+  } else {
+    const assets = mockStore.getAssets();
+    const asset = assets.find(a => a.id === assetId);
+    if (asset) {
+      const currentDate = asset.expected_return_date ? new Date(asset.expected_return_date) : new Date();
+      currentDate.setDate(currentDate.getDate() + additionalDays);
+      asset.expected_return_date = currentDate.toISOString().split('T')[0];
+    }
+  }
+}
+
+
+export async function fetchOverdueAssets(): Promise<Asset[]> {
+  if (!isSupabaseConfigured) {
+    const assets = mockStore.getAssets();
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    return assets.filter(a => 
+      a.custody_status === 'checked_out' && 
+      a.expected_return_date && 
+      new Date(a.expected_return_date) < today
+    );
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const { data, error } = await withTimeout(
+    supabase
+      .from('assets')
+      .select('*, projects(name), warehouses(name)')
+      .eq('custody_status', 'checked_out')
+      .lt('expected_return_date', todayStr),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) throw error;
+  return data || [];
 }

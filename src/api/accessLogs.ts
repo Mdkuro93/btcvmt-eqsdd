@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { AccessLog } from '../types';
 
@@ -33,7 +33,7 @@ export async function logAccessEvent(payload: LogAccessEventPayload): Promise<an
     try {
       const { data, error } = await withTimeout(
         supabase.from('access_logs').insert([row]).select().single(),
-        3000
+        DEFAULT_WRITE_TIMEOUT
       );
       if (!error && data) return data;
     } catch (err) {
@@ -69,7 +69,7 @@ export async function fetchAccessLogs(filters?: {
         query = query.eq('action', filters.action);
       }
 
-      const { data, error } = await withTimeout(query, 4000);
+      const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
       if (error) throw error;
       return (data || []) as AccessLog[];
     } catch (err) {

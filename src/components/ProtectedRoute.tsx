@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, effectiveRole } = useAuth();
 
   if (loading) {
     return (
@@ -52,9 +52,24 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
   }
 
   // Kiểm tra phân quyền theo vai trò (Role-Based Access)
-  if (allowedRoles && !allowedRoles.includes(profile.role)) {
-    const fallbackPath = (profile.role === 'viewer' || profile.role === 'user') ? '/lookup' : '/';
-    return <Navigate to={fallbackPath} replace />;
+  if (allowedRoles) {
+    const currentRole = (effectiveRole || profile.role) as string;
+    let isAllowed = currentRole === 'admin' || currentRole === 'super_admin' || allowedRoles.includes(currentRole as Role);
+
+    if (!isAllowed) {
+      if (currentRole === 'quan_ly' && (allowedRoles.includes('warehouse_manager') || allowedRoles.includes('btc_manager'))) {
+        isAllowed = true;
+      } else if (currentRole === 'chuyen_vien' && (allowedRoles.includes('capital_dept') || allowedRoles.includes('project_dept') || allowedRoles.includes('re_dept'))) {
+        isAllowed = true;
+      } else if ((currentRole === 'nguoi_dung' || currentRole === 'user') && allowedRoles.includes('viewer')) {
+        isAllowed = true;
+      }
+    }
+
+    if (!isAllowed) {
+      const fallbackPath = (currentRole === 'viewer' || currentRole === 'user' || currentRole === 'nguoi_dung') ? '/lookup' : '/';
+      return <Navigate to={fallbackPath} replace />;
+    }
   }
 
   return <Outlet />;

@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { ViewerWarehouseAccess } from '../types';
 
@@ -22,7 +22,7 @@ export async function fetchViewerWarehouseAccess(userId?: string): Promise<Viewe
         query = query.eq('user_id', userId);
       }
 
-      const { data, error } = await withTimeout(query, 4000);
+      const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
       if (error) throw error;
       return (data || []) as ViewerWarehouseAccess[];
     } catch (err) {
@@ -60,7 +60,7 @@ export async function grantViewerWarehouseAccess(payload: {
             { onConflict: 'user_id,warehouse_id' }
           )
           .select(),
-        4000
+        DEFAULT_WRITE_TIMEOUT
       );
       if (error) throw error;
       return data;
@@ -84,7 +84,7 @@ export async function extendViewerWarehouseAccess(id: string, newExpiresAt: stri
           .update({ expires_at: newExpiresAt })
           .eq('id', id)
           .select(),
-        4000
+        DEFAULT_WRITE_TIMEOUT
       );
       if (error) throw error;
       return data;
@@ -108,7 +108,7 @@ export async function revokeViewerWarehouseAccess(id: string): Promise<any> {
           .from('viewer_warehouse_access')
           .delete()
           .eq('id', id),
-        4000
+        DEFAULT_WRITE_TIMEOUT
       );
       if (error) throw error;
       return { success: true };

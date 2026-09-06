@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, UserPlus, Clock, CheckCircle2, AlertTriangle, ShieldCheck, 
   XCircle, Search, RefreshCw, Calendar, Building, Phone, Mail, 
-  ChevronDown, Check, Shield, Lock, Eye, AlertCircle, X, Sparkles
+  ChevronDown, Check, Shield, Lock, Eye, AlertCircle, X, Sparkles,
+  Edit2
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -14,10 +15,12 @@ import {
   rejectUserProfile, 
   createUserDirect, 
   updateUserStatus,
-  updateUserRole 
+  updateUserRole,
+  updateUserDirect 
 } from '../api/users';
 import { fetchWarehouses } from '../api/assets';
-import { Profile, Role, Warehouse } from '../types';
+import { fetchInvestorEntities } from '../api/investorEntities';
+import { Profile, Role, Warehouse, InvestorEntity } from '../types';
 import { checkLookupAccess, formatRemainingDuration } from '../lib/accessGuard';
 
 const ROLE_LABELS: Record<Role, { label: string; color: string; desc: string }> = {
@@ -25,10 +28,15 @@ const ROLE_LABELS: Record<Role, { label: string; color: string; desc: string }> 
   admin: { label: 'Quản trị viên', color: 'bg-purple-50 text-purple-700 border-purple-200', desc: 'Quản lý người dùng và danh mục' },
   btc_manager: { label: 'Ban Tài Chính (BTC)', color: 'bg-blue-50 text-blue-700 border-blue-200', desc: 'Phê duyệt mượn/thế chấp/xuất kho' },
   warehouse_manager: { label: 'Thủ Kho Trung Tâm/Chi Nhánh', color: 'bg-amber-50 text-amber-700 border-amber-200', desc: 'Quản lý kho sổ & duyệt truy cập' },
-  capital_dept: { label: 'Ban Nguồn Vốn', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', desc: 'Lập đề xuất mượn/thế chấp' },
-  project_dept: { label: 'Ban Quản Lý Dự Án', color: 'bg-cyan-50 text-cyan-700 border-cyan-200', desc: 'Đề xuất mượn & tách sổ' },
-  re_dept: { label: 'Ban Kinh Doanh BĐS', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', desc: 'Đề xuất bán & bàn giao' },
+  quan_ly: { label: 'Quản lý phòng ban', color: 'bg-teal-50 text-teal-700 border-teal-200', desc: 'Quản lý và duyệt hồ sơ' },
+  capital_dept: { label: 'Phòng Nguồn Vốn', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', desc: 'Lập đề xuất mượn/thế chấp' },
+  project_dept: { label: 'Ban PTDA/BĐN', color: 'bg-cyan-50 text-cyan-700 border-cyan-200', desc: 'Đề xuất mượn & tách sổ' },
+  re_dept: { label: 'Khối SPG', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', desc: 'Đề xuất bán & bàn giao' },
+  supervisor: { label: 'Quản lý (Xem báo cáo/Truy vấn)', color: 'bg-violet-50 text-violet-700 border-violet-200', desc: 'Giám sát báo cáo & yêu cầu kho phân công' },
+  investor: { label: 'Chủ đầu tư/Nhà đầu tư (CĐT/NĐT)', color: 'bg-rose-50 text-rose-700 border-rose-200', desc: 'Xem & gửi yêu cầu mượn/trả GCN thuộc thực thể sở hữu' },
+  chuyen_vien: { label: 'Chuyên viên nghiệp vụ', color: 'bg-sky-50 text-sky-700 border-sky-200', desc: 'Lập và xử lý đề xuất' },
   viewer: { label: 'Khách Tra Cứu', color: 'bg-slate-50 text-slate-700 border-slate-200', desc: 'Tra cứu thông tin GCN' },
+  nguoi_dung: { label: 'Người dùng', color: 'bg-stone-50 text-stone-700 border-stone-200', desc: 'Người dùng tra cứu cơ bản' },
   user: { label: 'Tra Cứu Tạm Thời', color: 'bg-orange-50 text-orange-700 border-orange-200', desc: 'Tài khoản tự đăng ký' },
 };
 
@@ -36,6 +44,7 @@ export const UserManagement: React.FC = () => {
   const { profile: currentUser } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [investorEntities, setInvestorEntities] = useState<InvestorEntity[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'expired' | 'internal'>('pending');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -65,17 +74,34 @@ export const UserManagement: React.FC = () => {
   const [newExpiryPreset, setNewExpiryPreset] = useState<'7d' | '30d' | '90d' | 'permanent' | 'custom'>('30d');
   const [newCustomExpiry, setNewCustomExpiry] = useState('');
   const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
+  const [assignedWarehouseIds, setAssignedWarehouseIds] = useState<string[]>([]);
+  const [selectedOwnerEntityIds, setSelectedOwnerEntityIds] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+
+  // Modal: Edit user
+  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editRole, setEditRole] = useState<Role>('viewer');
+  const [editPhone, setEditPhone] = useState('');
+  const [editOrganization, setEditOrganization] = useState('');
+  const [editStatus, setEditStatus] = useState<string>('active');
+  const [editExpiresAt, setEditExpiresAt] = useState('');
+  const [editManagedWarehouseIds, setEditManagedWarehouseIds] = useState<string[]>([]);
+  const [editAssignedWarehouseIds, setEditAssignedWarehouseIds] = useState<string[]>([]);
+  const [editOwnerEntityIds, setEditOwnerEntityIds] = useState<string[]>([]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [userList, whList] = await Promise.all([
+      const [userList, whList, invList] = await Promise.all([
         fetchProfiles(),
         fetchWarehouses(),
+        fetchInvestorEntities(),
       ]);
       setProfiles(userList || []);
       setWarehouses(whList || []);
+      setInvestorEntities(invList || []);
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu người dùng:', err);
       toast.error('Không thể tải danh sách người dùng');
@@ -97,6 +123,51 @@ export const UserManagement: React.FC = () => {
     setNewCustomExpiry(isoString);
   }, []);
 
+  const openEditModal = (u: Profile) => {
+    setEditingUser(u);
+    setEditFullName(u.full_name || '');
+    setEditRole(u.role);
+    setEditPhone(u.phone || '');
+    setEditOrganization(u.organization || '');
+    setEditStatus(u.status || 'active');
+    setEditManagedWarehouseIds(u.managed_warehouse_ids || []);
+    setEditAssignedWarehouseIds(u.assigned_warehouse_ids || []);
+    setEditOwnerEntityIds(u.owner_entity_ids || []);
+    setEditExpiresAt(u.access_expires_at ? new Date(u.access_expires_at).toISOString().slice(0, 16) : '');
+  };
+
+  const handleSaveUserEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editFullName.trim()) {
+      toast.error('Vui lòng nhập họ và tên');
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const updated = await updateUserDirect(editingUser.id, {
+        full_name: editFullName.trim(),
+        role: editRole,
+        status: editStatus as any,
+        phone: editPhone.trim() || null,
+        organization: editOrganization.trim() || null,
+        managed_warehouse_ids: editRole === 'warehouse_manager' ? editManagedWarehouseIds : null,
+        assigned_warehouse_ids: ['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(editRole) ? editAssignedWarehouseIds : null,
+        owner_entity_ids: editRole === 'investor' ? editOwnerEntityIds : null,
+        access_expires_at: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
+      });
+
+      setProfiles(prev => prev.map(p => p.id === editingUser.id ? { ...p, ...updated } : p));
+      toast.success(`Cập nhật thông tin tài khoản ${updated.full_name} thành công!`);
+      setEditingUser(null);
+    } catch (err: any) {
+      console.error('Lỗi cập nhật người dùng:', err);
+      toast.error(err.message || 'Không thể cập nhật người dùng');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   // Compute stats
   const stats = useMemo(() => {
     const now = Date.now();
@@ -106,7 +177,7 @@ export const UserManagement: React.FC = () => {
     let internalCount = 0;
 
     profiles.forEach(p => {
-      const isInternal = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept'].includes(p.role);
+      const isInternal = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor'].includes(p.role);
       if (isInternal) {
         internalCount++;
       }
@@ -159,7 +230,7 @@ export const UserManagement: React.FC = () => {
         }
         return false;
       } else if (activeTab === 'internal') {
-        const isInternal = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept'].includes(p.role);
+        const isInternal = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor'].includes(p.role);
         if (!isInternal) return false;
       }
 
@@ -323,6 +394,8 @@ export const UserManagement: React.FC = () => {
         phone: newPhone.trim() || undefined,
         organization: newOrganization.trim() || undefined,
         managed_warehouse_ids: newRole === 'warehouse_manager' ? selectedWarehouseIds : null,
+        assigned_warehouse_ids: ['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(newRole) ? assignedWarehouseIds : null,
+        owner_entity_ids: newRole === 'investor' ? selectedOwnerEntityIds : null,
       });
 
       setProfiles(prev => [created, ...prev]);
@@ -339,6 +412,8 @@ export const UserManagement: React.FC = () => {
       setNewPhone('');
       setNewOrganization('');
       setSelectedWarehouseIds([]);
+      setAssignedWarehouseIds([]);
+      setSelectedOwnerEntityIds([]);
       setIsCreateModalOpen(false);
     } catch (err: any) {
       console.error('Lỗi tạo tài khoản trực tiếp:', err);
@@ -587,13 +662,15 @@ export const UserManagement: React.FC = () => {
               className="text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
             >
               <option value="all">Tất cả vai trò</option>
-              <option value="user">Người dùng tra cứu tạm thời (user)</option>
+              <option value="user">Tra cứu tạm thời (user)</option>
               <option value="viewer">Khách tra cứu (viewer)</option>
               <option value="warehouse_manager">Thủ kho</option>
               <option value="btc_manager">Ban Tài Chính</option>
-              <option value="capital_dept">Ban Nguồn Vốn</option>
-              <option value="project_dept">Ban Quản Lý Dự Án</option>
-              <option value="re_dept">Ban Kinh Doanh BĐS</option>
+              <option value="capital_dept">Phòng Nguồn Vốn</option>
+              <option value="project_dept">Ban PTDA/BĐN</option>
+              <option value="re_dept">Khối SPG</option>
+              <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn)</option>
+              <option value="investor">Chủ đầu tư/Nhà đầu tư (CĐT/NĐT)</option>
               <option value="admin">Quản trị viên</option>
               <option value="super_admin">Quản trị tối cao</option>
             </select>
@@ -679,8 +756,25 @@ export const UserManagement: React.FC = () => {
                           {roleMeta.label}
                         </span>
                         {u.role === 'warehouse_manager' && u.managed_warehouse_ids && u.managed_warehouse_ids.length > 0 && (
-                          <div className="text-[11px] text-gray-500 mt-1">
+                          <div className="text-[11px] text-amber-700 font-medium mt-1">
                             Quản lý {u.managed_warehouse_ids.length} kho sổ
+                          </div>
+                        )}
+                        {['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(u.role) && u.assigned_warehouse_ids && u.assigned_warehouse_ids.length > 0 && (
+                          <div className="text-[11px] text-blue-700 font-medium mt-1">
+                            Phụ trách {u.assigned_warehouse_ids.length} kho
+                          </div>
+                        )}
+                        {u.role === 'investor' && u.owner_entity_ids && u.owner_entity_ids.length > 0 && (
+                          <div className="text-[11px] text-rose-700 font-medium mt-1" title={
+                            u.owner_entity_ids
+                              .map(id => {
+                                const found = investorEntities.find(ie => ie.id === id);
+                                return found ? `${found.name} (${found.company_code || 'Chưa có mã'})` : id;
+                              })
+                              .join(', ')
+                          }>
+                            Đại diện {u.owner_entity_ids.length} pháp nhân CĐT/NĐT
                           </div>
                         )}
                       </td>
@@ -809,6 +903,14 @@ export const UserManagement: React.FC = () => {
                               {u.status === 'disabled' ? 'Mở khóa' : 'Khóa'}
                             </button>
                           )}
+                          {/* Edit button */}
+                          <button
+                            onClick={() => openEditModal(u)}
+                            className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-lg transition"
+                            title="Sửa thông tin & phân quyền"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1160,9 +1262,11 @@ export const UserManagement: React.FC = () => {
                     <option value="viewer">Khách tra cứu (viewer)</option>
                     <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
                     <option value="btc_manager">Ban Tài Chính (btc_manager)</option>
-                    <option value="capital_dept">Ban Nguồn Vốn (capital_dept)</option>
-                    <option value="project_dept">Ban Quản Lý Dự Án (project_dept)</option>
-                    <option value="re_dept">Ban Kinh Doanh BĐS (re_dept)</option>
+                    <option value="capital_dept">Phòng Nguồn Vốn (capital_dept)</option>
+                    <option value="project_dept">Ban PTDA/BĐN (project_dept)</option>
+                    <option value="re_dept">Khối SPG (re_dept)</option>
+                    <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn) (supervisor)</option>
+                    <option value="investor">Chủ đầu tư/Nhà đầu tư (investor)</option>
                     <option value="admin">Quản trị viên (admin)</option>
                   </select>
                 </div>
@@ -1237,12 +1341,32 @@ export const UserManagement: React.FC = () => {
               {/* Warehouse selector for warehouse_manager */}
               {newRole === 'warehouse_manager' && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-                  <label className="block text-xs font-semibold text-amber-950">
-                    Phân công kho sổ phụ trách:
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-amber-950 flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-amber-700" />
+                      Phân công kho sổ quản lý: <span className="font-normal text-amber-700">({selectedWarehouseIds.length} kho đã chọn)</span>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWarehouseIds(warehouses.map(w => w.id))}
+                        className="text-amber-800 hover:underline font-medium"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWarehouseIds([])}
+                        className="text-gray-500 hover:underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                     {warehouses.map(wh => (
-                      <label key={wh.id} className="flex items-center gap-2 text-xs text-gray-700 bg-white p-2 rounded border border-gray-200 cursor-pointer">
+                      <label key={wh.id} className="flex items-center gap-2 text-xs text-gray-700 bg-white p-2 rounded border border-gray-200 cursor-pointer hover:bg-amber-50/50">
                         <input
                           type="checkbox"
                           checked={selectedWarehouseIds.includes(wh.id)}
@@ -1255,10 +1379,130 @@ export const UserManagement: React.FC = () => {
                           }}
                           className="rounded text-[#1E3A8A]"
                         />
-                        <span className="truncate">{wh.name}</span>
+                        <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
                       </label>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Multi-select "Kho phụ trách" for capital_dept, project_dept, re_dept, supervisor */}
+              {['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(newRole) && (
+                <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-blue-950 flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-blue-700" />
+                      Kho phụ trách: <span className="font-normal text-blue-700">({assignedWarehouseIds.length} kho đã chọn)</span>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setAssignedWarehouseIds(warehouses.map(w => w.id))}
+                        className="text-blue-700 hover:text-blue-900 font-medium hover:underline"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setAssignedWarehouseIds([])}
+                        className="text-gray-500 hover:text-gray-700 hover:underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-blue-800">
+                    Phân quyền cho tài khoản phụ trách các kho chỉ định (lập đề xuất, giám sát hoặc duyệt).
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                    {warehouses.map(wh => {
+                      const isChecked = assignedWarehouseIds.includes(wh.id);
+                      return (
+                        <label key={wh.id} className={`flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer transition ${
+                          isChecked ? 'bg-blue-100/70 border-blue-300 text-blue-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setAssignedWarehouseIds(prev => [...prev, wh.id]);
+                              } else {
+                                setAssignedWarehouseIds(prev => prev.filter(id => id !== wh.id));
+                              }
+                            }}
+                            className="rounded text-[#1E3A8A]"
+                          />
+                          <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Multi-select "Pháp nhân đại diện" for investor */}
+              {newRole === 'investor' && (
+                <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-rose-950 flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-rose-700" />
+                      Pháp nhân đại diện: <span className="font-normal text-rose-700">({selectedOwnerEntityIds.length} pháp nhân đã chọn)</span>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOwnerEntityIds(investorEntities.map(e => e.id))}
+                        className="text-rose-700 hover:text-rose-900 font-medium hover:underline"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOwnerEntityIds([])}
+                        className="text-gray-500 hover:text-gray-700 hover:underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-rose-800">
+                    Chỉ định các pháp nhân CĐT/NĐT mà tài khoản đại diện để có quyền xem và gửi yêu cầu mượn/trả GCN sở hữu.
+                  </div>
+                  {investorEntities.length === 0 ? (
+                    <div className="p-3 bg-white rounded-lg border border-rose-200 text-xs text-rose-600 text-center">
+                      Chưa có dữ liệu danh mục pháp nhân CĐT/NĐT. Vui lòng vào mục Quản trị &gt; Pháp nhân CĐT/NĐT để thêm mới.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
+                      {investorEntities.map(ent => {
+                        const isChecked = selectedOwnerEntityIds.includes(ent.id);
+                        return (
+                          <label key={ent.id} className={`flex items-center gap-2 text-xs p-2.5 rounded-lg border cursor-pointer transition ${
+                            isChecked ? 'bg-rose-100/70 border-rose-300 text-rose-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedOwnerEntityIds(prev => [...prev, ent.id]);
+                                } else {
+                                  setSelectedOwnerEntityIds(prev => prev.filter(id => id !== ent.id));
+                                }
+                              }}
+                              className="rounded text-rose-600"
+                            />
+                            <span className="flex-1 truncate">
+                              {ent.name} {ent.company_code ? `(${ent.company_code})` : ''}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1278,6 +1522,334 @@ export const UserManagement: React.FC = () => {
                 >
                   {isCreating && <RefreshCw className="w-4 h-4 animate-spin" />}
                   <span>Kích hoạt ngay</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Chỉnh sửa thông tin & Phân quyền người dùng */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-100 text-[#1E3A8A] rounded-lg">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Sửa thông tin & Phân quyền</h3>
+                  <p className="text-xs text-gray-500">Cập nhật vai trò, trạng thái, kho phụ trách và pháp nhân đại diện</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserEdit} className="space-y-4 mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Email đăng nhập
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingUser.email || ''}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 bg-gray-100 text-gray-500 rounded-lg cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Họ và tên <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFullName}
+                    onChange={e => setEditFullName(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Vai trò tài khoản <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={editRole}
+                    onChange={e => setEditRole(e.target.value as Role)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] bg-white font-medium"
+                  >
+                    <option value="user">Tra cứu tạm thời (user)</option>
+                    <option value="viewer">Khách tra cứu (viewer)</option>
+                    <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
+                    <option value="btc_manager">Ban Tài Chính (btc_manager)</option>
+                    <option value="capital_dept">Phòng Nguồn Vốn (capital_dept)</option>
+                    <option value="project_dept">Ban PTDA/BĐN (project_dept)</option>
+                    <option value="re_dept">Khối SPG (re_dept)</option>
+                    <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn) (supervisor)</option>
+                    <option value="investor">Chủ đầu tư/Nhà đầu tư (investor)</option>
+                    <option value="admin">Quản trị viên (admin)</option>
+                    <option value="super_admin">Quản trị tối cao (super_admin)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Trạng thái tài khoản <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={e => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] bg-white font-medium"
+                  >
+                    <option value="active">Hoạt động (active)</option>
+                    <option value="approved">Đã duyệt tra cứu (approved)</option>
+                    <option value="pending">Chờ phê duyệt (pending)</option>
+                    <option value="disabled">Đã khóa (disabled)</option>
+                    <option value="rejected">Từ chối (rejected)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Số điện thoại liên hệ
+                  </label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={e => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Cơ quan / Đơn vị công tác
+                  </label>
+                  <input
+                    type="text"
+                    value={editOrganization}
+                    onChange={e => setEditOrganization(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
+                  />
+                </div>
+              </div>
+
+              {/* Expiry date setting */}
+              {(editStatus === 'approved' || editRole === 'user' || editRole === 'viewer') && (
+                <div className="p-3.5 bg-orange-50/80 border border-orange-200 rounded-xl space-y-1.5">
+                  <label className="block text-xs font-semibold text-orange-950 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-orange-700" />
+                    Hạn thời gian tra cứu tạm thời:
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editExpiresAt}
+                    onChange={e => setEditExpiresAt(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-[11px] text-orange-800">
+                    Để trống nếu muốn cấp quyền không thời hạn hoặc không áp dụng hạn tra cứu.
+                  </p>
+                </div>
+              )}
+
+              {/* Edit Warehouse Manager: Managed warehouses */}
+              {editRole === 'warehouse_manager' && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-amber-950 flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-amber-700" />
+                      Kho sổ quản lý: <span className="font-normal text-amber-700">({editManagedWarehouseIds.length} kho)</span>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setEditManagedWarehouseIds(warehouses.map(w => w.id))}
+                        className="text-amber-800 hover:underline font-medium"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditManagedWarehouseIds([])}
+                        className="text-gray-500 hover:underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                    {warehouses.map(wh => (
+                      <label key={wh.id} className="flex items-center gap-2 text-xs text-gray-700 bg-white p-2 rounded border border-gray-200 cursor-pointer hover:bg-amber-50/50">
+                        <input
+                          type="checkbox"
+                          checked={editManagedWarehouseIds.includes(wh.id)}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setEditManagedWarehouseIds(prev => [...prev, wh.id]);
+                            } else {
+                              setEditManagedWarehouseIds(prev => prev.filter(id => id !== wh.id));
+                            }
+                          }}
+                          className="rounded text-[#1E3A8A]"
+                        />
+                        <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Multi-select "Kho phụ trách" for capital_dept, project_dept, re_dept, supervisor */}
+              {['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(editRole) && (
+                <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-blue-950 flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-blue-700" />
+                      Kho phụ trách: <span className="font-normal text-blue-700">({editAssignedWarehouseIds.length} kho)</span>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setEditAssignedWarehouseIds(warehouses.map(w => w.id))}
+                        className="text-blue-700 hover:text-blue-900 font-medium hover:underline"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditAssignedWarehouseIds([])}
+                        className="text-gray-500 hover:text-gray-700 hover:underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-blue-800">
+                    Gán danh sách kho sổ mà tài khoản có thẩm quyền nghiệp vụ (theo dõi báo cáo, duyệt, tra cứu).
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                    {warehouses.map(wh => {
+                      const isChecked = editAssignedWarehouseIds.includes(wh.id);
+                      return (
+                        <label key={wh.id} className={`flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer transition ${
+                          isChecked ? 'bg-blue-100/70 border-blue-300 text-blue-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setEditAssignedWarehouseIds(prev => [...prev, wh.id]);
+                              } else {
+                                setEditAssignedWarehouseIds(prev => prev.filter(id => id !== wh.id));
+                              }
+                            }}
+                            className="rounded text-[#1E3A8A]"
+                          />
+                          <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Multi-select "Pháp nhân đại diện" for investor */}
+              {editRole === 'investor' && (
+                <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-rose-950 flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-rose-700" />
+                      Pháp nhân đại diện: <span className="font-normal text-rose-700">({editOwnerEntityIds.length} pháp nhân)</span>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setEditOwnerEntityIds(investorEntities.map(e => e.id))}
+                        className="text-rose-700 hover:text-rose-900 font-medium hover:underline"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditOwnerEntityIds([])}
+                        className="text-gray-500 hover:text-gray-700 hover:underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-rose-800">
+                    Chỉ định các pháp nhân CĐT/NĐT mà tài khoản đại diện sở hữu để phân quyền truy cập và gửi đề xuất mượn/trả GCN.
+                  </div>
+                  {investorEntities.length === 0 ? (
+                    <div className="p-3 bg-white rounded-lg border border-rose-200 text-xs text-rose-600 text-center">
+                      Chưa có dữ liệu danh mục pháp nhân CĐT/NĐT. Vui lòng vào mục Quản trị &gt; Pháp nhân CĐT/NĐT để thêm mới.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
+                      {investorEntities.map(ent => {
+                        const isChecked = editOwnerEntityIds.includes(ent.id);
+                        return (
+                          <label key={ent.id} className={`flex items-center gap-2 text-xs p-2.5 rounded-lg border cursor-pointer transition ${
+                            isChecked ? 'bg-rose-100/70 border-rose-300 text-rose-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setEditOwnerEntityIds(prev => [...prev, ent.id]);
+                                } else {
+                                  setEditOwnerEntityIds(prev => prev.filter(id => id !== ent.id));
+                                }
+                              }}
+                              className="rounded text-rose-600"
+                            />
+                            <span className="flex-1 truncate">
+                              {ent.name} {ent.company_code ? `(${ent.company_code})` : ''}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2 text-sm font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg shadow-sm transition flex items-center gap-2"
+                >
+                  {isSavingEdit && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  <span>Lưu thay đổi</span>
                 </button>
               </div>
             </form>

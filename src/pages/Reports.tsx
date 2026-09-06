@@ -3,10 +3,11 @@ import { fetchAssets, fetchProjects, fetchWarehouses } from '../api/assets';
 import { Asset, Project, Warehouse } from '../types';
 import { computeReportSummary } from '../lib/reportEngine';
 import { formatPlotCode } from '../lib/assetIdentifier';
-import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle, Warehouse as WarehouseIcon, ShieldAlert } from 'lucide-react';
+import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle, Warehouse as WarehouseIcon, ShieldAlert, SlidersHorizontal } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import { LoadingFallback } from '../components/LoadingFallback';
+import { ReportSnapshotsManager } from '../components/ReportSnapshotsManager';
 import { mockStore } from '../lib/mockStore';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -35,9 +36,10 @@ export const Reports: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [reportPeriod, setReportPeriod] = useState<string>('Năm 2026');
 
-  // Pagination for DOM performance
+  // Pagination & Display density for DOM performance
   const [page, setPage] = useState(1);
-  const pageSize = 50;
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [tableDensity, setTableDensity] = useState<'comfortable' | 'compact'>('comfortable');
 
   useEffect(() => {
     loadData();
@@ -71,6 +73,11 @@ export const Reports: React.FC = () => {
     if (!isWarehouseManager || !managedWarehouseIds) return warehouses;
     return warehouses.filter(w => managedWarehouseIds.includes(w.id));
   }, [warehouses, isWarehouseManager, managedWarehouseIds]);
+
+  const currentWarehouseName = useMemo(() => {
+    if (!selectedWarehouseId) return undefined;
+    return warehouses.find(w => w.id === selectedWarehouseId)?.name;
+  }, [selectedWarehouseId, warehouses]);
 
   // Filtered Assets and Statistics
   const { filteredAssets, stats } = useMemo(() => {
@@ -157,7 +164,7 @@ export const Reports: React.FC = () => {
         
         let notesArr = [];
         if (asset.notes) notesArr.push(asset.notes);
-        if (asset.custody_status === 'checked_out') notesArr.push(`Đang xuất mượn cho ${asset.current_holder_dept || 'Bộ phận'}`);
+        if (asset.custody_status === 'checked_out') notesArr.push(`Đang xuất mượn cho ${asset.current_holder_dept || 'Chưa cập nhật'}`);
         if (asset.lifecycle_status === 'invalidated') notesArr.push('Sổ đã hủy do tách thửa');
         const notesStr = notesArr.length > 0 ? notesArr.join(' - ') : 'Lưu kho an toàn';
 
@@ -182,20 +189,20 @@ export const Reports: React.FC = () => {
           plotCodeDisplay,
           asset.area || 0,
           // Thông tin pháp lý GCN
-          asset.owner_name || 'Công ty Cổ phần Đầu tư VMT',
+          asset.owner_name || '-',
           asset.land_lot_no || '-',
           asset.map_sheet_no || '-',
           asset.address_detail || (asset.province ? `${asset.district || ''}, ${asset.province}` : '-'),
           asset.certificate_no,
-          `CH-${asset.certificate_no.replace(/\D/g, '') || String(100 + idx)}`,
-          asset.created_at ? new Date(asset.created_at).toLocaleDateString('vi-VN') : '15/01/2024',
-          asset.warehouses?.name || 'Kho Trung Tâm BTC',
+          asset.registry_no || '-',
+          asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : (asset.created_at ? new Date(asset.created_at).toLocaleDateString('vi-VN') : '-'),
+          asset.warehouses?.name || '-',
           asset.usage_purpose || '-',
           asset.usage_term || '-',
           // Thế chấp
           isMortgaged ? 'Đã thế chấp' : 'Chưa thế chấp',
-          isMortgaged ? (asset.mortgage_bank || 'BIDV - CN TP.HCM') : '-',
-          isMortgaged ? (asset.mortgage_unit || 'Ban Nguồn Vốn') : '-',
+          isMortgaged ? (asset.mortgage_bank || 'Chưa cập nhật') : '-',
+          isMortgaged ? (asset.mortgage_unit || 'Chưa cập nhật') : '-',
           '-',
           '-',
           valuation ? valuation : 0,
@@ -203,7 +210,7 @@ export const Reports: React.FC = () => {
           guaranteeVal ? guaranteeVal : 0,
           // Ghi chú
           asset.custody_status === 'checked_out'
-            ? `Đang xuất mượn cho ${asset.current_holder_dept || 'Bộ phận'}`
+            ? `Đang xuất mượn cho ${asset.current_holder_dept || 'Chưa cập nhật'}`
             : (asset.lifecycle_status === 'invalidated' ? 'Sổ đã hủy do tách thửa' : 'Lưu kho an toàn')
         ];
         wsData.push(row);
@@ -276,7 +283,14 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ReportSnapshotsManager
+              currentAssets={filteredAssets}
+              currentRegion={selectedRegion}
+              currentWarehouseName={currentWarehouseName}
+              onRefreshParent={loadData}
+            />
+
             <button
               onClick={exportExcel}
               disabled={loading || filteredAssets.length === 0}
@@ -435,18 +449,89 @@ export const Reports: React.FC = () => {
 
       {/* MATRIX EXCEL TABLE REPORT */}
       <div className="bg-white shadow-md border border-gray-300 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto max-h-[70vh]">
-          <table className="min-w-full divide-y divide-gray-300 text-xs text-left border-collapse">
+        {/* Matrix Table Toolbar */}
+        <div className="p-3.5 bg-gradient-to-r from-amber-50/90 via-slate-50 to-emerald-50/80 border-b border-gray-300 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="font-black text-gray-900 text-xs sm:text-sm uppercase tracking-tight flex items-center gap-1.5">
+              <FileSpreadsheet className="w-4 h-4 text-amber-700" />
+              Ma Trận Chi Tiết (27 Cột Nghiệp Vụ)
+            </span>
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+              {filteredAssets.length} bản ghi
+            </span>
+            <span className="text-xs text-gray-300 hidden md:inline">|</span>
+            <span className="text-[11px] text-gray-600 hidden lg:inline">
+              Cố định 2 cột <strong>[STT]</strong> và <strong>[Dự Án]</strong> giúp đối chiếu dễ dàng khi cuộn ngang 27 cột
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Density Selector */}
+            <div className="flex items-center bg-white p-0.5 rounded-lg border border-gray-300 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setTableDensity('comfortable')}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  tableDensity === 'comfortable'
+                    ? 'bg-[#1E3A8A] text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Chế độ dòng chi tiết, dễ đọc"
+              >
+                Chi tiết
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableDensity('compact')}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  tableDensity === 'compact'
+                    ? 'bg-[#1E3A8A] text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Chế độ dòng thu gọn, tối đa hóa số dòng hiển thị"
+              >
+                Thu gọn
+              </button>
+            </div>
+
+            {/* Page Size Selector */}
+            <div className="flex items-center gap-1.5 text-xs text-gray-700 font-medium">
+              <span className="hidden sm:inline">Dòng/trang:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="text-xs border border-gray-300 rounded-lg py-1 px-2 bg-white font-semibold text-gray-800 focus:ring-1 focus:ring-amber-500"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500 (Tất cả)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto max-h-[72vh] overflow-y-auto">
+          <table className="min-w-full text-left border-collapse">
             
             {/* LEVEL 1: CATEGORY SECTIONS HEADER */}
-            <thead>
+            <thead className="sticky top-0 z-30 shadow-2xs">
               <tr className="text-center font-black uppercase text-[11px] tracking-wide text-gray-900">
-                <th rowSpan={2} className="px-3 py-3 bg-amber-400 border border-gray-400 w-10 sticky left-0 z-20">
+                {/* Sticky STT */}
+                <th rowSpan={2} className="px-3 py-3 bg-amber-400 border border-gray-400 w-12 sticky left-0 z-40 text-center">
                   STT
                 </th>
 
-                {/* SECTION 1: THÔNG TIN CHUNG (YELLOW/GOLD) */}
-                <th colSpan={7} className="px-4 py-2 bg-amber-300 border border-gray-400 text-amber-950">
+                {/* Sticky DỰ ÁN */}
+                <th rowSpan={2} className="px-3 py-3 bg-amber-300 border border-gray-400 min-w-[180px] sticky left-12 z-40 text-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
+                  DỰ ÁN
+                </th>
+
+                {/* SECTION 1: THÔNG TIN CHUNG (YELLOW/GOLD) - 6 columns */}
+                <th colSpan={6} className="px-4 py-2 bg-amber-300 border border-gray-400 text-amber-950">
                   THÔNG TIN CHUNG
                 </th>
 
@@ -462,42 +547,41 @@ export const Reports: React.FC = () => {
 
                 {/* SECTION 4: GHI CHÚ */}
                 <th rowSpan={2} className="px-4 py-3 bg-amber-300 border border-gray-400 text-amber-950 min-w-[200px]">
-                  GHI CHÚ
+                  GHI CHÚ & KHO
                 </th>
               </tr>
 
               {/* LEVEL 2: SUB-COLUMNS HEADER */}
               <tr className="text-center font-bold text-[10px] uppercase tracking-wider text-gray-800 border-b border-gray-400">
-                {/* THÔNG TIN CHUNG COLUMNS */}
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[140px]">Dự án</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[120px]">Loại tài sản</th>
+                {/* THÔNG TIN CHUNG COLUMNS (minus Dự án which is sticky rowSpan=2) */}
+                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[130px]">Loại tài sản</th>
                 <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Nhóm sổ</th>
                 <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Phân Khu</th>
                 <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Số thửa/lô</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[120px] font-bold text-blue-900">Mã lô đất</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[90px]">Diện tích (m²)</th>
+                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[130px] font-bold text-blue-900">Mã lô đất</th>
+                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Diện tích (m²)</th>
 
                 {/* THÔNG TIN PHÁP LÝ GCN COLUMNS */}
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[160px]">Chủ sở hữu</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[80px]">Thửa đất số</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[80px]">Tờ bản đồ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[180px]">Địa chỉ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[110px]">Số CN QSDĐ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[100px]">Số vào sổ cấp</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[90px]">Ngày vào sổ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[140px]">Đơn vị quản lý sổ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[140px]">Mục đích sử dụng</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[100px]">Thời hạn sử dụng</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[190px]">Chủ sở hữu</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[90px]">Thửa đất số</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[90px]">Tờ bản đồ</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[220px]">Địa chỉ chi tiết</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[130px]">Số CN QSDĐ</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[110px]">Số vào sổ cấp</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[100px]">Ngày vào sổ</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[150px]">Đơn vị quản lý sổ</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[150px]">Mục đích sử dụng</th>
+                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[110px]">Thời hạn sử dụng</th>
 
                 {/* THẾ CHẤP COLUMNS */}
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[110px]">Tình trạng thế chấp</th>
+                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[120px]">Tình trạng thế chấp</th>
                 <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[160px]">Ngân hàng thế chấp 1</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[120px]">Đơn vị vay 1</th>
+                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[130px]">Đơn vị vay 1</th>
                 <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[140px]">Ngân hàng thế chấp 2</th>
                 <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[120px]">Đơn vị vay 2</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[120px]">Giá trị định giá</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[90px]">Tỷ lệ đảm bảo</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[120px]">Giá trị đảm bảo</th>
+                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[130px]">Giá trị định giá</th>
+                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[100px]">Tỷ lệ đảm bảo</th>
+                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[130px]">Giá trị đảm bảo</th>
               </tr>
             </thead>
 
@@ -531,29 +615,26 @@ export const Reports: React.FC = () => {
                   const valuation = asset.mortgage_valuation || 0;
                   const guaranteeRatio = asset.collateral_ratio || 0;
                   const guaranteeVal = asset.collateral_value || 0;
-                  
-                  let notesArr = [];
-                  if (asset.notes) notesArr.push(asset.notes);
-                  if (asset.custody_status === 'checked_out') notesArr.push(`Đang xuất mượn cho ${asset.current_holder_dept || 'Bộ phận'}`);
-                  if (asset.lifecycle_status === 'invalidated') notesArr.push('Sổ đã hủy do tách thửa');
-                  const notesStr = notesArr.length > 0 ? notesArr.join(' - ') : 'Lưu kho an toàn';
+                  const cellPadding = tableDensity === 'compact' ? 'py-1.5 px-2.5 text-[11px]' : 'py-2.5 px-3 text-xs';
 
                   return (
                     <tr key={asset.id} className="hover:bg-amber-50/40 transition-colors">
-                      {/* STT */}
-                      <td className="px-3 py-2 text-center font-bold text-gray-700 border-r border-gray-200 bg-gray-50 sticky left-0 z-10">
+                      {/* STT (Sticky Left) */}
+                      <td className={`${cellPadding} text-center font-bold text-gray-700 border-r border-gray-200 bg-gray-50 sticky left-0 z-10`}>
                         {(page - 1) * pageSize + index + 1}
                       </td>
 
-                      {/* THÔNG TIN CHUNG */}
-                      <td className="px-3 py-2 font-semibold text-gray-900 border-r border-gray-200">
-                        <div>{asset.projects?.name || '-'}</div>
+                      {/* DỰ ÁN (Sticky Left) */}
+                      <td className={`${cellPadding} font-semibold text-gray-900 border-r border-gray-200 bg-white sticky left-12 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] min-w-[180px]`}>
+                        <div className="leading-snug">{asset.projects?.name || '-'}</div>
                         {asset.business_project_name && (
-                          <div className="text-[10px] text-emerald-700 font-normal">KD: {asset.business_project_name}</div>
+                          <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">KD: {asset.business_project_name}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-gray-700 border-r border-gray-200">{asset.usage_purpose || '-'}</td>
-                      <td className="px-3 py-2 text-gray-700 border-r border-gray-200">
+
+                      {/* THÔNG TIN CHUNG */}
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.usage_purpose || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>
                         {asset.parent_asset_id ? (
                           <span className="text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded font-medium">Sổ con (Tách)</span>
                         ) : asset.lifecycle_status === 'invalidated' ? (
@@ -562,70 +643,78 @@ export const Reports: React.FC = () => {
                           <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Sổ chính</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-gray-700 border-r border-gray-200">{asset.subdivision || '-'}</td>
-                      <td className="px-3 py-2 font-mono text-gray-800 border-r border-gray-200">{asset.lot_no || asset.land_lot_no || '-'}</td>
-                      <td className="px-3 py-2 border-r border-gray-200">
-                        <span className="font-semibold text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded text-[11px] border border-blue-100">
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.subdivision || '-'}</td>
+                      <td className={`${cellPadding} font-mono text-gray-800 border-r border-gray-200`}>{asset.lot_no || asset.land_lot_no || '-'}</td>
+                      <td className={`${cellPadding} border-r border-gray-200`}>
+                        <span className="font-semibold text-blue-900 bg-blue-50 px-2 py-0.5 rounded text-[11px] border border-blue-200">
                           {formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no)}
                         </span>
                         {asset.business_plot_code && (
                           <div className="text-[10px] font-bold text-indigo-700 mt-0.5">KD: {asset.business_plot_code}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 font-bold text-gray-900 border-r border-gray-200 text-right">
-                        {asset.area ? asset.area.toLocaleString('vi-VN') : '-'}
+                      <td className={`${cellPadding} font-bold text-gray-900 border-r border-gray-200 text-right`}>
+                        {asset.area ? `${asset.area.toLocaleString('vi-VN')}` : '-'}
                       </td>
 
                       {/* THÔNG TIN PHÁP LÝ GCN */}
-                      <td className="px-3 py-2 font-medium text-gray-900 border-r border-gray-200">{asset.owner_name || 'Công ty Cổ phần Đầu tư VMT'}</td>
-                      <td className="px-3 py-2 text-center font-semibold text-gray-800 border-r border-gray-200">{asset.land_lot_no || '-'}</td>
-                      <td className="px-3 py-2 text-center text-gray-700 border-r border-gray-200">{asset.map_sheet_no || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600 border-r border-gray-200 truncate max-w-[200px]" title={asset.address_detail || ''}>
+                      <td className={`${cellPadding} font-semibold text-gray-900 border-r border-gray-200 min-w-[190px]`}>
+                        {asset.owner_name || '-'}
+                      </td>
+                      <td className={`${cellPadding} text-center font-semibold text-gray-800 border-r border-gray-200`}>{asset.land_lot_no || '-'}</td>
+                      <td className={`${cellPadding} text-center text-gray-700 border-r border-gray-200`}>{asset.map_sheet_no || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[220px] leading-snug`}>
                         {asset.address_detail || (asset.province ? `${asset.district || ''}, ${asset.province}` : '-')}
                       </td>
-                      <td className="px-3 py-2 font-bold text-[#1E3A8A] border-r border-gray-200">{asset.certificate_no}</td>
-                      <td className="px-3 py-2 text-gray-600 font-mono border-r border-gray-200">CH-{asset.certificate_no.replace(/\D/g, '') || String(100 + index)}</td>
-                      <td className="px-3 py-2 text-gray-600 border-r border-gray-200">
-                        {asset.created_at ? new Date(asset.created_at).toLocaleDateString('vi-VN') : '15/01/2024'}
+                      <td className={`${cellPadding} font-bold text-[#1E3A8A] border-r border-gray-200`}>{asset.certificate_no}</td>
+                      <td className={`${cellPadding} text-gray-600 font-mono border-r border-gray-200`}>{asset.registry_no || '-'}</td>
+                      <td className={`${cellPadding} text-gray-600 border-r border-gray-200`}>
+                        {asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : (asset.created_at ? new Date(asset.created_at).toLocaleDateString('vi-VN') : '-')}
                       </td>
-                      <td className="px-3 py-2 font-medium text-gray-800 border-r border-gray-200">{asset.warehouses?.name || 'Kho Trung Tâm BTC'}</td>
-                      <td className="px-3 py-2 text-gray-700 border-r border-gray-200">{asset.usage_purpose || '-'}</td>
-                      <td className="px-3 py-2 text-gray-700 border-r border-gray-200">{asset.usage_term || '-'}</td>
+                      <td className={`${cellPadding} font-medium text-gray-800 border-r border-gray-200 min-w-[150px]`}>
+                        {asset.warehouses?.name || '-'}
+                      </td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[150px]`}>{asset.usage_purpose || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.usage_term || '-'}</td>
 
                       {/* THÔNG TIN THẾ CHẤP NGÂN HÀNG */}
-                      <td className="px-3 py-2 border-r border-gray-200 text-center font-bold">
+                      <td className={`${cellPadding} border-r border-gray-200 text-center font-bold`}>
                         {isMortgaged ? (
                           <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded-full inline-block">Đã thế chấp</span>
                         ) : (
                           <span className="text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full inline-block">Chưa thế chấp</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 font-semibold text-red-900 border-r border-gray-200">
-                        {isMortgaged ? (asset.mortgage_bank || 'BIDV - CN TP.HCM') : '-'}
+                      <td className={`${cellPadding} font-semibold text-red-900 border-r border-gray-200 min-w-[160px]`}>
+                        {isMortgaged ? (asset.mortgage_bank || 'Chưa cập nhật') : '-'}
                       </td>
-                      <td className="px-3 py-2 text-gray-700 border-r border-gray-200">
-                        {isMortgaged ? (asset.mortgage_unit || 'Ban Nguồn Vốn') : '-'}
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[130px]`}>
+                        {isMortgaged ? (asset.mortgage_unit || 'Chưa cập nhật') : '-'}
                       </td>
-                      <td className="px-3 py-2 text-center text-gray-400 border-r border-gray-200">-</td>
-                      <td className="px-3 py-2 text-center text-gray-400 border-r border-gray-200">-</td>
-                      <td className="px-3 py-2 font-bold text-gray-900 border-r border-gray-200 text-right">
+                      <td className={`${cellPadding} text-center text-gray-400 border-r border-gray-200`}>-</td>
+                      <td className={`${cellPadding} text-center text-gray-400 border-r border-gray-200`}>-</td>
+                      <td className={`${cellPadding} font-bold text-gray-900 border-r border-gray-200 text-right min-w-[130px]`}>
                         {valuation ? `${valuation.toLocaleString('vi-VN')} đ` : '-'}
                       </td>
-                      <td className="px-3 py-2 text-center font-semibold text-gray-700 border-r border-gray-200">
+                      <td className={`${cellPadding} text-center font-semibold text-gray-700 border-r border-gray-200`}>
                         {guaranteeRatio ? `${guaranteeRatio}%` : '-'}
                       </td>
-                      <td className="px-3 py-2 font-bold text-emerald-700 border-r border-gray-200 text-right">
+                      <td className={`${cellPadding} font-bold text-emerald-700 border-r border-gray-200 text-right min-w-[130px]`}>
                         {guaranteeVal ? `${guaranteeVal.toLocaleString('vi-VN')} đ` : '-'}
                       </td>
 
                       {/* GHI CHÚ */}
-                      <td className="px-3 py-2 text-gray-600 text-[11px]">
+                      <td className={`${cellPadding} text-gray-600 text-[11px] min-w-[200px]`}>
                         {asset.custody_status === 'checked_out' ? (
-                          <span className="text-amber-700 font-semibold">Đang mượn tại {asset.current_holder_dept || 'Ban NV'}</span>
+                          <span className="text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Đang mượn tại {asset.current_holder_dept || 'Chưa cập nhật'}
+                          </span>
                         ) : asset.lifecycle_status === 'invalidated' ? (
                           <span className="text-gray-400 italic">Sổ gốc đã hủy (sau tách)</span>
                         ) : (
-                          <span className="text-emerald-700 font-medium">Lưu kho an toàn</span>
+                          <span className="text-emerald-700 font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            Lưu kho an toàn: {asset.warehouses?.name || '-'}
+                          </span>
                         )}
                       </td>
                     </tr>

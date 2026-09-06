@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 
 export async function fetchActivityLogs(params?: any): Promise<any[]> {
@@ -8,26 +8,21 @@ export async function fetchActivityLogs(params?: any): Promise<any[]> {
   const assetId = typeof params === 'string' ? params : params?.assetId;
   const actionType = typeof params === 'object' ? params?.actionType : undefined;
 
-  try {
-    let query = supabase
-      .from('activity_logs')
-      .select(`
-        *,
-        performer:profiles!activity_logs_performed_by_fkey(full_name, email),
-        warehouse:warehouses(name)
-      `)
-      .order('log_date', { ascending: false });
+  let query = supabase
+    .from('activity_logs')
+    .select(`
+      *,
+      performer:profiles!activity_logs_performed_by_fkey(full_name, email),
+      warehouse:warehouses(name)
+    `)
+    .order('log_date', { ascending: false });
 
-    if (assetId) query = query.eq('asset_id', assetId);
-    if (actionType) query = query.eq('action_type', actionType);
+  if (assetId) query = query.eq('asset_id', assetId);
+  if (actionType) query = query.eq('action_type', actionType);
 
-    const { data, error } = await withTimeout(query, 3000);
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn('Supabase fetchActivityLogs error or timeout, using mockStore:', err);
-    return mockStore.getLogs(params);
-  }
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) throw error;
+  return data || [];
 }
 
 export async function logActivity(logData: {
@@ -64,33 +59,32 @@ export async function logActivity(logData: {
     return newLog;
   }
 
+  const { data, error } = await withTimeout(
+    supabase
+      .from('activity_logs')
+      .insert([
+        {
+          asset_id: logData.assetId || null,
+          action_type: logData.actionType,
+          document_no: logData.documentNo || null,
+          description: logData.description || null,
+          used_by: logData.usedBy || null,
+          warehouse_id: logData.warehouseId || null,
+          notes: logData.notes || null,
+          performed_by: logData.performedBy || null,
+        },
+      ])
+      .select()
+      .single(),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) throw error;
+
   try {
-    const { data, error } = await withTimeout(
-      supabase
-        .from('activity_logs')
-        .insert([
-          {
-            asset_id: logData.assetId || null,
-            action_type: logData.actionType,
-            document_no: logData.documentNo || null,
-            description: logData.description || null,
-            used_by: logData.usedBy || null,
-            warehouse_id: logData.warehouseId || null,
-            notes: logData.notes || null,
-            performed_by: logData.performedBy || null,
-          },
-        ])
-        .select()
-        .single(),
-      3000
-    );
+    const logs = mockStore.getLogs();
+    mockStore.saveLogs([newLog, ...logs]);
+  } catch {}
 
-    if (!error && data) return data;
-  } catch (err) {
-    console.warn('Supabase logActivity error or timeout, saving to mockStore:', err);
-  }
-
-  const logs = mockStore.getLogs();
-  mockStore.saveLogs([newLog, ...logs]);
-  return newLog;
+  return data;
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchDashboardAssetStats, fetchWarehouses } from '../api/assets';
+import { fetchDashboardAssetStats, fetchWarehouses, fetchOverdueAssets } from '../api/assets';
+import { CalendarX } from 'lucide-react';
 import { fetchTransactions } from '../api/transactions';
 import { generateDemoData } from '../api/demo';
 import { DashboardSummaryCard, DashboardSummaryData } from '../components/DashboardSummaryCard';
@@ -28,6 +29,7 @@ export const Dashboard: React.FC = () => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [generatingDemo, setGeneratingDemo] = useState(false);
+  const [overdueAssets, setOverdueAssets] = useState<Asset[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const [summaryData, setSummaryData] = useState<DashboardSummaryData>({

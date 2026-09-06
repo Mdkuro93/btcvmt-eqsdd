@@ -1,4 +1,4 @@
-export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer' | 'super_admin' | 'admin' | 'warehouse_manager' | 'user';
+export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' | 'viewer' | 'super_admin' | 'admin' | 'warehouse_manager' | 'supervisor' | 'investor' | 'user' | 'quan_ly' | 'chuyen_vien' | 'nguoi_dung' | (string & {});
 
 export interface Region {
   id: string;
@@ -37,6 +37,7 @@ export interface Project {
   id: string;
   area_id: string;
   name: string;
+  default_owner_entity_id?: string | null;
   areas?: { name: string; region_id?: string; regions?: { name: string } };
 }
 
@@ -69,10 +70,13 @@ export interface Profile {
   email?: string;
   full_name?: string;
   role: Role;
+  originalRole?: Role | string;
   region_id: string | null;      // NULL = không giới hạn vùng (all)
   area_id: string | null;         // NULL = toàn vùng
   project_ids: string[] | null;   // NULL = không giới hạn theo dự án cụ thể
   managed_warehouse_ids?: string[] | null; // Danh sách ID kho Thủ kho phụ trách
+  assigned_warehouse_ids?: string[] | null; // Danh sách ID kho được phân công phụ trách/giám sát
+  owner_entity_ids?: string[] | null; // Danh sách ID thực thể CĐT/NĐT được gắn với tài khoản
   permissions: string[] | null;   // NULL = dùng mặc định theo role; có giá trị = ghi đè chi tiết
   status: 'active' | 'inactive' | 'disabled' | 'pending' | 'approved' | 'rejected';
   access_expires_at?: string | null; // Thời gian hết hạn tra cứu tạm thời (ISO timestamp)
@@ -128,6 +132,10 @@ export interface Asset {
   lot_no?: string | null;
   area: number | null;
   owner_name: string | null;
+  current_owner_entity_id?: string | null; // Thực thể sở hữu (CĐT / NĐT)
+  current_owner_role?: 'cdt' | 'ndt' | null; // Vai trò chủ sở hữu hiện tại
+  current_owner_entity?: InvestorEntity | null;
+  investor_entities?: { name: string; company_code?: string | null } | null;
 
   // Thông tin kinh doanh / Thương mại (Commercial Info)
   business_project_name?: string | null; // Tên dự án kinh doanh (VD: Cồn Dầu, Spana, Cora...)
@@ -269,4 +277,163 @@ export interface AccessLog {
   user?: { full_name?: string; email?: string } | null;
   profiles?: { full_name?: string; email?: string } | null;
 }
+
+export type ReportPeriodStatus = 'open' | 'locked';
+
+/**
+ * Cấu trúc dữ liệu tĩnh (Denormalized) của từng tài sản trong kỳ báo cáo
+ * Lưu toàn bộ chuỗi văn bản tĩnh (Tên phòng ban, loại đất, loại tài sản, dự án...)
+ * để tránh việc đổi tên danh mục sau này làm biến dạng số liệu lịch sử đã chốt.
+ */
+export interface DenormalizedReportAsset {
+  asset_id: string;
+  asset_code?: string;
+  certificate_no: string;
+  
+  // CHUỖI VĂN BẢN TĨNH (STATIC TEXT)
+  project_name: string;                   // Tên dự án tĩnh: VD "KĐT Nam Hòa Xuân"
+  business_project_name?: string;         // Tên dự án kinh doanh tĩnh: VD "Cồn Dầu"
+  area_name?: string;                     // Tên khu vực/vùng tĩnh
+  region_name?: string;                   // Tên miền tĩnh: VD "Vùng Miền Trung (VMT)"
+  warehouse_name: string;                 // Tên kho tĩnh: VD "Kho Trung Tâm BTC"
+  department_name?: string;               // Tên đơn vị quản lý: VD "Ban Nguồn Vốn"
+  current_holder_dept?: string;           // Tên đơn vị đang mượn sổ: VD "Ban Pháp chế"
+  
+  asset_type_name: string;                // Loại tài sản tĩnh: VD "Bất động sản đất nền", "Biệt thự"
+  land_use_type_name: string;             // Loại đất tĩnh: VD "Đất ở tại đô thị", "Đất TMDV"
+  usage_purpose?: string;                 // Mục đích sử dụng tĩnh
+  usage_term?: string;                    // Thời hạn sử dụng tĩnh: VD "Lâu dài", "Đến năm 2070"
+  
+  owner_name: string;                     // Chủ sở hữu tĩnh: VD "Công ty Cổ phần Đầu tư VMT"
+  certificate_group_label?: string;       // Nhóm sổ: "Sổ lớn" | "Sổ nhỏ" | "Sổ con (Tách)" | "Sổ chính"
+  subdivision?: string;                   // Phân khu: "B2-12"
+  lot_no?: string;                        // Số lô/thửa: "35"
+  land_lot_no?: string;                   // Thửa đất số: "105"
+  map_sheet_no?: string;                  // Tờ bản đồ số: "12"
+  plot_code: string;                      // Mã lô đất: "B2-12-35"
+  business_plot_code?: string;            // Mã kinh doanh: "LK02-15"
+  area: number;                           // Diện tích (m²)
+  address_detail: string;                 // Địa chỉ chi tiết
+  
+  // Thông tin thế chấp tĩnh
+  mortgage_status_label: string;          // "Đã thế chấp" | "Chưa thế chấp"
+  mortgage_bank_name?: string;            // "BIDV - Chi nhánh TP.HCM"
+  mortgage_unit_name?: string;            // "Ban Nguồn Vốn"
+  mortgage_bank_2_name?: string;
+  mortgage_unit_2_name?: string;
+  mortgage_valuation?: number;            // Giá trị định giá (VNĐ)
+  collateral_ratio?: number;              // Tỷ lệ đảm bảo (%)
+  collateral_value?: number;              // Giá trị đảm bảo (VNĐ)
+  
+  // Trạng thái lưu kho & Vòng đời tĩnh
+  custody_status_label: string;           // "Lưu kho an toàn" | "Đang xuất mượn" | "Đang luân chuyển"
+  lifecycle_status_label: string;         // "Hiệu lực" | "Đã tách thửa" | "Đã hủy"
+  notes?: string;                         // Ghi chú chi tiết tĩnh
+}
+
+export interface ReportSnapshot {
+  id: string;
+  report_code: string;                    // Mã báo cáo: BC-2026-08
+  report_period: string;                  // Tên kỳ báo cáo: "Tháng 08/2026", "Năm 2026"
+  period_status: ReportPeriodStatus;      // 'open' | 'locked'
+  title: string;                          // Tiêu đề báo cáo
+  region?: string;
+  warehouse_id?: string | null;
+  warehouse_name?: string | null;         // Tên kho tĩnh
+  department_name?: string | null;        // Đơn vị lập báo cáo tĩnh
+  submitted_by?: string | null;
+  submitted_by_name?: string | null;      // Tên người nộp tĩnh
+  submitted_at: string;
+  
+  locked_at?: string | null;              // Thời điểm khóa
+  locked_by?: string | null;
+  locked_by_name?: string | null;         // Người khóa tĩnh
+  
+  reopened_at?: string | null;            // Thời điểm mở khóa gần nhất
+  reopened_by?: string | null;
+  reopened_by_name?: string | null;       // Người mở khóa tĩnh
+  reopen_reason?: string | null;          // Lý do mở khóa bắt buộc
+  
+  total_assets: number;
+  total_area: number;
+  total_valuation: number;
+  total_collateral_value: number;
+  
+  // Dữ liệu tĩnh denormalized JSONB
+  report_data: DenormalizedReportAsset[];
+  
+  summary_stats?: Record<string, any>;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ==============================================================================
+// INVENTORY AUDITS (KIỂM KÊ KHO THỰC TẾ)
+// ==============================================================================
+
+export type InventoryAuditStatus = 'in_progress' | 'completed';
+export type InventoryAuditFindingStatus = 'pending' | 'matched' | 'missing' | 'misplaced';
+
+export interface InventoryAuditItem {
+  id: string;
+  audit_id: string;
+  asset_id: string;
+  expected_status: string;           // 'in_stock'
+  expected_location?: string | null; // Vị trí dự kiến (kệ/ngăn/kho)
+  actual_found: boolean;             // Đã tìm thấy hay chưa
+  actual_location?: string | null;   // Vị trí thực tế nếu sai vị trí
+  finding_status: InventoryAuditFindingStatus; // 'pending' | 'matched' | 'missing' | 'misplaced'
+  note?: string | null;              // Ghi chú hiện trạng
+  audited_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  asset?: Asset;
+}
+
+export interface InventoryAudit {
+  id: string;
+  warehouse_id: string;
+  performed_by: string;
+  started_at: string;
+  completed_at?: string | null;
+  status: InventoryAuditStatus;
+  notes?: string | null;
+  total_expected: number;
+  total_found: number;
+  total_missing: number;
+  total_misplaced: number;
+  created_at?: string;
+  updated_at?: string;
+  warehouse?: Warehouse;
+  warehouses?: { name: string; code?: string; is_central?: boolean; region_code?: string };
+  performer?: Profile | { full_name?: string; email?: string };
+  profiles?: { full_name?: string; email?: string };
+  items?: InventoryAuditItem[];
+}
+
+export interface InvestorEntity {
+  id: string;
+  name: string;
+  company_code?: string | null;
+  note?: string | null;
+  created_at?: string;
+}
+
+export interface AssetOwnershipTransfer {
+  id: string;
+  asset_id: string;
+  from_entity_id?: string | null;
+  from_role?: string | null;
+  to_entity_id: string;
+  to_role: 'cdt' | 'ndt';
+  transferred_at?: string;
+  transferred_by?: string | null;
+  note?: string | null;
+  asset?: Asset;
+  from_entity?: InvestorEntity;
+  to_entity?: InvestorEntity;
+  performer?: Profile | { id?: string; full_name?: string | null; email?: string | null } | null;
+}
+
 

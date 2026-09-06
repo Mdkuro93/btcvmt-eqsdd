@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Notification } from '../types';
 
@@ -16,7 +16,7 @@ export async function fetchNotifications(userId?: string): Promise<Notification[
       query = query.eq('user_id', userId);
     }
 
-    const { data, error } = await withTimeout(query, 3000);
+    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
     if (error) throw error;
     return data || [];
   } catch (err) {
@@ -36,7 +36,7 @@ export async function markNotificationAsRead(id: string): Promise<void> {
         .from('notifications')
         .update({ is_read: true })
         .eq('id', id),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
 
     if (error) throw error;
@@ -57,7 +57,7 @@ export async function markAllNotificationsAsRead(userId?: string): Promise<void>
     if (userId) {
       query = query.eq('user_id', userId);
     }
-    const { error } = await withTimeout(query, 3000);
+    const { error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
     if (error) throw error;
     mockStore.markAllNotificationsAsRead(userId);
   } catch (err) {
@@ -104,7 +104,7 @@ export async function createNotification(data: {
         ])
         .select()
         .single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
 
     if (!error && inserted) {

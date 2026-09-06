@@ -20,6 +20,7 @@ import { Admin } from './pages/Admin';
 import { Lookup } from './pages/Lookup';
 import { AccessRequests } from './pages/AccessRequests';
 import { UserManagement } from './pages/UserManagement';
+import { InventoryAudits } from './pages/InventoryAudits';
 
 // Dispatcher for the root route "/"
 function RootRoute() {
@@ -64,6 +65,7 @@ export default function App() {
               {/* Access Approval, Activity Logs & Reports */}
               <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'admin', 'super_admin']} />}>
                 <Route path="/access-requests" element={<AccessRequests />} />
+                <Route path="/inventory-audits" element={<InventoryAudits />} />
                 <Route path="/activity-logs" element={<ActivityLogs />} />
                 <Route path="/reports" element={<Reports />} />
               </Route>

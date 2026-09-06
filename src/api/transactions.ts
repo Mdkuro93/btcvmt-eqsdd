@@ -1,5 +1,6 @@
-import { supabase, isSupabaseConfigured, withTimeout } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
+import { DEFAULT_WAREHOUSE_SLA_DAYS, DEFAULT_RETURN_DAYS } from '../lib/constants';
 import { TransactionType, Asset } from '../types';
 import { updateAsset, createAsset, fetchWarehouses } from './assets';
 import { logActivity } from './activityLogs';
@@ -11,30 +12,26 @@ export async function fetchTransactions(): Promise<any[]> {
   if (!isSupabaseConfigured) {
     return mockStore.getTransactions();
   }
-  try {
-    const { data, error } = await withTimeout(
-      supabase
-        .from('transactions')
-        .select(`
+  
+  const { data, error } = await withTimeout(
+    supabase
+      .from('transactions')
+      .select(`
+        *,
+        created_by:profiles!transactions_created_by_fkey(full_name, email),
+        items:transaction_items(
           *,
-          created_by:profiles!transactions_created_by_fkey(full_name, email),
-          items:transaction_items(
-            *,
-            asset:assets(*, projects(name)),
-            confirmed_asset:assets!transaction_items_confirmed_asset_id_fkey(*, projects(name)),
-            decided_by:profiles!transaction_items_decided_by_fkey(full_name, email)
-          )
-        `)
-        .order('created_at', { ascending: false }),
-      3000
-    );
+          asset:assets(*, projects(name)),
+          confirmed_asset:assets!transaction_items_confirmed_asset_id_fkey(*, projects(name)),
+          decided_by:profiles!transaction_items_decided_by_fkey(full_name, email)
+        )
+      `)
+      .order('created_at', { ascending: false }),
+    DEFAULT_READ_TIMEOUT
+  );
 
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn('Supabase fetchTransactions error or timeout, using mockStore:', err);
-    return mockStore.getTransactions();
-  }
+  if (error) throw error;
+  return data || [];
 }
 
 export async function createTransaction(
@@ -47,6 +44,13 @@ export async function createTransaction(
   let txType: TransactionType;
   let txNotes: string | undefined;
   let items: Array<{ asset_id: string; type: TransactionType; details?: any }>;
+
+  // Thêm logic desiredReceiveDate nếu thiếu
+  if (details && !details.desiredReceiveDate) {
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + DEFAULT_WAREHOUSE_SLA_DAYS);
+    details.desiredReceiveDate = defaultDate.toISOString().split('T')[0];
+  }
 
   if (typeof param1 === 'string' && type) {
     createdBy = param1;
@@ -64,64 +68,92 @@ export async function createTransaction(
     items = param1.items || [];
   }
 
-  if (isSupabaseConfigured) {
-    try {
-      const { data: tx, error: txErr } = await withTimeout(
-        supabase
-          .from('transactions')
-          .insert([{ type: txType, notes: txNotes, created_by: createdBy }])
-          .select()
-          .single(),
-        3000
-      );
+  if (!isSupabaseConfigured) {
+    const current = mockStore.getTransactions();
+    const newTxId = 'tx-' + Date.now();
+    const assets = mockStore.getAssets();
 
-      if (txErr) throw txErr;
-
-      const itemsToInsert = items.map(it => ({
-        transaction_id: tx.id,
+    const newTx = {
+      id: newTxId,
+      type: txType,
+      notes: txNotes || '',
+      created_at: new Date().toISOString(),
+      created_by: { full_name: 'Người dùng hiện tại', email: 'user@btcvmt.vn' },
+      items: items.map((it, idx) => ({
+        id: 'txi-' + Date.now() + '-' + idx,
         asset_id: it.asset_id,
         type: it.type,
-        details: it.details,
         status: 'pending',
-      }));
+        details: it.details || {},
+        asset: assets.find(a => a.id === it.asset_id),
+      })),
+    };
 
-      const { data: insertedItems, error: itErr } = await withTimeout(
-        supabase
-          .from('transaction_items')
-          .insert(itemsToInsert)
-          .select(),
-        3000
-      );
+    mockStore.saveTransactions([newTx, ...current]);
 
-      if (itErr) throw itErr;
-
-      return { ...tx, items: insertedItems };
-    } catch (err) {
-      console.warn('Supabase createTransaction error or timeout, saving to mockStore:', err);
+    for (const it of items) {
+      await logActivity({
+        assetId: it.asset_id,
+        actionType: `Gửi YC ${txType}`,
+        description: `Tạo phiếu yêu cầu biến động (${txType})`,
+      });
     }
+
+    return newTx;
   }
 
-  const current = mockStore.getTransactions();
-  const newTxId = 'tx-' + Date.now();
-  const assets = mockStore.getAssets();
+  const { data: tx, error: txErr } = await withTimeout(
+    supabase
+      .from('transactions')
+      .insert([{ type: txType, notes: txNotes, created_by: createdBy }])
+      .select()
+      .single(),
+    DEFAULT_WRITE_TIMEOUT
+  );
 
-  const newTx = {
-    id: newTxId,
-    type: txType,
-    notes: txNotes || '',
-    created_at: new Date().toISOString(),
-    created_by: { full_name: 'Người dùng hiện tại', email: 'user@btcvmt.vn' },
-    items: items.map((it, idx) => ({
-      id: 'txi-' + Date.now() + '-' + idx,
-      asset_id: it.asset_id,
-      type: it.type,
-      status: 'pending',
-      details: it.details || {},
-      asset: assets.find(a => a.id === it.asset_id),
-    })),
-  };
+  if (txErr) throw txErr;
 
-  mockStore.saveTransactions([newTx, ...current]);
+  const itemsToInsert = items.map(it => ({
+    transaction_id: tx.id,
+    asset_id: it.asset_id,
+    type: it.type,
+    details: it.details,
+    status: 'pending',
+  }));
+
+  const { data: insertedItems, error: itErr } = await withTimeout(
+    supabase
+      .from('transaction_items')
+      .insert(itemsToInsert)
+      .select(),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (itErr) throw itErr;
+
+  try {
+    const current = mockStore.getTransactions();
+    const newTxId = tx.id;
+    const assets = mockStore.getAssets();
+
+    const newTx = {
+      id: newTxId,
+      type: txType,
+      notes: txNotes || '',
+      created_at: new Date().toISOString(),
+      created_by: { full_name: 'Người dùng hiện tại', email: 'user@btcvmt.vn' },
+      items: items.map((it, idx) => ({
+        id: insertedItems?.[idx]?.id || 'txi-' + Date.now() + '-' + idx,
+        asset_id: it.asset_id,
+        type: it.type,
+        status: 'pending',
+        details: it.details || {},
+        asset: assets.find(a => a.id === it.asset_id),
+      })),
+    };
+
+    mockStore.saveTransactions([newTx, ...current]);
+  } catch {}
 
   for (const it of items) {
     await logActivity({
@@ -131,7 +163,7 @@ export async function createTransaction(
     });
   }
 
-  return newTx;
+  return { ...tx, items: insertedItems };
 }
 
 export async function decideTransactionItem(
@@ -145,27 +177,7 @@ export async function decideTransactionItem(
   let targetItem: any = null;
   let transactionParent: any = null;
 
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await withTimeout(
-        supabase
-          .from('transaction_items')
-          .select('*, transaction:transactions(*), asset:assets(*)')
-          .eq('id', itemId)
-          .single(),
-        3000
-      );
-
-      if (!error && data) {
-        targetItem = data;
-        transactionParent = data.transaction;
-      }
-    } catch (e) {
-      console.warn('Supabase fetch transaction_item failed or timed out:', e);
-    }
-  }
-
-  if (!targetItem) {
+  if (!isSupabaseConfigured) {
     const txs = mockStore.getTransactions();
     for (const tx of txs) {
       const found = (tx.items || []).find((i: any) => i.id === itemId);
@@ -174,6 +186,21 @@ export async function decideTransactionItem(
         transactionParent = tx;
         break;
       }
+    }
+  } else {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('transaction_items')
+        .select('*, transaction:transactions(*), asset:assets(*)')
+        .eq('id', itemId)
+        .single(),
+      DEFAULT_READ_TIMEOUT
+    );
+
+    if (error) throw error;
+    if (data) {
+      targetItem = data;
+      transactionParent = data.transaction;
     }
   }
 
@@ -213,27 +240,34 @@ export async function decideTransactionItem(
     sourceWarehouseId !== targetWarehouseId
   );
 
-  if (isSupabaseConfigured) {
-    try {
-      // Call secure RPC with timeout
-      const { error } = await withTimeout(
-        supabase.rpc('decide_transaction_item', {
-          p_item_id: itemId,
-          p_status: decision,
-          p_notes: notes || null,
-          p_details: details,
-          p_voucher_code: generatedVoucher || null,
-          p_confirmed_asset_id: confirmedAssetId || null,
-        }),
-        3000
-      );
-      
-      if (error) throw error;
-    } catch (rpcErr) {
-      console.warn('RPC decide_transaction_item failed or timed out, executing local mock logic:', rpcErr);
-      // Fall through to mock store updates
-      await runLocalDecideLogic();
+  
+  // Nếu là duyệt checkout và không có returnDate thì tự tính ngày trả (SLA trả sổ)
+  if (decision === 'approved' && itemType === 'checkout') {
+    if (!details.returnDate) {
+      const returnDate = new Date();
+      returnDate.setDate(returnDate.getDate() + DEFAULT_RETURN_DAYS);
+      details.returnDate = returnDate.toISOString().split('T')[0];
     }
+  }
+
+  if (isSupabaseConfigured) {
+    // Call secure RPC with timeout
+    const { error } = await withTimeout(
+      supabase.rpc('decide_transaction_item', {
+        p_item_id: itemId,
+        p_status: decision,
+        p_notes: notes || null,
+        p_details: details,
+        p_voucher_code: generatedVoucher || null,
+        p_confirmed_asset_id: confirmedAssetId || null,
+      }),
+      DEFAULT_WRITE_TIMEOUT
+    );
+    
+    if (error) throw error;
+    try {
+      await runLocalDecideLogic();
+    } catch {}
   } else {
     await runLocalDecideLogic();
   }
