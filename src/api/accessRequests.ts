@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { AccessRequest } from '../types';
 import { grantViewerWarehouseAccess } from './viewerAccess';
@@ -40,11 +40,29 @@ export async function submitAccessRequests(payload: CreateAccessRequestPayload):
     return { success: true, count: rows.length };
   }
 
-  const { error } = await withTimeout(
-    supabase.from('access_requests').insert(rows),
-    DEFAULT_WRITE_TIMEOUT
-  );
-  if (error) throw error;
+  try {
+    const { error } = await withTimeout(
+      supabase.from('access_requests').insert(rows),
+      DEFAULT_WRITE_TIMEOUT
+    );
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        for (const row of rows) {
+          mockStore.addAccessRequest(row);
+        }
+        return { success: true, count: rows.length };
+      }
+      throw error;
+    }
+  } catch (err) {
+    if (isSchemaMissingError(err)) {
+      for (const row of rows) {
+        mockStore.addAccessRequest(row);
+      }
+      return { success: true, count: rows.length };
+    }
+    throw err;
+  }
   
   try {
     for (const row of rows) {
@@ -67,22 +85,48 @@ export async function fetchAccessRequests(statusFilter?: 'pending' | 'approved' 
     return reqs as AccessRequest[];
   }
 
-  let query = supabase
-    .from('access_requests')
-    .select(`
-      *,
-      reviewer:profiles!access_requests_reviewed_by_fkey(full_name, email),
-      warehouses:warehouses(id, name, code, is_central)
-    `)
-    .order('created_at', { ascending: false });
+  try {
+    let query = supabase
+      .from('access_requests')
+      .select(`
+        *,
+        reviewer:profiles!access_requests_reviewed_by_fkey(full_name, email),
+        warehouses:warehouses(id, name, code, is_central)
+      `)
+      .order('created_at', { ascending: false });
 
-  if (statusFilter && statusFilter !== 'all') {
-    query = query.eq('status', statusFilter);
+    if (statusFilter && statusFilter !== 'all') {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng access_requests hoặc warehouses chưa có trong Supabase, dùng mockStore:', error.message);
+        let reqs = mockStore.getAccessRequests();
+        if (statusFilter && statusFilter !== 'all') {
+          reqs = reqs.filter(r => r.status === statusFilter);
+        }
+        return reqs as AccessRequest[];
+      }
+      throw error;
+    }
+    return (data || []) as AccessRequest[];
+  } catch (err: any) {
+    if (isSchemaMissingError(err)) {
+      let reqs = mockStore.getAccessRequests();
+      if (statusFilter && statusFilter !== 'all') {
+        reqs = reqs.filter(r => r.status === statusFilter);
+      }
+      return reqs as AccessRequest[];
+    }
+    console.warn('Lỗi trong fetchAccessRequests, fallback sang mockStore:', err);
+    let reqs = mockStore.getAccessRequests();
+    if (statusFilter && statusFilter !== 'all') {
+      reqs = reqs.filter(r => r.status === statusFilter);
+    }
+    return reqs as AccessRequest[];
   }
-
-  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-  if (error) throw error;
-  return (data || []) as AccessRequest[];
 }
 
 /**

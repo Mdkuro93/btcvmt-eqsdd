@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, FileText, CheckCircle, AlertTriangle, Loader2, X } from 'lucide-react';
+import { fetchInvestorEntities } from '../api/investorEntities';
 import { fetchProjects, importAssets, checkDuplicateAssets } from '../api/assets';
 import { useAuth } from '../contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
@@ -60,12 +61,13 @@ export const Import: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
+        const investorEntities = await fetchInvestorEntities();
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
-        // Expected headers: "Số GCN", "Tên dự án", "Phân khu", "Diện tích", "Chủ sở hữu"
+        // Expected headers: "Số GCN", "Tên dự án", "Phân khu", "Diện tích", "Chủ sở hữu", "Mã công ty sở hữu", "Phân loại"
         const rawData = XLSX.utils.sheet_to_json(worksheet);
         
         // Map and validate
@@ -75,6 +77,8 @@ export const Import: React.FC = () => {
           const subdivision = row['Phân khu']?.toString().trim() || null;
           const area = row['Diện tích'] ? parseFloat(row['Diện tích']) : null;
           const owner_name = row['Chủ sở hữu']?.toString().trim() || null;
+          const companyCode = row['Mã công ty sở hữu']?.toString().trim();
+          const roleRaw = row['Phân loại']?.toString().trim().toLowerCase();
 
           // Find project ID
           let project_id = null;
@@ -96,6 +100,22 @@ export const Import: React.FC = () => {
             }
           }
 
+          let current_owner_entity_id = null;
+          let current_owner_role = null;
+
+          if (companyCode) {
+            const entity = investorEntities.find(e => e.company_code?.toLowerCase() === companyCode.toLowerCase());
+            if (entity) {
+              current_owner_entity_id = entity.id;
+              if (roleRaw === 'cđt' || roleRaw === 'cdt') current_owner_role = 'cdt';
+              else if (roleRaw === 'nđt' || roleRaw === 'ndt') current_owner_role = 'ndt';
+              else current_owner_role = 'cdt'; // Default to cdt if not specified correctly but entity exists
+            } else {
+              hasError = true;
+              errorMessage = `Không tìm thấy pháp nhân với mã: ${companyCode}`;
+            }
+          }
+
           return {
             _originalRow: index + 2, // Excel rows are 1-indexed, and header is 1
             certificate_no,
@@ -104,6 +124,10 @@ export const Import: React.FC = () => {
             subdivision,
             area,
             owner_name,
+            current_owner_entity_id,
+            current_owner_role,
+            companyCode, // Keep for display
+            roleRaw, // Keep for display
             custody_status: 'in_stock',
             lifecycle_status: 'active',
             sale_status: 'not_ready',
@@ -162,7 +186,7 @@ export const Import: React.FC = () => {
     try {
       // Remove display-only fields before sending to DB
       const dbData = validData.map(d => {
-        const { _originalRow, projectName, hasError, errorMessage, isDuplicate, ...rest } = d;
+        const { _originalRow, projectName, companyCode, roleRaw, hasError, errorMessage, isDuplicate, ...rest } = d;
         return rest;
       });
 

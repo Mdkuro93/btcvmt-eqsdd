@@ -228,7 +228,8 @@ export interface AuditLog {
   } | null;
 }
 
-export type TransactionType = 'checkout' | 'checkin' | 'split' | 'mortgage' | 'sale_update';
+export type TransactionType = 'checkout' | 'checkin';
+export type TransactionReason = 'mượn' | 'thế chấp' | 'chuyển nhượng' | 'xuất bán' | 'tách sổ' | 'thu hồi' | 'đổi sổ' | 'trả' | 'giải chấp' | 'nhập sau bán' | 'cấp mới';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 
 export interface AccessRequest {

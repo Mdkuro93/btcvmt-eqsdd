@@ -100,7 +100,8 @@ export const VoucherPrintModal: React.FC<Props> = ({
   }, [printScope, txItems, item]);
 
   const txType = item.type || transaction?.type || 'checkout';
-  const vType = getVoucherTypeFromTransaction(txType);
+  const itemReason = item.reason || item.details?.reason || transaction?.notes;
+  const vType = getVoucherTypeFromTransaction(txType, itemReason);
 
   const defaultVoucherCode = item.voucher_code || item.details?.voucherCode || transaction?.items?.find((i: any) => i.voucher_code)?.voucher_code || `${vType}${format(new Date(), 'yyMM')}-${Math.floor(100 + Math.random() * 900)}`;
   const defaultDateStr = item.decided_at || transaction?.created_at || new Date().toISOString();

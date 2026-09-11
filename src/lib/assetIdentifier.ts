@@ -53,6 +53,108 @@ export const REGION_CODES = [
 ];
 
 /**
+ * Danh mục mã 63 Tỉnh / Thành phố Việt Nam (Quy chuẩn 3 ký tự)
+ */
+export const PROVINCE_CODES: Array<{ name: string; code: string }> = [
+  { name: 'An Giang', code: 'AGG' },
+  { name: 'Bà Rịa - Vũng Tàu', code: 'VTU' },
+  { name: 'Bắc Giang', code: 'BGG' },
+  { name: 'Bắc Kạn', code: 'BKN' },
+  { name: 'Bạc Liêu', code: 'BLU' },
+  { name: 'Bắc Ninh', code: 'BNH' },
+  { name: 'Bến Tre', code: 'BTE' },
+  { name: 'Bình Định', code: 'BDH' },
+  { name: 'Bình Dương', code: 'BDG' },
+  { name: 'Bình Phước', code: 'BPC' },
+  { name: 'Bình Thuận', code: 'BTN' },
+  { name: 'Cà Mau', code: 'CMU' },
+  { name: 'Cần Thơ', code: 'CTO' },
+  { name: 'Cao Bằng', code: 'CBG' },
+  { name: 'Đà Nẵng', code: 'DNG' },
+  { name: 'Đắk Lắk', code: 'DLK' },
+  { name: 'Đắk Nông', code: 'DKN' },
+  { name: 'Điện Biên', code: 'DBN' },
+  { name: 'Đồng Nai', code: 'DNI' },
+  { name: 'Đồng Tháp', code: 'DTP' },
+  { name: 'Gia Lai', code: 'GLA' },
+  { name: 'Hà Giang', code: 'HGG' },
+  { name: 'Hà Nam', code: 'HNM' },
+  { name: 'Hà Nội', code: 'HAN' },
+  { name: 'Hà Tĩnh', code: 'HTN' },
+  { name: 'Hải Dương', code: 'HDG' },
+  { name: 'Hải Phòng', code: 'HPG' },
+  { name: 'Hậu Giang', code: 'HAG' },
+  { name: 'Hòa Bình', code: 'HBH' },
+  { name: 'Hưng Yên', code: 'HYN' },
+  { name: 'Khánh Hòa', code: 'KHA' },
+  { name: 'Kiên Giang', code: 'KGG' },
+  { name: 'Kon Tum', code: 'KTM' },
+  { name: 'Lai Châu', code: 'LCH' },
+  { name: 'Lạng Sơn', code: 'LSN' },
+  { name: 'Lào Cai', code: 'LCA' },
+  { name: 'Lâm Đồng', code: 'LDD' },
+  { name: 'Long An', code: 'LAN' },
+  { name: 'Nam Định', code: 'NDH' },
+  { name: 'Nghệ An', code: 'NAN' },
+  { name: 'Ninh Bình', code: 'NBH' },
+  { name: 'Ninh Thuận', code: 'NTH' },
+  { name: 'Phú Thọ', code: 'PTO' },
+  { name: 'Phú Yên', code: 'PYN' },
+  { name: 'Quảng Bình', code: 'QBH' },
+  { name: 'Quảng Nam', code: 'QNM' },
+  { name: 'Quảng Ngãi', code: 'QNG' },
+  { name: 'Quảng Ninh', code: 'QNH' },
+  { name: 'Quảng Trị', code: 'QTR' },
+  { name: 'Sóc Trăng', code: 'STG' },
+  { name: 'Sơn La', code: 'SLA' },
+  { name: 'Tây Ninh', code: 'TNH' },
+  { name: 'Thái Bình', code: 'TBH' },
+  { name: 'Thái Nguyên', code: 'TNN' },
+  { name: 'Thanh Hóa', code: 'THA' },
+  { name: 'Thừa Thiên Huế', code: 'HUE' },
+  { name: 'Tiền Giang', code: 'TGG' },
+  { name: 'TP. Hồ Chí Minh', code: 'HCM' },
+  { name: 'Trà Vinh', code: 'TVH' },
+  { name: 'Tuyên Quang', code: 'TQG' },
+  { name: 'Vĩnh Long', code: 'VLG' },
+  { name: 'Vĩnh Phúc', code: 'VPC' },
+  { name: 'Yên Bái', code: 'YBI' },
+];
+
+/**
+ * Trích xuất / tra cứu mã tỉnh 3 ký tự từ tên hoặc mã tỉnh đã nhập
+ */
+export function getProvinceCode(provinceNameOrCode?: string | null): string {
+  if (!provinceNameOrCode) return 'DNG';
+  const clean = provinceNameOrCode.trim();
+  
+  // Kiểm tra nếu đã truyền trực tiếp mã tỉnh 3 ký tự (ví dụ DNG, QTR, QNG, HCM, HAN)
+  const byCode = PROVINCE_CODES.find(p => p.code.toUpperCase() === clean.toUpperCase());
+  if (byCode) return byCode.code;
+
+  // Chuẩn hóa chuỗi tìm kiếm theo tên
+  const normInput = clean.toLowerCase().replace(/^(tp\.?|thành phố|tỉnh)\s+/i, '').trim();
+  const byName = PROVINCE_CODES.find(p => {
+    const normName = p.name.toLowerCase().replace(/^(tp\.?|thành phố|tỉnh)\s+/i, '').trim();
+    return (
+      normName === normInput ||
+      p.name.toLowerCase() === clean.toLowerCase() ||
+      normInput.includes(normName) ||
+      normName.includes(normInput)
+    );
+  });
+
+  if (byName) return byName.code;
+  
+  // Nếu là chuỗi 3 ký tự chữ
+  if (clean.length === 3 && /^[A-Za-z]+$/.test(clean)) {
+    return clean.toUpperCase();
+  }
+
+  return 'DNG'; // Mặc định vùng miền trung / Đà Nẵng
+}
+
+/**
  * Deterministically find region code (VMB, VMT, VMN) for a given project or warehouse
  */
 export function resolveRegionCode(
@@ -84,29 +186,31 @@ export function resolveRegionCode(
 }
 
 /**
- * Generate sequential asset identifier separated per Region and per Collateral Type:
- * Format: [REGION]_[COLLATERAL]_[00000001] (8 digits sequence)
+ * Generate sequential asset identifier separated per Region, Province and per Collateral Type:
+ * Format: [REGION]_[PROVINCE]_[COLLATERAL]_[00000001] (8 digits sequence)
  * Examples:
- * - VMT_BDS_00000001, VMT_BDS_00000002...
- * - VMN_BDS_00000001, VMN_BDS_00000002...
- * - VMB_BDS_00000001, VMB_BDS_00000002...
- * - VMT_TSCD_00000001...
+ * - VMT_DNG_BDS_00000001, VMT_DNG_BDS_00000002...
+ * - VMT_QTR_BDS_00000001, VMT_QNG_BDS_00000001...
+ * - VMN_HCM_BDS_00000001, VMB_HAN_BDS_00000001...
+ * - VMT_DNG_TSCD_00000001...
  */
 export function generateNextAssetCode(
   regionCode: string = 'VMT',
+  provinceCodeOrName: string = 'DNG',
   collateralType: string = 'BDS',
   existingAssets: Asset[] = []
 ): string {
   const cleanRegion = (regionCode || 'VMT').toUpperCase().trim();
+  const cleanProvince = getProvinceCode(provinceCodeOrName);
   const cleanType = (collateralType || 'BDS').toUpperCase().trim();
-  const prefix = `${cleanRegion}_${cleanType}_`;
+  const prefix = `${cleanRegion}_${cleanProvince}_${cleanType}_`;
 
   let maxSeq = 0;
 
   existingAssets.forEach(a => {
     if (a.asset_code) {
       const code = a.asset_code.trim().toUpperCase();
-      // Only count assets matching this exact Region and Collateral Type prefix
+      // Only count assets matching this exact Region, Province and Collateral Type prefix
       if (code.startsWith(prefix)) {
         const numPart = code.slice(prefix.length);
         const parsedNum = parseInt(numPart, 10);

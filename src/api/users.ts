@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Profile, Role } from '../types';
 import { ALL_PERMISSIONS, DEFAULT_PERMISSIONS_BY_ROLE } from '../lib/permissions';
@@ -11,16 +11,34 @@ export async function fetchProfiles(): Promise<Profile[]> {
   if (!isSupabaseConfigured) {
     baseProfiles = mockStore.getProfiles();
   } else {
-    const { data, error } = await withTimeout(
-      supabase
-        .from('profiles')
-        .select('*, regions(name), areas(name)')
-        .order('created_at', { ascending: false }),
-      DEFAULT_READ_TIMEOUT
-    );
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*, regions(name), areas(name)')
+          .order('created_at', { ascending: false }),
+        DEFAULT_READ_TIMEOUT
+      );
 
-    if (error) throw error;
-    baseProfiles = data || [];
+      if (error) {
+        if (isSchemaMissingError(error)) {
+          console.warn('Bảng profiles hoặc quan hệ regions/areas chưa có trên Supabase, dùng mockStore:', error.message);
+          baseProfiles = mockStore.getProfiles();
+        } else {
+          console.warn('Lỗi khi tải danh sách profiles từ Supabase:', error);
+          baseProfiles = mockStore.getProfiles();
+        }
+      } else {
+        baseProfiles = data || [];
+      }
+    } catch (err: any) {
+      if (isSchemaMissingError(err)) {
+        baseProfiles = mockStore.getProfiles();
+      } else {
+        console.warn('Lỗi fetchProfiles, fallback sang mockStore:', err);
+        baseProfiles = mockStore.getProfiles();
+      }
+    }
   }
 
   return baseProfiles;

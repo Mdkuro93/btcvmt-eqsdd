@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { InventoryAudit, InventoryAuditItem, Profile } from '../types';
 import { mockStore } from '../lib/mockStore';
 import { logActivity } from './activityLogs';
@@ -26,15 +26,22 @@ export async function fetchInventoryAudits(warehouseId?: string): Promise<Invent
     }
 
     const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-    if (error) throw error;
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng inventory_audits hoặc warehouses chưa có trên Supabase, dùng mockStore:', error.message);
+        return mockStore.getInventoryAudits(warehouseId);
+      }
+      console.warn('Lỗi khi tải danh sách đợt kiểm kê từ Supabase, dùng mockStore:', error);
+      return mockStore.getInventoryAudits(warehouseId);
+    }
 
     return (data || []).map((row: any) => ({
       ...row,
       warehouse: row.warehouses,
       profiles: row.performer,
     }));
-  } catch (err) {
-    console.warn('Supabase fetch inventory audits failed, fallback to mockStore:', err);
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchInventoryAudits, fallback sang mockStore:', err);
     return mockStore.getInventoryAudits(warehouseId);
   }
 }
@@ -61,7 +68,13 @@ export async function getInventoryAuditDetail(auditId: string): Promise<Inventor
       DEFAULT_READ_TIMEOUT
     );
 
-    if (auditError) throw auditError;
+    if (auditError) {
+      if (isSchemaMissingError(auditError)) {
+        return mockStore.getInventoryAudit(auditId);
+      }
+      console.warn('Lỗi khi tải thông tin đợt kiểm kê từ Supabase, dùng mockStore:', auditError);
+      return mockStore.getInventoryAudit(auditId);
+    }
     if (!audit) return null;
 
     const { data: items, error: itemsError } = await withTimeout(
@@ -92,7 +105,12 @@ export async function getInventoryAuditDetail(auditId: string): Promise<Inventor
       DEFAULT_READ_TIMEOUT
     );
 
-    if (itemsError) throw itemsError;
+    if (itemsError) {
+      if (isSchemaMissingError(itemsError)) {
+        return mockStore.getInventoryAudit(auditId);
+      }
+      console.warn('Lỗi khi tải items kiểm kê từ Supabase:', itemsError);
+    }
 
     return {
       ...audit,
@@ -100,8 +118,8 @@ export async function getInventoryAuditDetail(auditId: string): Promise<Inventor
       profiles: audit.performer,
       items: items || [],
     };
-  } catch (err) {
-    console.warn('Supabase get inventory audit detail failed, fallback to mockStore:', err);
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm getInventoryAuditDetail, fallback sang mockStore:', err);
     return mockStore.getInventoryAudit(auditId);
   }
 }
@@ -143,7 +161,10 @@ export async function createInventoryAudit(
       DEFAULT_READ_TIMEOUT
     );
 
-    if (assetErr) throw assetErr;
+    if (assetErr) {
+      console.error('Lỗi khi kiểm tra danh sách GCN trong kho để kiểm kê:', assetErr);
+      throw new Error(`Không thể tải danh sách GCN trong kho: ${assetErr.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
     const assetList = assets || [];
 
     // 2. Tạo bản ghi inventory_audits
@@ -170,7 +191,10 @@ export async function createInventoryAudit(
       DEFAULT_WRITE_TIMEOUT
     );
 
-    if (createAuditErr) throw createAuditErr;
+    if (createAuditErr) {
+      console.error('Lỗi khi tạo đợt kiểm kê mới trên Supabase:', createAuditErr);
+      throw new Error(`Không thể khởi tạo đợt kiểm kê: ${createAuditErr.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
 
     // 3. Tạo các dòng inventory_audit_items
     if (assetList.length > 0) {
@@ -190,22 +214,33 @@ export async function createInventoryAudit(
         DEFAULT_WRITE_TIMEOUT
       );
 
-      if (insertItemsErr) throw insertItemsErr;
+      if (insertItemsErr) {
+        console.error('Lỗi khi chèn danh sách chi tiết kiểm kê:', insertItemsErr);
+        throw new Error(`Không thể tạo danh sách GCN cần kiểm kê: ${insertItemsErr.message || 'Lỗi cơ sở dữ liệu'}.`);
+      }
     }
 
     // 4. Ghi log activity
-    await logActivity({
-      actionType: 'Bắt đầu kiểm kê kho',
-      warehouseId,
-      description: `Bắt đầu đợt kiểm kê tại kho ${audit.warehouses?.name || warehouseId} với ${assetList.length} GCN dự kiến.`,
-      notes,
-      performedBy: profile.id,
-    });
+    try {
+      await logActivity({
+        actionType: 'Bắt đầu kiểm kê kho',
+        warehouseId,
+        description: `Bắt đầu đợt kiểm kê tại kho ${audit.warehouses?.name || warehouseId} với ${assetList.length} GCN dự kiến.`,
+        notes,
+        performedBy: profile.id,
+      });
+    } catch (e) {
+      console.warn('Log activity error:', e);
+    }
 
-    return await getInventoryAuditDetail(audit.id) as InventoryAudit;
-  } catch (err) {
-    console.warn('Supabase create inventory audit failed, fallback to mockStore:', err);
-    return mockStore.createInventoryAudit(warehouseId, profile.id, notes);
+    const detail = await getInventoryAuditDetail(audit.id);
+    if (!detail) {
+      throw new Error('Không thể tải chi tiết đợt kiểm kê vừa tạo.');
+    }
+    return detail;
+  } catch (err: any) {
+    console.error('Lỗi trong hàm createInventoryAudit:', err);
+    throw new Error(err.message || 'Không thể tạo đợt kiểm kê mới, vui lòng thử lại.');
   }
 }
 
@@ -240,7 +275,10 @@ export async function updateInventoryAuditItem(
       DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật dòng kiểm kê trên Supabase:', error);
+      throw new Error(`Không thể cập nhật dòng kiểm kê: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
 
     // Recalculate stats on parent audit
     if (updated?.audit_id) {
@@ -248,9 +286,9 @@ export async function updateInventoryAuditItem(
     }
 
     return updated;
-  } catch (err) {
-    console.warn('Supabase update audit item failed, fallback to mockStore:', err);
-    return mockStore.updateInventoryAuditItem(itemId, data);
+  } catch (err: any) {
+    console.error('Lỗi trong hàm updateInventoryAuditItem:', err);
+    throw new Error(err.message || 'Không thể cập nhật kết quả kiểm kê GCN, vui lòng thử lại.');
   }
 }
 
@@ -274,7 +312,7 @@ export async function batchUpdateAuditItems(
 
   try {
     for (const item of items) {
-      await withTimeout(
+      const { error } = await withTimeout(
         supabase
           .from('inventory_audit_items')
           .update({
@@ -288,11 +326,15 @@ export async function batchUpdateAuditItems(
           .eq('id', item.id),
         DEFAULT_WRITE_TIMEOUT
       );
+      if (error) {
+        console.error('Lỗi khi cập nhật batch dòng kiểm kê:', error);
+        throw new Error(`Không thể cập nhật dòng kiểm kê ID ${item.id}: ${error.message}`);
+      }
     }
     await recalculateAuditStats(auditId);
-  } catch (err) {
-    console.warn('Supabase batch update items failed, fallback to mockStore:', err);
-    mockStore.batchUpdateAuditItems(auditId, items);
+  } catch (err: any) {
+    console.error('Lỗi trong hàm batchUpdateAuditItems:', err);
+    throw new Error(err.message || 'Không thể cập nhật hàng loạt kết quả kiểm kê, vui lòng thử lại.');
   }
 }
 
@@ -314,14 +356,18 @@ export async function recalculateAuditStats(auditId: string): Promise<void> {
       DEFAULT_READ_TIMEOUT
     );
 
-    if (error || !items) return;
+    if (error) {
+      console.error('Lỗi khi lấy items để tính toán thống kê kiểm kê:', error);
+      throw error;
+    }
+    if (!items) return;
 
     const total_expected = items.length;
     const total_found = items.filter(i => i.actual_found).length;
     const total_missing = items.filter(i => i.finding_status === 'missing').length;
     const total_misplaced = items.filter(i => i.finding_status === 'misplaced').length;
 
-    await withTimeout(
+    const { error: updateErr } = await withTimeout(
       supabase
         .from('inventory_audits')
         .update({
@@ -334,8 +380,9 @@ export async function recalculateAuditStats(auditId: string): Promise<void> {
         .eq('id', auditId),
       DEFAULT_WRITE_TIMEOUT
     );
-  } catch (err) {
-    console.warn('Recalculate audit stats failed:', err);
+    if (updateErr) throw updateErr;
+  } catch (err: any) {
+    console.warn('Recalculate audit stats failed on Supabase:', err);
   }
 }
 
@@ -385,20 +432,27 @@ export async function completeInventoryAudit(
       DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi hoàn tất đợt kiểm kê trên Supabase:', error);
+      throw new Error(`Không thể chốt đợt kiểm kê: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
 
-    await logActivity({
-      actionType: 'Hoàn tất kiểm kê kho',
-      warehouseId: completed?.warehouse_id,
-      description: `Hoàn tất đợt kiểm kê kho ${completed?.warehouses?.name || auditId}. Tìm thấy ${completed?.total_found}/${completed?.total_expected} GCN (Khuyết thiếu: ${completed?.total_missing}, Sai vị trí: ${completed?.total_misplaced}).`,
-      notes,
-      performedBy: profile.id,
-    });
+    try {
+      await logActivity({
+        actionType: 'Hoàn tất kiểm kê kho',
+        warehouseId: completed?.warehouse_id,
+        description: `Hoàn tất đợt kiểm kê kho ${completed?.warehouses?.name || auditId}. Tìm thấy ${completed?.total_found}/${completed?.total_expected} GCN (Khuyết thiếu: ${completed?.total_missing}, Sai vị trí: ${completed?.total_misplaced}).`,
+        notes,
+        performedBy: profile.id,
+      });
+    } catch (e) {
+      console.warn('Log activity error:', e);
+    }
 
     return await getInventoryAuditDetail(auditId);
-  } catch (err) {
-    console.warn('Supabase complete audit failed, fallback to mockStore:', err);
-    return mockStore.completeInventoryAudit(auditId, notes);
+  } catch (err: any) {
+    console.error('Lỗi trong hàm completeInventoryAudit:', err);
+    throw new Error(err.message || 'Không thể hoàn tất đợt kiểm kê, vui lòng thử lại.');
   }
 }
 
@@ -419,10 +473,13 @@ export async function deleteInventoryAudit(auditId: string): Promise<boolean> {
       DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi xóa đợt kiểm kê trên Supabase:', error);
+      throw new Error(`Không thể xóa đợt kiểm kê: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
     return true;
-  } catch (err) {
-    console.warn('Supabase delete inventory audit failed, fallback to mockStore:', err);
-    return mockStore.deleteInventoryAudit(auditId);
+  } catch (err: any) {
+    console.error('Lỗi trong hàm deleteInventoryAudit:', err);
+    throw new Error(err.message || 'Không thể xóa đợt kiểm kê, vui lòng thử lại.');
   }
 }

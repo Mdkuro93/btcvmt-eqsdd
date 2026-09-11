@@ -3,7 +3,6 @@ import {
   supabase, 
   isSupabaseConfigured, 
   withTimeout, 
-  loginUser, 
   registerUser, 
 } from '../lib/supabase';
 import { Profile, Role, AppUserSession } from '../types';
@@ -365,51 +364,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Đăng nhập bằng Tên đăng nhập (Username) hoặc Email kèm Mật khẩu.
-   * Ưu tiên gọi RPC login_user({ p_username, p_password }) theo yêu cầu.
+   * Dùng thẳng Supabase Auth (username được ánh xạ sang email nội bộ qua
+   * resolveToProfileAndEmail) — KHÔNG còn gọi RPC login_user/bảng app_users
+   * cũ nữa (đã bị khoá RLS chủ đích ở migration 0018, và không hash mật khẩu).
    */
   const signInWithPassword = async (accountOrEmail: string, password: string): Promise<{ success: boolean; profile: Profile }> => {
     setLoading(true);
     const cleanAccount = accountOrEmail.trim().toLowerCase();
-
-    // 1. Thử đăng nhập bằng RPC login_user (Dành cho bảng public.app_users bằng Username thuần túy)
-    try {
-      const appSession = await loginUser(cleanAccount, password);
-      if (appSession) {
-        const appProfile: Profile = {
-          id: appSession.id,
-          username: appSession.username,
-          email: appSession.username.includes('@') ? appSession.username : `${appSession.username}@btcvmt.vn`,
-          full_name: appSession.full_name || appSession.username,
-          role: (appSession.role as any) || 'user',
-          status: appSession.status as any,
-          access_expires_at: appSession.access_expires_at,
-          permissions: ['asset.lookup'],
-          region_id: null,
-          area_id: null,
-          project_ids: null,
-          managed_warehouse_ids: null,
-          created_at: new Date().toISOString(),
-        };
-
-        setUser({ id: appSession.id, email: appProfile.email, role: appProfile.role });
-        setProfile(appProfile);
-
-        await logAccessEvent({
-          userId: appSession.id,
-          action: 'login',
-          details: { method: 'rpc_login_user', username: appSession.username, role: appSession.role, status: appSession.status },
-        }).catch(() => {});
-
-        setLoading(false);
-        return { success: true, profile: appProfile };
-      }
-    } catch (rpcErr: any) {
-      // Nếu lỗi sai mật khẩu hoặc lỗi từ RPC, ghi nhận nhưng nếu là định dạng email thì có thể thử auth fallback
-      if (!cleanAccount.includes('@') && !rpcErr?.message?.includes('function') && !rpcErr?.message?.includes('PGRST202')) {
-        setLoading(false);
-        throw rpcErr instanceof Error ? rpcErr : new Error('Tên đăng nhập hoặc mật khẩu không chính xác.');
-      }
-    }
 
     // 2. Supabase configured -> Thử Supabase Auth (dành cho tài khoản nội bộ / email)
     if (isSupabaseConfigured) {

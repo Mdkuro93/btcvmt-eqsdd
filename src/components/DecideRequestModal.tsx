@@ -68,7 +68,7 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
   // Voucher preview
   const voucherPreview = useMemo(() => {
     if (!item?.type || !currentWarehouse) return '';
-    return previewVoucherCode(currentWarehouse, item.type);
+    return previewVoucherCode(currentWarehouse, item.type, details?.reason);
   }, [currentWarehouse, item]);
 
   // Track diffs

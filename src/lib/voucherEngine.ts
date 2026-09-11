@@ -1,4 +1,6 @@
 import { Warehouse } from '../types';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT } from './supabase';
+import { mockStore } from './mockStore';
 
 export type VoucherType = 'PN' | 'PX';
 
@@ -7,25 +9,15 @@ export type VoucherType = 'PN' | 'PX';
  * PHIẾU NHẬP (PN): Thêm mới GCN, Trả sổ mượn, Giải chấp nhập kho, Sổ con nhập kho sau tách
  * PHIẾU XUẤT (PX): Mượn/Xuất sổ, Thế chấp ngân hàng, Tách sổ (xuất sổ gốc), Xuất bán
  */
-export function getVoucherTypeFromTransaction(txType: string): VoucherType {
-  switch (txType) {
-    case 'checkout':
-    case 'mortgage':
-    case 'sale_update':
-    case 'split_parent':
-    case 'sell':
-      return 'PX';
-    case 'checkin':
-    case 'unmortgage':
-    case 'create_asset':
-    case 'split_child':
-    case 'import':
-    default:
-      if (['checkout', 'mortgage', 'sale_update', 'split_parent', 'sell'].includes(txType)) {
-        return 'PX';
-      }
-      return 'PN';
+export function getVoucherTypeFromTransaction(txType: string, reason?: string): VoucherType {
+  if (txType === 'checkout') return 'PX';
+  if (txType === 'checkin') return 'PN';
+  
+  // fallback for older code if any
+  if (['mortgage', 'sale_update', 'split_parent', 'sell'].includes(txType)) {
+    return 'PX';
   }
+  return 'PN';
 }
 
 /**
@@ -53,49 +45,77 @@ export function getWarehouseCode(warehouse?: Warehouse | null, defaultIdx: numbe
   return String(val).padStart(3, '0');
 }
 
-const COUNTER_STORAGE_KEY = 'btcvmt_voucher_counters';
-
-function getCounters(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(COUNTER_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveCounters(counters: Record<string, number>) {
-  try {
-    localStorage.setItem(COUNTER_STORAGE_KEY, JSON.stringify(counters));
-  } catch (err) {
-    console.warn('Voucher counter save error:', err);
-  }
-}
-
 /**
- * Auto-generate official voucher code and increment sequence number
+ * Auto-generate official voucher code based on real data in Supabase / mockStore
+ * Format: [REGION]-[WH_CODE]-[VOUCHER_TYPE]-[0001]/[YEAR]
+ * Example: VMT-001-PN-0001/2026, VMT-001-PX-0001/2026
  */
-export function generateNextVoucherCode(
+export async function generateNextVoucherCode(
   warehouse: Warehouse | null | undefined,
   txType: string,
+  reason?: string,
+  existingVoucherCodes?: string[],
   date: Date = new Date()
-): { voucherCode: string; voucherType: VoucherType; seq: number } {
-  const vType = getVoucherTypeFromTransaction(txType);
+): Promise<{ voucherCode: string; voucherType: VoucherType; seq: number }> {
+  const vType = getVoucherTypeFromTransaction(txType, reason);
   const year = date.getFullYear();
   const regionCode = getRegionCode(warehouse);
   const whCode = getWarehouseCode(warehouse);
-  const whIdKey = warehouse?.id || 'wh_default';
+  const prefix = `${regionCode}-${whCode}-${vType}-`;
+  const yearSuffix = `/${year}`;
 
-  const counterKey = `${whIdKey}_${vType}_${year}`;
-  const counters = getCounters();
-  const currentSeq = counters[counterKey] || 0;
-  const nextSeq = currentSeq + 1;
+  let codes: string[] = [];
 
-  counters[counterKey] = nextSeq;
-  saveCounters(counters);
+  if (existingVoucherCodes) {
+    codes = existingVoucherCodes;
+  } else if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from('transaction_items')
+          .select('voucher_code')
+          .ilike('voucher_code', `${prefix}%`),
+        DEFAULT_READ_TIMEOUT
+      );
+      if (error) {
+        console.error('Lỗi khi truy vấn số phiếu từ Supabase:', error);
+        throw new Error(`Không thể xác định số phiếu tiếp theo từ cơ sở dữ liệu: ${error.message || 'Lỗi truy vấn'}. Vui lòng thử lại.`);
+      }
+      if (data) {
+        codes = data.map((r: any) => r.voucher_code).filter(Boolean);
+      }
+    } catch (err: any) {
+      console.error('Lỗi khi lấy mã chứng từ từ cơ sở dữ liệu:', err);
+      if (err.message && err.message.includes('Không thể xác định số phiếu tiếp theo')) {
+        throw err;
+      }
+      throw new Error(`Không thể xác định số phiếu tiếp theo, vui lòng thử lại (${err.message || 'Lỗi kết nối'}).`);
+    }
+  } else {
+    // Chỉ dùng mockStore khi isSupabaseConfigured === false (chế độ demo/offline rõ ràng)
+    const txs = mockStore.getTransactions();
+    codes = txs
+      .flatMap((t: any) => (t.items || []).map((i: any) => i.voucher_code))
+      .filter(Boolean);
+  }
 
+  let maxSeq = 0;
+
+  codes.forEach(code => {
+    if (!code) return;
+    const trimmed = String(code).trim().toUpperCase();
+    if (trimmed.startsWith(prefix) && trimmed.endsWith(yearSuffix)) {
+      const numPart = trimmed.slice(prefix.length, trimmed.length - yearSuffix.length);
+      const parsed = parseInt(numPart, 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
+  });
+
+  const nextSeq = maxSeq + 1;
   const seqStr = String(nextSeq).padStart(4, '0');
-  const voucherCode = `${regionCode}-${whCode}-${vType}-${seqStr}/${year}`;
+  const voucherCode = `${prefix}${seqStr}/${year}`;
 
   return { voucherCode, voucherType: vType, seq: nextSeq };
 }
@@ -106,19 +126,38 @@ export function generateNextVoucherCode(
 export function previewVoucherCode(
   warehouse: Warehouse | null | undefined,
   txType: string,
+  reason?: string,
+  existingVoucherCodes?: string[],
   date: Date = new Date()
 ): string {
-  const vType = getVoucherTypeFromTransaction(txType);
+  const vType = getVoucherTypeFromTransaction(txType, reason);
   const year = date.getFullYear();
   const regionCode = getRegionCode(warehouse);
   const whCode = getWarehouseCode(warehouse);
-  const whIdKey = warehouse?.id || 'wh_default';
+  const prefix = `${regionCode}-${whCode}-${vType}-`;
+  const yearSuffix = `/${year}`;
 
-  const counterKey = `${whIdKey}_${vType}_${year}`;
-  const counters = getCounters();
-  const currentSeq = counters[counterKey] || 0;
-  const nextSeq = currentSeq + 1;
+  const codes =
+    existingVoucherCodes ||
+    mockStore
+      .getTransactions()
+      .flatMap((t: any) => (t.items || []).map((i: any) => i.voucher_code))
+      .filter(Boolean);
 
+  let maxSeq = 0;
+  codes.forEach(code => {
+    if (!code) return;
+    const trimmed = String(code).trim().toUpperCase();
+    if (trimmed.startsWith(prefix) && trimmed.endsWith(yearSuffix)) {
+      const numPart = trimmed.slice(prefix.length, trimmed.length - yearSuffix.length);
+      const parsed = parseInt(numPart, 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
+  });
+
+  const nextSeq = maxSeq + 1;
   const seqStr = String(nextSeq).padStart(4, '0');
-  return `${regionCode}-${whCode}-${vType}-${seqStr}/${year}`;
+  return `${prefix}${seqStr}/${year}`;
 }

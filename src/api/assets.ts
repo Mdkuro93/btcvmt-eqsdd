@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Asset, Region, Area, Warehouse, Project } from '../types';
 import { generateNextAssetCode, resolveRegionCode } from '../lib/assetIdentifier';
@@ -78,14 +78,36 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
   // Apply Server-side Sort & Range Pagination
   query = query.order('created_at', { ascending: false }).range(from, to);
 
-  const { data, count, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-  if (error) throw error;
-  
-  return { 
-    data: (data || []) as unknown as Asset[], 
-    totalCount: count ?? (data?.length || 0),
-    source: 'supabase'
-  };
+  try {
+    const { data, count, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Lỗi bảng/quan hệ trong fetchAssets từ Supabase, chuyển sang mockStore:', error.message);
+        const allFiltered = mockStore.getAssets(filters);
+        const totalCount = allFiltered.length;
+        const startIndex = (page - 1) * pageSize;
+        const pageData = allFiltered.slice(startIndex, startIndex + pageSize);
+        return { data: pageData, totalCount, source: 'mock' };
+      }
+      throw error;
+    }
+    
+    return { 
+      data: (data || []) as unknown as Asset[], 
+      totalCount: count ?? (data?.length || 0),
+      source: 'supabase'
+    };
+  } catch (err: any) {
+    if (isSchemaMissingError(err)) {
+      console.warn('Ngoại lệ bảng/quan hệ trong fetchAssets, chuyển sang mockStore:', err);
+      const allFiltered = mockStore.getAssets(filters);
+      const totalCount = allFiltered.length;
+      const startIndex = (page - 1) * pageSize;
+      const pageData = allFiltered.slice(startIndex, startIndex + pageSize);
+      return { data: pageData, totalCount, source: 'mock' };
+    }
+    throw err;
+  }
 }
 
 /**
@@ -251,7 +273,7 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
   const selectedWh = warehouses.find(w => w.id === assetData.warehouse_id);
   const regionCode = resolveRegionCode(assetData.project_id, projects, selectedWh?.region_code);
   const collateralType = assetData.collateral_type || 'BDS';
-  const autoCode = assetData.asset_code || generateNextAssetCode(regionCode, collateralType, current);
+  const autoCode = assetData.asset_code || generateNextAssetCode(regionCode, assetData.province, collateralType, current);
 
   const fullAsset: Asset = {
     id: 'asset-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -337,9 +359,20 @@ export async function updateAsset(
   user?: { id?: string; email?: string; full_name?: string } | null,
   notes?: string
 ): Promise<Asset> {
-  const currentAsset = (isSupabaseConfigured 
-    ? (await withTimeout(supabase.from('assets').select('*').eq('id', id).single(), DEFAULT_READ_TIMEOUT).catch(() => ({ data: null }))).data 
-    : mockStore.getAssets().find(a => a.id === id)) || {};
+  let currentAsset: Partial<Asset> = {};
+  if (!isSupabaseConfigured) {
+    currentAsset = mockStore.getAssets().find(a => a.id === id) || {};
+  } else {
+    const { data: dbAsset, error: fetchErr } = await withTimeout(
+      supabase.from('assets').select('*').eq('id', id).single(),
+      DEFAULT_READ_TIMEOUT
+    );
+    if (fetchErr) {
+      console.error('Lỗi khi tải thông tin GCN để cập nhật:', fetchErr);
+      throw new Error(`Không thể tìm thấy hoặc đọc thông tin GCN: ${fetchErr.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+    currentAsset = dbAsset || {};
+  }
 
   const payload = {
     ...updates,
@@ -367,7 +400,10 @@ export async function updateAsset(
       DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật GCN:', error);
+      throw new Error(`Không thể cập nhật GCN: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
     updatedAsset = data;
 
     try {
@@ -416,9 +452,20 @@ export async function bulkUpdateAssets(
     if (payload[k] === undefined) delete payload[k];
   });
 
-  const allAssets = isSupabaseConfigured
-    ? (await withTimeout(supabase.from('assets').select('*').in('id', ids), DEFAULT_READ_TIMEOUT).catch(() => ({ data: [] }))).data || []
-    : mockStore.getAssets().filter(a => ids.includes(a.id));
+  let allAssets: Asset[] = [];
+  if (!isSupabaseConfigured) {
+    allAssets = mockStore.getAssets().filter(a => ids.includes(a.id));
+  } else {
+    const { data: dbAssets, error: fetchErr } = await withTimeout(
+      supabase.from('assets').select('*').in('id', ids),
+      DEFAULT_READ_TIMEOUT
+    );
+    if (fetchErr) {
+      console.error('Lỗi khi tải danh sách GCN cập nhật hàng loạt:', fetchErr);
+      throw new Error(`Không thể đọc danh sách GCN để cập nhật: ${fetchErr.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+    allAssets = (dbAssets || []) as Asset[];
+  }
 
   if (!isSupabaseConfigured) {
     const current = mockStore.getAssets();
@@ -437,7 +484,10 @@ export async function bulkUpdateAssets(
         .in('id', ids),
       DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật hàng loạt GCN:', error);
+      throw new Error(`Không thể cập nhật hàng loạt GCN: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
 
     try {
       const current = mockStore.getAssets();
@@ -480,9 +530,20 @@ export async function importExcelAndUpdateAssets(
   mode: 'update_or_create' | 'update_only' | 'create_only' = 'update_or_create',
   recordHistory: boolean = false
 ): Promise<{ updatedCount: number; createdCount: number; errors: string[] }> {
-  const currentAssets = isSupabaseConfigured 
-    ? (await withTimeout(supabase.from('assets').select('*'), 3000).catch(() => ({ data: [] }))).data || []
-    : mockStore.getAssets();
+  let currentAssets: Asset[] = [];
+  if (!isSupabaseConfigured) {
+    currentAssets = mockStore.getAssets();
+  } else {
+    const { data: dbAssets, error: fetchErr } = await withTimeout(
+      supabase.from('assets').select('*'),
+      DEFAULT_READ_TIMEOUT * 2
+    );
+    if (fetchErr) {
+      console.error('Lỗi khi tải danh sách GCN hiện có để đối chiếu Excel:', fetchErr);
+      throw new Error(`Không thể đọc danh sách GCN hiện có từ cơ sở dữ liệu: ${fetchErr.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+    currentAssets = (dbAssets || []) as Asset[];
+  }
 
   const [projects, warehouses, investorEntities] = await Promise.all([
     fetchProjects(),
@@ -528,6 +589,7 @@ export async function importExcelAndUpdateAssets(
 
       const companyCode = (row.company_code || row['Mã công ty sở hữu'] || '').toString().trim().toUpperCase();
       const rawRole = (row.role || row['Phân loại'] || '').toString().trim().toLowerCase();
+      const rawTransferDate = row.transfer_date || row['Ngày chuyển nhượng'] || row['Ngày Chuyển Nhượng'];
 
       let targetEntityId: string | null = null;
       let targetRole: 'cdt' | 'ndt' | null = null;
@@ -538,11 +600,36 @@ export async function importExcelAndUpdateAssets(
           errors.push(`Dòng "${matchCertNo || matchId || 'N/A'}": Không tìm thấy mã công ty sở hữu "${companyCode}". Vui lòng tạo pháp nhân trước.`);
           continue; // Skip this row as per requirement "đưa dòng đó vào danh sách cần xử lý thủ công"
         }
+        
+        if (rawRole === 'ndt' || rawRole === 'nhà đầu tư') {
+          targetRole = 'ndt';
+        } else if (rawRole === 'cdt' || rawRole === 'chủ đầu tư') {
+          targetRole = 'cdt';
+        } else {
+          errors.push(`Dòng "${matchCertNo || matchId || 'N/A'}": Thiếu hoặc sai Phân loại (phải là CĐT/NĐT) khi đã điền Mã công ty sở hữu.`);
+          continue;
+        }
+
         targetEntityId = matchedEntity.id;
-        targetRole = (rawRole === 'ndt' || rawRole === 'nhà đầu tư') ? 'ndt' : 'cdt';
       } else if (matchedProj && matchedProj.default_owner_entity_id) {
         targetEntityId = matchedProj.default_owner_entity_id;
         targetRole = 'cdt';
+      }
+
+      // Parse transfer date if present
+      let transferDateStr = new Date().toISOString();
+      if (rawTransferDate) {
+        // Simple attempt to parse date, depending on Excel format it could be a number (Excel serial date) or string
+        const parsedDate = new Date(rawTransferDate);
+        if (!isNaN(parsedDate.getTime())) {
+          transferDateStr = parsedDate.toISOString();
+        } else if (typeof rawTransferDate === 'number') {
+          // Excel serial date (days since 1900-01-01)
+          const excelDate = new Date((rawTransferDate - (25567 + 2)) * 86400 * 1000); // adjust for timezone issues later, but simplified for now
+          if (!isNaN(excelDate.getTime())) {
+            transferDateStr = excelDate.toISOString();
+          }
+        }
       }
 
       if (existing && mode !== 'create_only') {
@@ -589,7 +676,7 @@ export async function importExcelAndUpdateAssets(
                 to_entity_id: updates.current_owner_entity_id,
                 to_role: updates.current_owner_role,
                 transferred_by: null,
-                transferred_at: new Date().toISOString(),
+                transferred_at: transferDateStr,
                 note: 'Dữ liệu lịch sử, nhập bổ sung khi triển khai hệ thống'
              };
              
@@ -655,7 +742,7 @@ export async function importExcelAndUpdateAssets(
               to_entity_id: created.current_owner_entity_id,
               to_role: created.current_owner_role,
               transferred_by: null,
-              transferred_at: new Date().toISOString(),
+              transferred_at: transferDateStr,
               note: 'Dữ liệu lịch sử, nhập bổ sung khi triển khai hệ thống'
            };
            
@@ -732,7 +819,7 @@ export async function importAssets(assetsData: any[]) {
     const selectedWh = warehouses.find((w: any) => w.id === a.warehouse_id);
     const regionCode = resolveRegionCode(a.project_id, projects, selectedWh?.region_code);
     const colType = a.collateral_type || 'BDS';
-    const code = a.asset_code || generateNextAssetCode(regionCode, colType, accumulatedAssets);
+    const code = a.asset_code || generateNextAssetCode(regionCode, a.province, colType, accumulatedAssets);
 
     const assetItem: Asset = {
       id: 'asset-' + Date.now() + '-' + idx,
@@ -760,6 +847,8 @@ export async function importAssets(assetsData: any[]) {
       mortgage_status: a.mortgage_status || 'none',
       warehouse_id: a.warehouse_id || null,
       current_holder_dept: a.current_holder_dept || null,
+      current_owner_entity_id: a.current_owner_entity_id || null,
+      current_owner_role: a.current_owner_role || null,
       notes: a.notes || null,
       created_at: new Date().toISOString(),
     };
@@ -778,15 +867,22 @@ export async function importAssets(assetsData: any[]) {
         .from('assets')
         .insert(newAssets)
         .select(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn('Supabase importAssets error or timeout, saving to mockStore:', err);
-    mockStore.saveAssets([...newAssets, ...current]);
-    return newAssets;
+    if (error) {
+      console.error('Lỗi khi import danh sách GCN vào Supabase:', error);
+      throw new Error(`Không thể nhập danh sách GCN vào cơ sở dữ liệu: ${error.message || 'Lỗi lưu trữ'}.`);
+    }
+
+    try {
+      mockStore.saveAssets([...(data || []), ...current]);
+    } catch {}
+
+    return data || [];
+  } catch (err: any) {
+    console.error('Lỗi trong hàm importAssets:', err);
+    throw new Error(err.message || 'Lỗi khi nhập danh sách GCN vào cơ sở dữ liệu.');
   }
 }
 
@@ -800,13 +896,20 @@ export async function fetchProjects(): Promise<Project[]> {
         .from('projects')
         .select('*, areas(name, region_id)')
         .order('name'),
-      3000
+      DEFAULT_READ_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng projects chưa có trong Supabase, sử dụng mockStore:', error.message);
+        return mockStore.getProjects();
+      }
+      console.warn('Lỗi khi tải danh sách dự án từ Supabase, sử dụng mockStore:', error);
+      return mockStore.getProjects();
+    }
     return data || [];
-  } catch (err) {
-    console.warn('Supabase fetchProjects error or timeout, using mockStore:', err);
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchProjects, fallback sang mockStore:', err);
     return mockStore.getProjects();
   }
 }
@@ -829,21 +932,23 @@ export async function createProject(project: { name: string; area_id: string }):
         .insert([project])
         .select()
         .single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi tạo dự án trên Supabase:', error);
+      throw new Error(`Không thể tạo dự án: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getProjects();
+      mockStore.saveProjects([...current, data]);
+    } catch {}
+
     return data;
-  } catch (err) {
-    console.warn('Supabase createProject error or timeout, saving to mockStore:', err);
-    const current = mockStore.getProjects();
-    const newProj: Project = {
-      id: 'proj-' + Date.now(),
-      name: project.name,
-      area_id: project.area_id,
-    };
-    mockStore.saveProjects([...current, newProj]);
-    return mockStore.getProjects().find(p => p.id === newProj.id)!;
+  } catch (err: any) {
+    console.error('Lỗi trong hàm createProject:', err);
+    throw new Error(err.message || 'Không thể tạo dự án, vui lòng thử lại.');
   }
 }
 
@@ -861,15 +966,23 @@ export async function updateProject(id: string, updates: { name?: string; area_i
         .eq('id', id)
         .select()
         .single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật dự án trên Supabase:', error);
+      throw new Error(`Không thể cập nhật thông tin dự án: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getProjects();
+      mockStore.saveProjects(current.map(p => p.id === id ? { ...p, ...updates } : p));
+    } catch {}
+
     return data;
-  } catch (err) {
-    const current = mockStore.getProjects();
-    mockStore.saveProjects(current.map(p => p.id === id ? { ...p, ...updates } : p));
-    return mockStore.getProjects().find(p => p.id === id);
+  } catch (err: any) {
+    console.error('Lỗi trong hàm updateProject:', err);
+    throw new Error(err.message || 'Không thể cập nhật dự án, vui lòng thử lại.');
   }
 }
 
@@ -882,12 +995,20 @@ export async function deleteProject(id: string) {
   try {
     const { error } = await withTimeout(
       supabase.from('projects').delete().eq('id', id),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
-  } catch (err) {
-    const current = mockStore.getProjects();
-    mockStore.saveProjects(current.filter(p => p.id !== id));
+    if (error) {
+      console.error('Lỗi khi xóa dự án trên Supabase:', error);
+      throw new Error(`Không thể xóa dự án: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getProjects();
+      mockStore.saveProjects(current.filter(p => p.id !== id));
+    } catch {}
+  } catch (err: any) {
+    console.error('Lỗi trong hàm deleteProject:', err);
+    throw new Error(err.message || 'Không thể xóa dự án, vui lòng thử lại.');
   }
 }
 
@@ -898,12 +1019,19 @@ export async function fetchRegions(): Promise<Region[]> {
   try {
     const { data, error } = await withTimeout(
       supabase.from('regions').select('*').order('name'),
-      3000
+      DEFAULT_READ_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng regions chưa có trong Supabase, sử dụng mockStore:', error.message);
+        return mockStore.getRegions();
+      }
+      console.warn('Lỗi khi tải danh sách vùng miền từ Supabase, sử dụng mockStore:', error);
+      return mockStore.getRegions();
+    }
     return data || [];
-  } catch (err) {
-    console.warn('Supabase fetchRegions error or timeout, using mockStore:', err);
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchRegions, fallback sang mockStore:', err);
     return mockStore.getRegions();
   }
 }
@@ -918,15 +1046,22 @@ export async function createRegion(name: string): Promise<Region> {
   try {
     const { data, error } = await withTimeout(
       supabase.from('regions').insert([{ name }]).select().single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi tạo vùng miền trên Supabase:', error);
+      throw new Error(`Không thể tạo vùng miền: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getRegions();
+      mockStore.saveRegions([...current, data]);
+    } catch {}
+
     return data;
-  } catch (err) {
-    const current = mockStore.getRegions();
-    const newR: Region = { id: 'reg-' + Date.now(), name };
-    mockStore.saveRegions([...current, newR]);
-    return newR;
+  } catch (err: any) {
+    console.error('Lỗi trong hàm createRegion:', err);
+    throw new Error(err.message || 'Không thể tạo vùng miền, vui lòng thử lại.');
   }
 }
 
@@ -939,13 +1074,22 @@ export async function updateRegion(id: string, name: string) {
   try {
     const { data, error } = await withTimeout(
       supabase.from('regions').update({ name }).eq('id', id).select().single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật vùng miền trên Supabase:', error);
+      throw new Error(`Không thể cập nhật vùng miền: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getRegions();
+      mockStore.saveRegions(current.map(r => r.id === id ? { ...r, name } : r));
+    } catch {}
+
     return data;
-  } catch (err) {
-    const current = mockStore.getRegions();
-    mockStore.saveRegions(current.map(r => r.id === id ? { ...r, name } : r));
+  } catch (err: any) {
+    console.error('Lỗi trong hàm updateRegion:', err);
+    throw new Error(err.message || 'Không thể cập nhật vùng miền, vui lòng thử lại.');
   }
 }
 
@@ -958,12 +1102,20 @@ export async function deleteRegion(id: string) {
   try {
     const { error } = await withTimeout(
       supabase.from('regions').delete().eq('id', id),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
-  } catch (err) {
-    const current = mockStore.getRegions();
-    mockStore.saveRegions(current.filter(r => r.id !== id));
+    if (error) {
+      console.error('Lỗi khi xóa vùng miền trên Supabase:', error);
+      throw new Error(`Không thể xóa vùng miền: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getRegions();
+      mockStore.saveRegions(current.filter(r => r.id !== id));
+    } catch {}
+  } catch (err: any) {
+    console.error('Lỗi trong hàm deleteRegion:', err);
+    throw new Error(err.message || 'Không thể xóa vùng miền, vui lòng thử lại.');
   }
 }
 
@@ -974,12 +1126,19 @@ export async function fetchAreas(): Promise<Area[]> {
   try {
     const { data, error } = await withTimeout(
       supabase.from('areas').select('*, regions(name)').order('name'),
-      3000
+      DEFAULT_READ_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng areas chưa có trong Supabase, sử dụng mockStore:', error.message);
+        return mockStore.getAreas();
+      }
+      console.warn('Lỗi khi tải danh sách khu vực từ Supabase, sử dụng mockStore:', error);
+      return mockStore.getAreas();
+    }
     return data || [];
-  } catch (err) {
-    console.warn('Supabase fetchAreas error or timeout, using mockStore:', err);
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchAreas, fallback sang mockStore:', err);
     return mockStore.getAreas();
   }
 }
@@ -994,15 +1153,22 @@ export async function createArea(name: string, region_id: string): Promise<Area>
   try {
     const { data, error } = await withTimeout(
       supabase.from('areas').insert([{ name, region_id }]).select().single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi tạo khu vực trên Supabase:', error);
+      throw new Error(`Không thể tạo khu vực: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getAreas();
+      mockStore.saveAreas([...current, data]);
+    } catch {}
+
     return data;
-  } catch (err) {
-    const current = mockStore.getAreas();
-    const newA: Area = { id: 'area-' + Date.now(), name, region_id };
-    mockStore.saveAreas([...current, newA]);
-    return mockStore.getAreas().find(a => a.id === newA.id)!;
+  } catch (err: any) {
+    console.error('Lỗi trong hàm createArea:', err);
+    throw new Error(err.message || 'Không thể tạo khu vực, vui lòng thử lại.');
   }
 }
 
@@ -1015,13 +1181,22 @@ export async function updateArea(id: string, name: string, region_id: string) {
   try {
     const { data, error } = await withTimeout(
       supabase.from('areas').update({ name, region_id }).eq('id', id).select().single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật khu vực trên Supabase:', error);
+      throw new Error(`Không thể cập nhật khu vực: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getAreas();
+      mockStore.saveAreas(current.map(a => a.id === id ? { ...a, name, region_id } : a));
+    } catch {}
+
     return data;
-  } catch (err) {
-    const current = mockStore.getAreas();
-    mockStore.saveAreas(current.map(a => a.id === id ? { ...a, name, region_id } : a));
+  } catch (err: any) {
+    console.error('Lỗi trong hàm updateArea:', err);
+    throw new Error(err.message || 'Không thể cập nhật khu vực, vui lòng thử lại.');
   }
 }
 
@@ -1034,12 +1209,20 @@ export async function deleteArea(id: string) {
   try {
     const { error } = await withTimeout(
       supabase.from('areas').delete().eq('id', id),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
-  } catch (err) {
-    const current = mockStore.getAreas();
-    mockStore.saveAreas(current.filter(a => a.id !== id));
+    if (error) {
+      console.error('Lỗi khi xóa khu vực trên Supabase:', error);
+      throw new Error(`Không thể xóa khu vực: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getAreas();
+      mockStore.saveAreas(current.filter(a => a.id !== id));
+    } catch {}
+  } catch (err: any) {
+    console.error('Lỗi trong hàm deleteArea:', err);
+    throw new Error(err.message || 'Không thể xóa khu vực, vui lòng thử lại.');
   }
 }
 
@@ -1050,12 +1233,19 @@ export async function fetchWarehouses(): Promise<Warehouse[]> {
   try {
     const { data, error } = await withTimeout(
       supabase.from('warehouses').select('*, regions(name)').order('name'),
-      3000
+      DEFAULT_READ_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng warehouses chưa có trong Supabase, sử dụng mockStore:', error.message);
+        return mockStore.getWarehouses();
+      }
+      console.warn('Lỗi khi tải danh sách kho từ Supabase, sử dụng mockStore:', error);
+      return mockStore.getWarehouses();
+    }
     return data || [];
-  } catch (err) {
-    console.warn('Supabase fetchWarehouses error or timeout, using mockStore:', err);
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchWarehouses, fallback sang mockStore:', err);
     return mockStore.getWarehouses();
   }
 }
@@ -1077,22 +1267,22 @@ export async function createWarehouse(warehouse: { name: string; code?: string |
   try {
     const { data, error } = await withTimeout(
       supabase.from('warehouses').insert([warehouse]).select().single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi tạo kho lưu trữ trên Supabase:', error);
+      throw new Error(`Không thể tạo kho lưu trữ: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getWarehouses();
+      mockStore.saveWarehouses([...current, data]);
+    } catch {}
+
     return data;
-  } catch (err) {
-    const current = mockStore.getWarehouses();
-    const newW: Warehouse = {
-      id: 'wh-' + Date.now(),
-      name: warehouse.name,
-      code: warehouse.code || String(current.length + 1).padStart(3, '0'),
-      region_code: warehouse.region_code || 'VMT',
-      region_id: warehouse.region_id || null,
-      is_central: warehouse.is_central || false,
-    };
-    mockStore.saveWarehouses([...current, newW]);
-    return mockStore.getWarehouses().find(w => w.id === newW.id)!;
+  } catch (err: any) {
+    console.error('Lỗi trong hàm createWarehouse:', err);
+    throw new Error(err.message || 'Không thể tạo kho lưu trữ, vui lòng thử lại.');
   }
 }
 
@@ -1105,13 +1295,22 @@ export async function updateWarehouse(id: string, updates: { name?: string; code
   try {
     const { data, error } = await withTimeout(
       supabase.from('warehouses').update(updates).eq('id', id).select().single(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật thông tin kho trên Supabase:', error);
+      throw new Error(`Không thể cập nhật kho: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getWarehouses();
+      mockStore.saveWarehouses(current.map(w => w.id === id ? { ...w, ...updates } : w));
+    } catch {}
+
     return data;
-  } catch (err) {
-    const current = mockStore.getWarehouses();
-    mockStore.saveWarehouses(current.map(w => w.id === id ? { ...w, ...updates } : w));
+  } catch (err: any) {
+    console.error('Lỗi trong hàm updateWarehouse:', err);
+    throw new Error(err.message || 'Không thể cập nhật kho, vui lòng thử lại.');
   }
 }
 
@@ -1124,12 +1323,20 @@ export async function deleteWarehouse(id: string) {
   try {
     const { error } = await withTimeout(
       supabase.from('warehouses').delete().eq('id', id),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
-    if (error) throw error;
-  } catch (err) {
-    const current = mockStore.getWarehouses();
-    mockStore.saveWarehouses(current.filter(w => w.id !== id));
+    if (error) {
+      console.error('Lỗi khi xóa kho trên Supabase:', error);
+      throw new Error(`Không thể xóa kho lưu trữ: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      const current = mockStore.getWarehouses();
+      mockStore.saveWarehouses(current.filter(w => w.id !== id));
+    } catch {}
+  } catch (err: any) {
+    console.error('Lỗi trong hàm deleteWarehouse:', err);
+    throw new Error(err.message || 'Không thể xóa kho lưu trữ, vui lòng thử lại.');
   }
 }
 
@@ -1144,18 +1351,20 @@ export const deleteAsset = async (id: string): Promise<void> => {
         .from('assets')
         .delete()
         .eq('id', id),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
 
     if (error) {
-      console.warn('Supabase deleteAsset returned error, deleting from mockStore:', error);
-      mockStore.deleteAsset(id);
-    } else {
-      mockStore.deleteAsset(id);
+      console.error('Supabase deleteAsset returned error:', error);
+      throw new Error(`Không thể xóa GCN khỏi cơ sở dữ liệu: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
-  } catch (err) {
-    console.warn('Supabase deleteAsset caught error or timeout, deleting from mockStore:', err);
-    mockStore.deleteAsset(id);
+
+    try {
+      mockStore.deleteAsset(id);
+    } catch {}
+  } catch (err: any) {
+    console.error('Lỗi trong hàm deleteAsset:', err);
+    throw new Error(err.message || 'Không thể xóa GCN, vui lòng thử lại.');
   }
 };
 
@@ -1171,18 +1380,20 @@ export const deleteMultipleAssets = async (ids: string[]): Promise<void> => {
         .from('assets')
         .delete()
         .in('id', ids),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
 
     if (error) {
-      console.warn('Supabase deleteMultipleAssets returned error, deleting from mockStore:', error);
-      mockStore.deleteAssets(ids);
-    } else {
-      mockStore.deleteAssets(ids);
+      console.error('Supabase deleteMultipleAssets returned error:', error);
+      throw new Error(`Không thể xóa các GCN đã chọn từ cơ sở dữ liệu: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
-  } catch (err) {
-    console.warn('Supabase deleteMultipleAssets caught error or timeout, deleting from mockStore:', err);
-    mockStore.deleteAssets(ids);
+
+    try {
+      mockStore.deleteAssets(ids);
+    } catch {}
+  } catch (err: any) {
+    console.error('Lỗi trong hàm deleteMultipleAssets:', err);
+    throw new Error(err.message || 'Không thể xóa danh sách GCN, vui lòng thử lại.');
   }
 };
 
@@ -1196,16 +1407,24 @@ export async function createMultipleAssets(assetsData: Partial<Asset>[]): Promis
         .from('assets')
         .insert(assetsData)
         .select(),
-      3000
+      DEFAULT_WRITE_TIMEOUT
     );
     if (error) {
-      console.warn('Supabase createMultipleAssets error, saving to mockStore:', error);
-      return importAssets(assetsData);
+      console.error('Supabase createMultipleAssets error:', error);
+      throw new Error(`Không thể thêm mới hàng loạt GCN vào cơ sở dữ liệu: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
+
+    try {
+      if (data) {
+        const current = mockStore.getAssets();
+        mockStore.saveAssets([...data, ...current]);
+      }
+    } catch {}
+
     return data || [];
-  } catch (err) {
-    console.warn('Supabase createMultipleAssets caught error or timeout, saving to mockStore:', err);
-    return importAssets(assetsData);
+  } catch (err: any) {
+    console.error('Lỗi trong hàm createMultipleAssets:', err);
+    throw new Error(err.message || 'Không thể tạo hàng loạt GCN, vui lòng thử lại.');
   }
 }
 

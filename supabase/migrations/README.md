@@ -29,5 +29,10 @@ Nếu bạn đang cập nhật một database có sẵn, hãy chạy các file t
   * Thay đổi: Tạo hàng loạt các Index lớn để tăng tốc truy vấn hệ thống (đặc biệt là bảng assets).
 * **`0008_update_profiles_role_constraint.sql`**: (Tạo mới)
   * Thay đổi: Cập nhật ràng buộc (CHECK constraint) cho cột `role` trong bảng `profiles` nhằm bao gồm đầy đủ tất cả các vai trò mới như `super_admin`, `admin`, `warehouse_manager`, `chuyen_vien`, v.v.
+* **`0018_fix_all_missing_tables_rpc_and_rls.sql`**: (KHUYÊN DÙNG NHẤT - One-Click Master Fix)
+  * Khắc phục toàn diện lỗi `PGRST205` (Table missing in schema cache), tạo đầy đủ tất cả các bảng còn thiếu (`app_users`, `notifications`, `investor_entities`, `inventory_audits`, v.v.).
+  * Thiết lập đầy đủ các hàm RPC (`register_user`, `login_user`, `approve_user`, `transfer_asset_ownership`, `lookup_asset_status`, `lock_reporting_period`, `reopen_reporting_period`) kèm `GRANT EXECUTE` cho các roles `anon`, `authenticated`.
+  * Cấu hình RLS thông minh, tương thích với cả phiên đăng nhập qua bảng `app_users` (role `anon`) và Supabase Auth (role `authenticated`).
+  * Tuyệt đối an toàn (Idempotent): Sử dụng `CREATE TABLE IF NOT EXISTS` và `ALTER TABLE ADD COLUMN`, không làm mất dữ liệu hiện có.
 
-Bạn hãy xem xét kỹ và chạy từng file SQL trên Supabase Editor nhé!
+Bạn hãy xem xét kỹ và chạy file `0018_fix_all_missing_tables_rpc_and_rls.sql` trên Supabase SQL Editor nhé!

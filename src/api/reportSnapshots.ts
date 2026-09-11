@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { ReportSnapshot, DenormalizedReportAsset, Asset } from '../types';
 import { mockStore } from '../lib/mockStore';
 import { formatPlotCode } from '../lib/assetIdentifier';
@@ -130,13 +130,20 @@ export async function fetchReportSnapshots(): Promise<ReportSnapshot[]> {
         .from('report_snapshots')
         .select('*')
         .order('submitted_at', { ascending: false }),
-      DEFAULT_WRITE_TIMEOUT
+      DEFAULT_READ_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng report_snapshots chưa có trong Supabase, dùng mockStore:', error.message);
+        return mockStore.getReportSnapshots();
+      }
+      console.warn('Lỗi khi tải danh sách snapshot báo cáo từ Supabase, dùng mockStore:', error);
+      return mockStore.getReportSnapshots();
+    }
     return (data as ReportSnapshot[]) || [];
-  } catch (error) {
-    console.warn('Supabase fetchReportSnapshots error, falling back to mockStore:', error);
+  } catch (error: any) {
+    console.warn('Lỗi trong hàm fetchReportSnapshots, fallback sang mockStore:', error);
     return mockStore.getReportSnapshots();
   }
 }
@@ -227,11 +234,19 @@ export async function createReportSnapshot(params: {
       DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi tạo snapshot báo cáo trên Supabase:', error);
+      throw new Error(`Không thể lưu snapshot báo cáo: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      mockStore.addReportSnapshot(data);
+    } catch {}
+
     return data as ReportSnapshot;
-  } catch (error) {
-    console.warn('Supabase createReportSnapshot error, falling back to mockStore:', error);
-    return mockStore.addReportSnapshot(newSnapshotPayload);
+  } catch (error: any) {
+    console.error('Lỗi trong hàm createReportSnapshot:', error);
+    throw new Error(error.message || 'Không thể lưu kỳ báo cáo vào cơ sở dữ liệu.');
   }
 }
 
@@ -248,35 +263,42 @@ export async function reopenReportingPeriod(
     throw new Error('Vui lòng cung cấp lý do mở khóa kỳ báo cáo rõ ràng (tối thiểu 5 ký tự)');
   }
 
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase.rpc('reopen_reporting_period', {
-        p_snapshot_id: snapshotId,
-        p_reason: reason.trim(),
-      });
-
-      if (error) {
-        // If RPC function not found in database yet, fall back to mockStore with full audit log
-        console.warn('RPC reopen_reporting_period failed on Supabase, applying via fallback:', error);
-      } else if (data && data.success) {
-        return {
-          success: true,
-          message: data.message || 'Mở khóa kỳ báo cáo thành công',
-          snapshot: data.snapshot,
-        };
-      }
-    } catch (rpcErr) {
-      console.warn('RPC call exception:', rpcErr);
-    }
+  if (!isSupabaseConfigured) {
+    return mockStore.reopenReportingPeriod(
+      snapshotId,
+      reason.trim(),
+      user?.id,
+      user?.full_name || user?.email || 'Quản trị viên'
+    );
   }
 
-  // Fallback to local store with audit log recording
-  return mockStore.reopenReportingPeriod(
-    snapshotId,
-    reason.trim(),
-    user?.id,
-    user?.full_name || user?.email || 'Quản trị viên'
-  );
+  try {
+    const { data, error } = await supabase.rpc('reopen_reporting_period', {
+      p_snapshot_id: snapshotId,
+      p_reason: reason.trim(),
+    });
+
+    if (error) {
+      console.error('Lỗi khi gọi RPC reopen_reporting_period:', error);
+      throw new Error(`Không thể mở khóa kỳ báo cáo: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    if (data && data.success) {
+      try {
+        mockStore.reopenReportingPeriod(snapshotId, reason.trim(), user?.id, user?.full_name || user?.email);
+      } catch {}
+      return {
+        success: true,
+        message: data.message || 'Mở khóa kỳ báo cáo thành công',
+        snapshot: data.snapshot,
+      };
+    }
+
+    throw new Error(data?.message || 'Mở khóa kỳ báo cáo không thành công.');
+  } catch (rpcErr: any) {
+    console.error('Lỗi trong hàm reopenReportingPeriod:', rpcErr);
+    throw new Error(rpcErr.message || 'Không thể mở khóa kỳ báo cáo.');
+  }
 }
 
 /**
@@ -287,27 +309,38 @@ export async function lockReportingPeriod(
   notes?: string,
   user?: { id?: string; full_name?: string; email?: string }
 ): Promise<{ success: boolean; message: string }> {
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase.rpc('lock_reporting_period', {
-        p_snapshot_id: snapshotId,
-        p_notes: notes || null,
-      });
-
-      if (!error && data?.success) {
-        return { success: true, message: data.message };
-      }
-    } catch (err) {
-      console.warn('RPC lock_reporting_period failed, falling back:', err);
-    }
+  if (!isSupabaseConfigured) {
+    return mockStore.lockReportingPeriod(
+      snapshotId,
+      notes,
+      user?.id,
+      user?.full_name || user?.email || 'Quản trị viên'
+    );
   }
 
-  return mockStore.lockReportingPeriod(
-    snapshotId,
-    notes,
-    user?.id,
-    user?.full_name || user?.email || 'Quản trị viên'
-  );
+  try {
+    const { data, error } = await supabase.rpc('lock_reporting_period', {
+      p_snapshot_id: snapshotId,
+      p_notes: notes || null,
+    });
+
+    if (error) {
+      console.error('Lỗi khi gọi RPC lock_reporting_period:', error);
+      throw new Error(`Không thể khóa kỳ báo cáo: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    if (data?.success) {
+      try {
+        mockStore.lockReportingPeriod(snapshotId, notes, user?.id, user?.full_name || user?.email);
+      } catch {}
+      return { success: true, message: data.message };
+    }
+
+    throw new Error(data?.message || 'Khóa kỳ báo cáo không thành công.');
+  } catch (err: any) {
+    console.error('Lỗi trong hàm lockReportingPeriod:', err);
+    throw new Error(err.message || 'Không thể khóa kỳ báo cáo.');
+  }
 }
 
 /**
@@ -336,11 +369,19 @@ export async function updateReportSnapshot(
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi cập nhật snapshot báo cáo trên Supabase:', error);
+      throw new Error(`Không thể cập nhật snapshot: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      mockStore.updateReportSnapshot(snapshotId, updates);
+    } catch {}
+
     return data as ReportSnapshot;
-  } catch (error) {
-    console.warn('Supabase updateReportSnapshot error, falling back to mockStore:', error);
-    return mockStore.updateReportSnapshot(snapshotId, updates);
+  } catch (error: any) {
+    console.error('Lỗi trong hàm updateReportSnapshot:', error);
+    throw new Error(error.message || 'Không thể cập nhật kỳ báo cáo.');
   }
 }
 
@@ -365,10 +406,18 @@ export async function deleteReportSnapshot(snapshotId: string): Promise<boolean>
       .delete()
       .eq('id', snapshotId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Lỗi khi xóa snapshot báo cáo trên Supabase:', error);
+      throw new Error(`Không thể xóa snapshot báo cáo: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    try {
+      mockStore.deleteReportSnapshot(snapshotId);
+    } catch {}
+
     return true;
-  } catch (error) {
-    console.warn('Supabase deleteReportSnapshot error, falling back to mockStore:', error);
-    return mockStore.deleteReportSnapshot(snapshotId);
+  } catch (error: any) {
+    console.error('Lỗi trong hàm deleteReportSnapshot:', error);
+    throw new Error(error.message || 'Không thể xóa kỳ báo cáo.');
   }
 }

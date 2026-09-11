@@ -3,19 +3,36 @@ import { Profile, AppUser, AppUserSession } from '../types';
 import { canLookupData, checkLookupAccess } from './accessGuard';
 import { mockStore } from './mockStore';
 
-// Direct Supabase configuration to prevent ERR_NAME_NOT_RESOLVED
-const SUPABASE_URL = 'https://dkzfjwrrlnupdflrxxao.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRremZqd3JybG51cGRmbHJ4eGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTgxNTgsImV4cCI6MjEwMzk5NDE1OH0.gaOgF8u-_rkg2qNsT2jePAFrjDyTHyXK58hZHwTGvRQ';
+// Direct Supabase configuration with environment variables support
+const envUrl = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_URL = (
+  envUrl && !envUrl.includes('your-project')
+    ? envUrl
+    : 'https://dkzfjwrrlnupdflrxxao.supabase.co'
+).trim();
+
+const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_ANON_KEY = (
+  envKey && !envKey.includes('your-anon-key')
+    ? envKey
+    : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRremZqd3JybG51cGRmbHJ4eGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTgxNTgsImV4cCI6MjEwMzk5NDE1OH0.gaOgF8u-_rkg2qNsT2jePAFrjDyTHyXK58hZHwTGvRQ'
+).trim();
 
 export const supabaseUrl = SUPABASE_URL;
 export const supabaseAnonKey = SUPABASE_ANON_KEY;
-export const isSupabaseConfigured = true;
+export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-// Initialize Supabase Client
+// Initialize Supabase Client Singleton
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: false,
+  },
+  global: {
+    headers: {
+      'x-application-name': 'btcvmt-eqsdd',
+    },
   },
 });
 
@@ -570,6 +587,32 @@ export async function testSupabaseConnection(): Promise<{ ok: boolean; message: 
 
 export const DEFAULT_READ_TIMEOUT = 5000;
 export const DEFAULT_WRITE_TIMEOUT = 8000;
+
+/**
+ * Checks if a Supabase error is caused by a missing table, column, relation or missing schema cache.
+ */
+export function isSchemaMissingError(err: any): boolean {
+  if (!err) return false;
+  const code = err.code || err.status || '';
+  const message = String(err.message || err.details || err.hint || '');
+  
+  if (
+    code === 'PGRST205' || // Could not find table in schema cache
+    code === '42P01' ||    // relation does not exist
+    code === 'PGRST202' || // function not found in schema cache
+    code === 'PGRST200' || // Could not embed / relation not found
+    code === 'PGRST204' || // column not found in schema cache
+    code === '42703' ||    // undefined_column
+    message.includes('schema cache') ||
+    message.includes('does not exist') ||
+    message.includes('Could not find the table') ||
+    message.includes('relation') ||
+    message.includes('Could not find')
+  ) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Timeout wrapper for Supabase queries.

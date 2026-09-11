@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 
 export async function generateDemoData() {
@@ -14,7 +14,13 @@ export async function generateDemoData() {
       .select()
       .single();
 
-    if (rErr) throw rErr;
+    if (rErr) {
+      if (isSchemaMissingError(rErr)) {
+        mockStore.resetDemoData();
+        return;
+      }
+      throw rErr;
+    }
 
     const { data: area, error: aErr } = await supabase
       .from('areas')
@@ -22,7 +28,13 @@ export async function generateDemoData() {
       .select()
       .single();
 
-    if (aErr) throw aErr;
+    if (aErr) {
+      if (isSchemaMissingError(aErr)) {
+        mockStore.resetDemoData();
+        return;
+      }
+      throw aErr;
+    }
 
     const { data: warehouse, error: wErr } = await supabase
       .from('warehouses')
@@ -30,7 +42,13 @@ export async function generateDemoData() {
       .select()
       .single();
 
-    if (wErr) throw wErr;
+    if (wErr) {
+      if (isSchemaMissingError(wErr)) {
+        mockStore.resetDemoData();
+        return;
+      }
+      throw wErr;
+    }
 
     const { data: project, error: pErr } = await supabase
       .from('projects')
@@ -38,7 +56,13 @@ export async function generateDemoData() {
       .select()
       .single();
 
-    if (pErr) throw pErr;
+    if (pErr) {
+      if (isSchemaMissingError(pErr)) {
+        mockStore.resetDemoData();
+        return;
+      }
+      throw pErr;
+    }
 
     const demoAssets = [
       {
@@ -74,9 +98,20 @@ export async function generateDemoData() {
       },
     ];
 
-    await supabase.from('assets').upsert(demoAssets, { onConflict: 'certificate_number' });
-  } catch (err) {
-    console.warn('Supabase generateDemoData failed, resetting mockStore demo data:', err);
-    mockStore.resetDemoData();
+    const { error: assetErr } = await supabase.from('assets').upsert(demoAssets, { onConflict: 'certificate_number' });
+    if (assetErr) {
+      if (isSchemaMissingError(assetErr)) {
+        mockStore.resetDemoData();
+        return;
+      }
+      throw assetErr;
+    }
+  } catch (err: any) {
+    if (isSchemaMissingError(err)) {
+      mockStore.resetDemoData();
+      return;
+    }
+    console.error('Lỗi khi khởi tạo dữ liệu mẫu trên Supabase:', err);
+    throw new Error(err.message || 'Không thể tạo dữ liệu mẫu trên cơ sở dữ liệu.');
   }
 }

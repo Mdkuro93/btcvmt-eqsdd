@@ -4,7 +4,7 @@ import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { updateAsset, fetchAssets } from '../api/assets';
 import { logActivity } from '../api/activityLogs';
-import { COLLATERAL_TYPES, PROPERTY_TYPES, checkAssetDuplicate, resolveRegionCode, generateNextAssetCode } from '../lib/assetIdentifier';
+import { COLLATERAL_TYPES, PROPERTY_TYPES, checkAssetDuplicate, resolveRegionCode } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { AssetTransferModal } from './AssetTransferModal';

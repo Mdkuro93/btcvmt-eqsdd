@@ -1,22 +1,49 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { fetchAssets, fetchProjects, fetchWarehouses } from '../api/assets';
+import { fetchReportStatistics, fetchReportDetailedAssets, ReportStatistics } from '../api/reports';
 import { Asset, Project, Warehouse } from '../types';
-import { computeReportSummary } from '../lib/reportEngine';
 import { formatPlotCode } from '../lib/assetIdentifier';
-import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle, Warehouse as WarehouseIcon, ShieldAlert, SlidersHorizontal } from 'lucide-react';
+import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle, Warehouse as WarehouseIcon, ShieldAlert, SlidersHorizontal, ArrowLeftRight, RotateCcw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import { LoadingFallback } from '../components/LoadingFallback';
 import { ReportSnapshotsManager } from '../components/ReportSnapshotsManager';
-import { mockStore } from '../lib/mockStore';
+import { MortgagedAssetsReview } from '../components/MortgagedAssetsReview';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Reports: React.FC = () => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [assets, setAssets] = useState<Asset[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [tableAssets, setTableAssets] = useState<Asset[]>([]);
+  const [mortgagedAssetsForReview, setMortgagedAssetsForReview] = useState<Asset[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+
+  // Server-computed statistics
+  const [reportStats, setReportStats] = useState<ReportStatistics>({
+    total_count: 0,
+    total_area: 0,
+    mortgaged_count: 0,
+    total_mortgage_valuation: 0,
+    in_stock_count: 0,
+    total_accessible_assets: 0,
+    total_accessible_mortgaged: 0,
+    by_warehouse: [],
+    by_project: [],
+    by_mortgage_bank: []
+  });
+
+  // Active Tab: 'standard' | 'mortgaged_review'
+  const [activeTab, setActiveTab] = useState<'standard' | 'mortgaged_review'>('standard');
+
+  // Role permissions: Chỉ Admin/Quản lý kho xem được mục Rà soát thế chấp
+  const canViewMortgageReview = useMemo(() => {
+    const role = profile?.role || '';
+    return ['admin', 'super_admin', 'btc_manager', 'warehouse_manager', 'quan_ly'].includes(role) &&
+      !['capital_dept', 're_dept', 'project_dept', 'investor', 'viewer', 'user'].includes(role);
+  }, [profile?.role]);
 
   // Warehouse scoping for warehouse_manager
   const isWarehouseManager = profile?.role === 'warehouse_manager';
@@ -41,32 +68,98 @@ export const Reports: React.FC = () => {
   const [pageSize, setPageSize] = useState<number>(50);
   const [tableDensity, setTableDensity] = useState<'comfortable' | 'compact'>('comfortable');
 
+  // Load auxiliary data (projects, warehouses) once
   useEffect(() => {
-    loadData();
+    const loadCatalogs = async () => {
+      try {
+        const [allProjects, allWarehouses] = await Promise.all([
+          fetchProjects(),
+          fetchWarehouses()
+        ]);
+        setProjects(allProjects);
+        setWarehouses(allWarehouses);
+      } catch (err) {
+        console.error('Lỗi tải danh mục dự án & kho:', err);
+      }
+    };
+    loadCatalogs();
   }, []);
 
+  // Reset page when filter changes
   useEffect(() => {
     setPage(1);
   }, [selectedRegion, selectedWarehouseId, selectedProjectId, selectedMortgageStatus, searchTerm, reportPeriod]);
 
-  const loadData = async () => {
+  // Load aggregated stats & current page from server
+  const loadData = useCallback(async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
-      const [assetsResult, allProjects, allWarehouses] = await Promise.all([
-        fetchAssets({}, 1, 10000),
-        fetchProjects(),
-        fetchWarehouses()
+      const filterParams = {
+        selectedRegion,
+        warehouseId: selectedWarehouseId,
+        projectId: selectedProjectId,
+        mortgageStatus: selectedMortgageStatus,
+        searchTerm,
+        allowedWarehouseIds: managedWarehouseIds
+      };
+
+      // 1. Fetch aggregated stats from PostgreSQL RPC (super fast, returns single summary record)
+      // 2. Fetch paginated assets for display table (only 25-50 rows instead of 10000)
+      const [statsResult, tableResult] = await Promise.all([
+        fetchReportStatistics(filterParams),
+        fetchAssets({
+          search: searchTerm,
+          projectId: selectedProjectId,
+          mortgageStatus: selectedMortgageStatus,
+          warehouseId: selectedWarehouseId
+        }, page, pageSize)
       ]);
-      setAssets(assetsResult.data || []);
-      setProjects(allProjects);
-      setWarehouses(allWarehouses);
-    } catch (error) {
-      toast.error('Lỗi tải dữ liệu báo cáo');
-      console.error(error);
+
+      setReportStats(statsResult);
+
+      // Filter table rows by region if region filter is active
+      let filteredPageRows = tableResult.data || [];
+      if (selectedRegion && selectedRegion !== 'Tất cả vùng') {
+        const searchReg = selectedRegion.replace('Vùng ', '').trim().toLowerCase();
+        filteredPageRows = filteredPageRows.filter(asset => {
+          const regionName = asset.projects?.areas?.regions?.name || (asset.warehouses as any)?.regions?.name || '';
+          return regionName.toLowerCase().includes(searchReg);
+        });
+      }
+      setTableAssets(filteredPageRows);
+
+      // If mortgaged review tab is active or clicked, load mortgaged assets for that tab
+      if (activeTab === 'mortgaged_review') {
+        const mortgaged = await fetchReportDetailedAssets({
+          mortgageStatus: 'mortgaged',
+          allowedWarehouseIds: managedWarehouseIds
+        });
+        setMortgagedAssetsForReview(mortgaged);
+      }
+    } catch (error: any) {
+      const msg = error?.message || 'Không thể tải số liệu báo cáo, vui lòng thử lại';
+      setErrorMessage(msg);
+      toast.error(msg);
+      console.error('Lỗi khi tải dữ liệu báo cáo:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedRegion, selectedWarehouseId, selectedProjectId, selectedMortgageStatus, searchTerm, managedWarehouseIds, page, pageSize, activeTab]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Load mortgaged assets when switching to mortgaged_review tab
+  useEffect(() => {
+    if (activeTab === 'mortgaged_review' && mortgagedAssetsForReview.length === 0) {
+      fetchReportDetailedAssets({
+        mortgageStatus: 'mortgaged',
+        allowedWarehouseIds: managedWarehouseIds
+      }).then(data => setMortgagedAssetsForReview(data)).catch(console.error);
+    }
+  }, [activeTab, managedWarehouseIds, mortgagedAssetsForReview.length]);
 
   // Available warehouses for dropdown based on user role
   const availableWarehouses = useMemo(() => {
@@ -79,25 +172,40 @@ export const Reports: React.FC = () => {
     return warehouses.find(w => w.id === selectedWarehouseId)?.name;
   }, [selectedWarehouseId, warehouses]);
 
-  // Filtered Assets and Statistics
-  const { filteredAssets, stats } = useMemo(() => {
-    return computeReportSummary(assets, {
-      selectedRegion,
-      selectedProjectId,
-      selectedMortgageStatus,
-      searchTerm,
-      warehouseId: selectedWarehouseId,
-      allowedWarehouseIds: managedWarehouseIds
-    });
-  }, [assets, selectedRegion, selectedProjectId, selectedMortgageStatus, searchTerm, selectedWarehouseId, managedWarehouseIds]);
+  // Stats alias for rendering
+  const stats = useMemo(() => ({
+    totalCount: reportStats.total_count,
+    totalArea: reportStats.total_area,
+    mortgagedCount: reportStats.mortgaged_count,
+    totalMortgageValuation: reportStats.total_mortgage_valuation,
+    inStockCount: reportStats.in_stock_count
+  }), [reportStats]);
 
-  const displayAssets = useMemo(() => {
-    return filteredAssets.slice((page - 1) * pageSize, page * pageSize);
-  }, [filteredAssets, page, pageSize]);
+  // Badge counts
+  const totalAccessibleCount = reportStats.total_accessible_assets || stats.totalCount;
+  const mortgagedCount = reportStats.total_accessible_mortgaged || stats.mortgagedCount;
 
-  // Excel Export matching exact template structure from user image
-  const exportExcel = () => {
+  // Excel Export: Fetches full detailed dataset matching active filters on demand
+  const exportExcel = async () => {
     try {
+      setExporting(true);
+      const toastId = toast.loading('Đang trích xuất dữ liệu chi tiết cho file Excel...');
+      
+      const detailedAssets = await fetchReportDetailedAssets({
+        selectedRegion,
+        warehouseId: selectedWarehouseId,
+        projectId: selectedProjectId,
+        mortgageStatus: selectedMortgageStatus,
+        searchTerm,
+        allowedWarehouseIds: managedWarehouseIds
+      });
+
+      if (detailedAssets.length === 0) {
+        toast.dismiss(toastId);
+        toast.error('Không tìm thấy dữ liệu để xuất Excel');
+        return;
+      }
+
       const headerTitle = `BÁO CÁO THEO DÕI CHI TIẾT TỒN KHO BẤT ĐỘNG SẢN ${selectedRegion.toUpperCase()}`;
       
       // Create Worksheet Matrix
@@ -156,7 +264,7 @@ export const Reports: React.FC = () => {
       wsData.push(row5);
 
       // Rows 6+: Data
-      filteredAssets.forEach((asset, idx) => {
+      detailedAssets.forEach((asset, idx) => {
         const isMortgaged = asset.mortgage_status === 'mortgaged';
         const valuation = asset.mortgage_valuation || 0;
         const guaranteeRatio = asset.collateral_ratio || 0;
@@ -252,10 +360,14 @@ export const Reports: React.FC = () => {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo Chi tiết BĐS');
       XLSX.writeFile(wb, `Bao-Cao-Chi-Tiet-Ton-Kho-BDS-${selectedRegion.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`);
-      toast.success('Xuất file Excel báo cáo thành công!');
+      
+      toast.dismiss(toastId);
+      toast.success(`Xuất file Excel thành công (${detailedAssets.length} GCN)!`);
     } catch (err: any) {
       console.error(err);
       toast.error('Lỗi xuất Excel: ' + err.message);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -263,8 +375,66 @@ export const Reports: React.FC = () => {
     <div className="space-y-6 pb-12">
       <Toaster position="top-right" />
 
-      {/* HEADER BANNER LIKE EXCEL SPREADSHEET */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+      {/* ROLE-AWARE REPORT TAB NAVIGATION */}
+      {canViewMortgageReview && (
+        <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('standard')}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'standard'
+                  ? 'bg-[#1E3A8A] text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Báo Cáo Chi Tiết Tồn Kho BĐS (27 Cột Chuẩn Mẫu)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'standard' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                {totalAccessibleCount} GCN
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('mortgaged_review')}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'mortgaged_review'
+                  ? 'bg-red-800 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-red-900 hover:bg-red-50'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 text-rose-300" />
+              <span>Rà Soát GCN Đang Thế Chấp & Quyền Sở Hữu</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'mortgaged_review' 
+                  ? 'bg-white/25 text-white' 
+                  : 'bg-red-100 text-red-800 border border-red-200'
+              }`}>
+                {mortgagedCount} GCN
+              </span>
+            </button>
+          </div>
+
+          <div className="text-[11px] text-gray-500 pr-3 hidden lg:flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Chế độ quản trị: <strong>{profile?.full_name || 'Admin/Quản lý kho'}</strong></span>
+          </div>
+        </div>
+      )}
+
+      {/* RENDER ACTIVE TAB CONTENT */}
+      {activeTab === 'mortgaged_review' && canViewMortgageReview ? (
+        <MortgagedAssetsReview
+          assets={mortgagedAssetsForReview}
+          projects={projects}
+          warehouses={warehouses}
+          managedWarehouseIds={managedWarehouseIds}
+          currentUser={profile}
+          onRefreshData={loadData}
+        />
+      ) : (
+        <>
+          {/* HEADER BANNER LIKE EXCEL SPREADSHEET */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-amber-500 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-md border border-amber-600">
@@ -285,7 +455,7 @@ export const Reports: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-2">
             <ReportSnapshotsManager
-              currentAssets={filteredAssets}
+              currentAssets={tableAssets}
               currentRegion={selectedRegion}
               currentWarehouseName={currentWarehouseName}
               onRefreshParent={loadData}
@@ -293,10 +463,18 @@ export const Reports: React.FC = () => {
 
             <button
               onClick={exportExcel}
-              disabled={loading || filteredAssets.length === 0}
+              disabled={loading || exporting || stats.totalCount === 0}
               className="inline-flex items-center px-4 py-2.5 text-sm font-bold rounded-lg shadow-sm text-white bg-[#1E3A8A] hover:bg-blue-900 disabled:opacity-50 transition-all cursor-pointer"
             >
-              <Download className="w-4 h-4 mr-2" /> Xuất File Excel Chuẩn Mẫu
+              {exporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang Xuất File...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" /> Xuất File Excel Chuẩn Mẫu
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -457,7 +635,7 @@ export const Reports: React.FC = () => {
               Ma Trận Chi Tiết (27 Cột Nghiệp Vụ)
             </span>
             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-              {filteredAssets.length} bản ghi
+              {stats.totalCount} bản ghi
             </span>
             <span className="text-xs text-gray-300 hidden md:inline">|</span>
             <span className="text-[11px] text-gray-600 hidden lg:inline">
@@ -593,16 +771,25 @@ export const Reports: React.FC = () => {
                     <LoadingFallback
                       message="Đang tổng hợp dữ liệu báo cáo..."
                       onRetry={() => loadData()}
-                      onForceLocal={() => {
-                        setAssets(mockStore.getAssets());
-                        setProjects(mockStore.getProjects());
-                        setLoading(false);
-                        toast.success('Đã tải dữ liệu báo cáo cục bộ');
-                      }}
                     />
                   </td>
                 </tr>
-              ) : filteredAssets.length === 0 ? (
+              ) : errorMessage ? (
+                <tr>
+                  <td colSpan={27} className="px-4 py-16 text-center">
+                    <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
+                    <p className="mt-2 text-sm text-red-700 font-semibold">{errorMessage}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadData()}
+                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg text-white bg-[#1E3A8A] hover:bg-blue-900 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Tải lại dữ liệu
+                    </button>
+                  </td>
+                </tr>
+              ) : tableAssets.length === 0 ? (
                 <tr>
                   <td colSpan={27} className="px-4 py-16 text-center">
                     <AlertCircle className="h-8 w-8 text-gray-400 mx-auto" />
@@ -610,7 +797,7 @@ export const Reports: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                displayAssets.map((asset, index) => {
+                tableAssets.map((asset, index) => {
                   const isMortgaged = asset.mortgage_status === 'mortgaged';
                   const valuation = asset.mortgage_valuation || 0;
                   const guaranteeRatio = asset.collateral_ratio || 0;
@@ -726,14 +913,14 @@ export const Reports: React.FC = () => {
         </div>
         
         {/* Pagination Controls */}
-        {filteredAssets.length > 0 && (
+        {stats.totalCount > 0 && (
           <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 rounded-b-xl">
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-gray-700">
                   Hiển thị <span className="font-medium">{(page - 1) * pageSize + 1}</span> đến{' '}
-                  <span className="font-medium">{Math.min(page * pageSize, filteredAssets.length)}</span> trong{' '}
-                  <span className="font-medium">{filteredAssets.length}</span> kết quả
+                  <span className="font-medium">{Math.min(page * pageSize, stats.totalCount)}</span> trong{' '}
+                  <span className="font-medium">{stats.totalCount}</span> kết quả
                 </p>
               </div>
               <div>
@@ -746,11 +933,11 @@ export const Reports: React.FC = () => {
                     Trước
                   </button>
                   <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                    Trang {page} / {Math.ceil(filteredAssets.length / pageSize) || 1}
+                    Trang {page} / {Math.ceil(stats.totalCount / pageSize) || 1}
                   </span>
                   <button
-                    onClick={() => setPage(p => Math.min(Math.ceil(filteredAssets.length / pageSize), p + 1))}
-                    disabled={page >= Math.ceil(filteredAssets.length / pageSize)}
+                    onClick={() => setPage(p => Math.min(Math.ceil(stats.totalCount / pageSize), p + 1))}
+                    disabled={page >= Math.ceil(stats.totalCount / pageSize)}
                     className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                   >
                     Tiếp
@@ -761,6 +948,9 @@ export const Reports: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
-  );
+    </>
+  )}
+</div>
+);
 };
+

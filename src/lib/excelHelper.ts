@@ -29,6 +29,7 @@ export interface ExcelAssetRow {
   'Thời Gian Cập Nhật Cuối'?: string;
   'Mã công ty sở hữu'?: string;
   'Phân loại'?: string;
+  'Ngày chuyển nhượng'?: string;
 }
 
 export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_QSDD_VMT') {
@@ -74,6 +75,7 @@ export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_Q
       'Thời Gian Cập Nhật Cuối': a.updated_at ? format(new Date(a.updated_at), 'dd/MM/yyyy HH:mm') : (a.created_at ? format(new Date(a.created_at), 'dd/MM/yyyy HH:mm') : ''),
       'Mã công ty sở hữu': a.current_owner_entity?.company_code || '',
       'Phân loại': a.current_owner_role === 'cdt' ? 'CĐT' : (a.current_owner_role === 'ndt' ? 'NĐT' : ''),
+      'Ngày chuyển nhượng': '',
     };
   });
 
@@ -107,6 +109,7 @@ export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_Q
     { wch: 20 }, // TG cập nhật
     { wch: 22 }, // Mã công ty sở hữu
     { wch: 12 }, // Phân loại
+    { wch: 20 }, // Ngày chuyển nhượng
   ];
   worksheet['!cols'] = colWidths;
 
@@ -144,6 +147,7 @@ export function downloadExcelTemplate() {
       'Kho Lưu Giữ': '-',
       'Mã công ty sở hữu': 'VMT_HOLDINGS',
       'Phân loại': 'CĐT',
+      'Ngày chuyển nhượng': '2023-12-01',
     },
     {
       'ID Hệ Thống': '',
@@ -170,6 +174,7 @@ export function downloadExcelTemplate() {
       'Kho Lưu Giữ': 'Kho Dự Án Bình Dương',
       'Mã công ty sở hữu': '',
       'Phân loại': '',
+      'Ngày chuyển nhượng': '',
     },
   ];
 

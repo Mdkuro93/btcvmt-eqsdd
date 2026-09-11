@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { InvestorEntity, AssetOwnershipTransfer } from '../types';
 
@@ -7,19 +7,29 @@ export async function fetchInvestorEntities(): Promise<InvestorEntity[]> {
     return mockStore.getInvestorEntities();
   }
 
-  const { data, error } = await withTimeout(
-    supabase
-      .from('investor_entities')
-      .select('*')
-      .order('name', { ascending: true }),
-    DEFAULT_READ_TIMEOUT
-  );
+  try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('investor_entities')
+        .select('*')
+        .order('name', { ascending: true }),
+      DEFAULT_READ_TIMEOUT
+    );
 
-  if (error) {
-    throw new Error('Không thể tải danh mục pháp nhân CĐT/NĐT: ' + error.message);
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng investor_entities chưa có trên Supabase, dùng mockStore:', error.message);
+        return mockStore.getInvestorEntities();
+      }
+      console.warn('Lỗi khi tải investor_entities, dùng mockStore:', error);
+      return mockStore.getInvestorEntities();
+    }
+
+    return data || [];
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchInvestorEntities, fallback sang mockStore:', err);
+    return mockStore.getInvestorEntities();
   }
-
-  return data || [];
 }
 
 export async function createInvestorEntity(payload: {
@@ -173,26 +183,36 @@ export async function fetchAssetOwnershipTransfers(assetId?: string): Promise<As
     return mockStore.getAssetOwnershipTransfers(assetId);
   }
 
-  let query = supabase
-    .from('asset_ownership_transfers')
-    .select(`
-      *,
-      from_entity:from_entity_id(*),
-      to_entity:to_entity_id(*),
-      performer:transferred_by(id, full_name, email)
-    `)
-    .order('transferred_at', { ascending: false });
+  try {
+    let query = supabase
+      .from('asset_ownership_transfers')
+      .select(`
+        *,
+        from_entity:from_entity_id(*),
+        to_entity:to_entity_id(*),
+        performer:transferred_by(id, full_name, email)
+      `)
+      .order('transferred_at', { ascending: false });
 
-  if (assetId) {
-    query = query.eq('asset_id', assetId);
+    if (assetId) {
+      query = query.eq('asset_id', assetId);
+    }
+
+    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng asset_ownership_transfers chưa có trong Supabase, dùng mockStore:', error.message);
+        return mockStore.getAssetOwnershipTransfers(assetId);
+      }
+      console.warn('Lỗi fetch asset_ownership_transfers:', error);
+      return mockStore.getAssetOwnershipTransfers(assetId);
+    }
+
+    return (data || []) as AssetOwnershipTransfer[];
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchAssetOwnershipTransfers, fallback mockStore:', err);
+    return mockStore.getAssetOwnershipTransfers(assetId);
   }
-
-  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-  if (error) {
-    throw new Error('Lỗi fetch asset_ownership_transfers: ' + error.message);
-  }
-
-  return (data || []) as AssetOwnershipTransfer[];
 }
 
 /**

@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 
 export async function fetchActivityLogs(params?: any): Promise<any[]> {
@@ -8,21 +8,33 @@ export async function fetchActivityLogs(params?: any): Promise<any[]> {
   const assetId = typeof params === 'string' ? params : params?.assetId;
   const actionType = typeof params === 'object' ? params?.actionType : undefined;
 
-  let query = supabase
-    .from('activity_logs')
-    .select(`
-      *,
-      performer:profiles!activity_logs_performed_by_fkey(full_name, email),
-      warehouse:warehouses(name)
-    `)
-    .order('log_date', { ascending: false });
+  try {
+    let query = supabase
+      .from('activity_logs')
+      .select(`
+        *,
+        performer:profiles!activity_logs_performed_by_fkey(full_name, email),
+        warehouse:warehouses(name)
+      `)
+      .order('log_date', { ascending: false });
 
-  if (assetId) query = query.eq('asset_id', assetId);
-  if (actionType) query = query.eq('action_type', actionType);
+    if (assetId) query = query.eq('asset_id', assetId);
+    if (actionType) query = query.eq('action_type', actionType);
 
-  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-  if (error) throw error;
-  return data || [];
+    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        console.warn('Bảng activity_logs hoặc quan hệ liên quan chưa có trong Supabase, dùng mockStore:', error.message);
+        return mockStore.getLogs(params);
+      }
+      console.warn('Lỗi fetchActivityLogs từ Supabase:', error);
+      return mockStore.getLogs(params);
+    }
+    return data || [];
+  } catch (err: any) {
+    console.warn('Lỗi trong hàm fetchActivityLogs, fallback mockStore:', err);
+    return mockStore.getLogs(params);
+  }
 }
 
 export async function logActivity(logData: {
@@ -59,32 +71,50 @@ export async function logActivity(logData: {
     return newLog;
   }
 
-  const { data, error } = await withTimeout(
-    supabase
-      .from('activity_logs')
-      .insert([
-        {
-          asset_id: logData.assetId || null,
-          action_type: logData.actionType,
-          document_no: logData.documentNo || null,
-          description: logData.description || null,
-          used_by: logData.usedBy || null,
-          warehouse_id: logData.warehouseId || null,
-          notes: logData.notes || null,
-          performed_by: logData.performedBy || null,
-        },
-      ])
-      .select()
-      .single(),
-    DEFAULT_WRITE_TIMEOUT
-  );
-
-  if (error) throw error;
-
   try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('activity_logs')
+        .insert([
+          {
+            asset_id: logData.assetId || null,
+            action_type: logData.actionType,
+            document_no: logData.documentNo || null,
+            description: logData.description || null,
+            used_by: logData.usedBy || null,
+            warehouse_id: logData.warehouseId || null,
+            notes: logData.notes || null,
+            performed_by: logData.performedBy || null,
+          },
+        ])
+        .select()
+        .single(),
+      DEFAULT_WRITE_TIMEOUT
+    );
+
+    if (error) {
+      if (isSchemaMissingError(error)) {
+        const logs = mockStore.getLogs();
+        mockStore.saveLogs([newLog, ...logs]);
+        return newLog;
+      }
+      throw error;
+    }
+
+    try {
+      const logs = mockStore.getLogs();
+      mockStore.saveLogs([newLog, ...logs]);
+    } catch {}
+
+    return data;
+  } catch (err: any) {
+    if (isSchemaMissingError(err)) {
+      const logs = mockStore.getLogs();
+      mockStore.saveLogs([newLog, ...logs]);
+      return newLog;
+    }
     const logs = mockStore.getLogs();
     mockStore.saveLogs([newLog, ...logs]);
-  } catch {}
-
-  return data;
+    return newLog;
+  }
 }

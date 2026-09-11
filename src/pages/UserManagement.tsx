@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Users, UserPlus, Clock, CheckCircle2, AlertTriangle, ShieldCheck, 
-  XCircle, Search, RefreshCw, Calendar, Building, Phone, Mail, 
-  ChevronDown, Check, Shield, Lock, Eye, AlertCircle, X, Sparkles,
-  Edit2
-} from 'lucide-react';
+import { Users, UserPlus, RefreshCw, Search } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,30 +10,17 @@ import {
   rejectUserProfile, 
   createUserDirect, 
   updateUserStatus,
-  updateUserRole,
   updateUserDirect 
 } from '../api/users';
 import { fetchWarehouses } from '../api/assets';
 import { fetchInvestorEntities } from '../api/investorEntities';
-import { Profile, Role, Warehouse, InvestorEntity } from '../types';
-import { checkLookupAccess, formatRemainingDuration } from '../lib/accessGuard';
-
-const ROLE_LABELS: Record<Role, { label: string; color: string; desc: string }> = {
-  super_admin: { label: 'Quản trị tối cao', color: 'bg-red-50 text-red-700 border-red-200', desc: 'Toàn quyền cấu hình hệ thống' },
-  admin: { label: 'Quản trị viên', color: 'bg-purple-50 text-purple-700 border-purple-200', desc: 'Quản lý người dùng và danh mục' },
-  btc_manager: { label: 'Ban Tài Chính (BTC)', color: 'bg-blue-50 text-blue-700 border-blue-200', desc: 'Phê duyệt mượn/thế chấp/xuất kho' },
-  warehouse_manager: { label: 'Thủ Kho Trung Tâm/Chi Nhánh', color: 'bg-amber-50 text-amber-700 border-amber-200', desc: 'Quản lý kho sổ & duyệt truy cập' },
-  quan_ly: { label: 'Quản lý phòng ban', color: 'bg-teal-50 text-teal-700 border-teal-200', desc: 'Quản lý và duyệt hồ sơ' },
-  capital_dept: { label: 'Phòng Nguồn Vốn', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', desc: 'Lập đề xuất mượn/thế chấp' },
-  project_dept: { label: 'Ban PTDA/BĐN', color: 'bg-cyan-50 text-cyan-700 border-cyan-200', desc: 'Đề xuất mượn & tách sổ' },
-  re_dept: { label: 'Khối SPG', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', desc: 'Đề xuất bán & bàn giao' },
-  supervisor: { label: 'Quản lý (Xem báo cáo/Truy vấn)', color: 'bg-violet-50 text-violet-700 border-violet-200', desc: 'Giám sát báo cáo & yêu cầu kho phân công' },
-  investor: { label: 'Chủ đầu tư/Nhà đầu tư (CĐT/NĐT)', color: 'bg-rose-50 text-rose-700 border-rose-200', desc: 'Xem & gửi yêu cầu mượn/trả GCN thuộc thực thể sở hữu' },
-  chuyen_vien: { label: 'Chuyên viên nghiệp vụ', color: 'bg-sky-50 text-sky-700 border-sky-200', desc: 'Lập và xử lý đề xuất' },
-  viewer: { label: 'Khách Tra Cứu', color: 'bg-slate-50 text-slate-700 border-slate-200', desc: 'Tra cứu thông tin GCN' },
-  nguoi_dung: { label: 'Người dùng', color: 'bg-stone-50 text-stone-700 border-stone-200', desc: 'Người dùng tra cứu cơ bản' },
-  user: { label: 'Tra Cứu Tạm Thời', color: 'bg-orange-50 text-orange-700 border-orange-200', desc: 'Tài khoản tự đăng ký' },
-};
+import { Profile, Warehouse, InvestorEntity } from '../types';
+import { UserManagementStats } from '../components/user-management/UserManagementStats';
+import { UserTable } from '../components/user-management/UserTable';
+import { ApproveUserModal } from '../components/user-management/ApproveUserModal';
+import { ExtendAccessModal } from '../components/user-management/ExtendAccessModal';
+import { CreateUserModal } from '../components/user-management/CreateUserModal';
+import { EditUserModal } from '../components/user-management/EditUserModal';
 
 export const UserManagement: React.FC = () => {
   const { profile: currentUser } = useAuth();
@@ -50,46 +32,18 @@ export const UserManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
 
-  // Modal: Approve user & set access_expires_at
+  // Modals state
   const [approvingUser, setApprovingUser] = useState<Profile | null>(null);
-  const [expiryPreset, setExpiryPreset] = useState<'24h' | '3d' | '7d' | '30d' | '90d' | 'custom'>('7d');
-  const [customExpiryDate, setCustomExpiryDate] = useState<string>('');
   const [isApproving, setIsApproving] = useState<boolean>(false);
 
-  // Modal: Extend user access
   const [extendingUser, setExtendingUser] = useState<Profile | null>(null);
-  const [extendPreset, setExtendPreset] = useState<'24h' | '3d' | '7d' | '30d' | 'custom'>('7d');
-  const [extendCustomDate, setExtendCustomDate] = useState<string>('');
   const [isExtending, setIsExtending] = useState<boolean>(false);
 
-  // Modal: Create direct user (Admin/Warehouse Manager)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
-  const [newFullName, setNewFullName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<Role>('user');
-  const [newPhone, setNewPhone] = useState('');
-  const [newOrganization, setNewOrganization] = useState('');
-  const [newExpiryPreset, setNewExpiryPreset] = useState<'7d' | '30d' | '90d' | 'permanent' | 'custom'>('30d');
-  const [newCustomExpiry, setNewCustomExpiry] = useState('');
-  const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
-  const [assignedWarehouseIds, setAssignedWarehouseIds] = useState<string[]>([]);
-  const [selectedOwnerEntityIds, setSelectedOwnerEntityIds] = useState<string[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState<boolean>(false);
 
-  // Modal: Edit user
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
-  const [editFullName, setEditFullName] = useState('');
-  const [editRole, setEditRole] = useState<Role>('viewer');
-  const [editPhone, setEditPhone] = useState('');
-  const [editOrganization, setEditOrganization] = useState('');
-  const [editStatus, setEditStatus] = useState<string>('active');
-  const [editExpiresAt, setEditExpiresAt] = useState('');
-  const [editManagedWarehouseIds, setEditManagedWarehouseIds] = useState<string[]>([]);
-  const [editAssignedWarehouseIds, setEditAssignedWarehouseIds] = useState<string[]>([]);
-  const [editOwnerEntityIds, setEditOwnerEntityIds] = useState<string[]>([]);
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -113,60 +67,6 @@ export const UserManagement: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
-
-  // Set default custom date to 7 days from now
-  useEffect(() => {
-    const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const isoString = d.toISOString().slice(0, 16);
-    setCustomExpiryDate(isoString);
-    setExtendCustomDate(isoString);
-    setNewCustomExpiry(isoString);
-  }, []);
-
-  const openEditModal = (u: Profile) => {
-    setEditingUser(u);
-    setEditFullName(u.full_name || '');
-    setEditRole(u.role);
-    setEditPhone(u.phone || '');
-    setEditOrganization(u.organization || '');
-    setEditStatus(u.status || 'active');
-    setEditManagedWarehouseIds(u.managed_warehouse_ids || []);
-    setEditAssignedWarehouseIds(u.assigned_warehouse_ids || []);
-    setEditOwnerEntityIds(u.owner_entity_ids || []);
-    setEditExpiresAt(u.access_expires_at ? new Date(u.access_expires_at).toISOString().slice(0, 16) : '');
-  };
-
-  const handleSaveUserEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
-    if (!editFullName.trim()) {
-      toast.error('Vui lòng nhập họ và tên');
-      return;
-    }
-    setIsSavingEdit(true);
-    try {
-      const updated = await updateUserDirect(editingUser.id, {
-        full_name: editFullName.trim(),
-        role: editRole,
-        status: editStatus as any,
-        phone: editPhone.trim() || null,
-        organization: editOrganization.trim() || null,
-        managed_warehouse_ids: editRole === 'warehouse_manager' ? editManagedWarehouseIds : null,
-        assigned_warehouse_ids: ['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(editRole) ? editAssignedWarehouseIds : null,
-        owner_entity_ids: editRole === 'investor' ? editOwnerEntityIds : null,
-        access_expires_at: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
-      });
-
-      setProfiles(prev => prev.map(p => p.id === editingUser.id ? { ...p, ...updated } : p));
-      toast.success(`Cập nhật thông tin tài khoản ${updated.full_name} thành công!`);
-      setEditingUser(null);
-    } catch (err: any) {
-      console.error('Lỗi cập nhật người dùng:', err);
-      toast.error(err.message || 'Không thể cập nhật người dùng');
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
 
   // Compute stats
   const stats = useMemo(() => {
@@ -256,36 +156,11 @@ export const UserManagement: React.FC = () => {
     });
   }, [profiles, activeTab, roleFilter, searchQuery]);
 
-  // Calculate expiration date based on preset
-  const calculateExpiryDate = (preset: string, customDate: string): string => {
-    const now = Date.now();
-    if (preset === '24h') {
-      return new Date(now + 24 * 60 * 60 * 1000).toISOString();
-    }
-    if (preset === '3d') {
-      return new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString();
-    }
-    if (preset === '7d') {
-      return new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString();
-    }
-    if (preset === '30d') {
-      return new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString();
-    }
-    if (preset === '90d') {
-      return new Date(now + 90 * 24 * 60 * 60 * 1000).toISOString();
-    }
-    if (preset === 'custom' && customDate) {
-      return new Date(customDate).toISOString();
-    }
-    return new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString();
-  };
-
   // Handle Approve user
-  const handleConfirmApproval = async () => {
+  const handleApprove = async (expiresAt: string) => {
     if (!approvingUser) return;
     setIsApproving(true);
     try {
-      const expiresAt = calculateExpiryDate(expiryPreset, customExpiryDate);
       const updated = await approveUserProfile(approvingUser.id, expiresAt, currentUser?.id);
       if (updated) {
         setProfiles(prev => prev.map(p => p.id === approvingUser.id ? updated : p));
@@ -303,12 +178,11 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  // Handle Extend user
-  const handleConfirmExtend = async () => {
+  // Handle Extend user access
+  const handleExtend = async (expiresAt: string) => {
     if (!extendingUser) return;
     setIsExtending(true);
     try {
-      const expiresAt = calculateExpiryDate(extendPreset, extendCustomDate);
       const updated = await extendUserAccess(extendingUser.id, expiresAt);
       if (updated) {
         setProfiles(prev => prev.map(p => p.id === extendingUser.id ? updated : p));
@@ -363,63 +237,38 @@ export const UserManagement: React.FC = () => {
   };
 
   // Handle Create Direct User
-  const handleCreateDirectUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEmail.trim()) {
-      toast.error('Vui lòng nhập Email');
-      return;
-    }
-    if (!newFullName.trim()) {
-      toast.error('Vui lòng nhập Họ và tên');
-      return;
-    }
-
+  const handleCreateDirectUser = async (userData: any) => {
     setIsCreating(true);
     try {
-      let expiresAt: string | null = null;
-      if (newRole === 'user' || newRole === 'viewer') {
-        if (newExpiryPreset !== 'permanent') {
-          expiresAt = calculateExpiryDate(newExpiryPreset, newCustomExpiry);
-        }
-      }
-
-      const created = await createUserDirect({
-        email: newEmail.trim(),
-        full_name: newFullName.trim(),
-        username: newUsername.trim() || undefined,
-        password: newPassword.trim() || '123456',
-        role: newRole,
-        status: (newRole === 'user' && expiresAt) ? 'approved' : 'active',
-        access_expires_at: expiresAt,
-        phone: newPhone.trim() || undefined,
-        organization: newOrganization.trim() || undefined,
-        managed_warehouse_ids: newRole === 'warehouse_manager' ? selectedWarehouseIds : null,
-        assigned_warehouse_ids: ['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(newRole) ? assignedWarehouseIds : null,
-        owner_entity_ids: newRole === 'investor' ? selectedOwnerEntityIds : null,
-      });
-
+      const created = await createUserDirect(userData);
       setProfiles(prev => [created, ...prev]);
       toast.success(
         `Tạo tài khoản ${created.full_name} (${created.email}) thành công! Tài khoản đã được kích hoạt trực tiếp ngay lập tức.`,
         { duration: 5000 }
       );
-      // Reset form
-      setNewFullName('');
-      setNewEmail('');
-      setNewUsername('');
-      setNewPassword('');
-      setNewRole('user');
-      setNewPhone('');
-      setNewOrganization('');
-      setSelectedWarehouseIds([]);
-      setAssignedWarehouseIds([]);
-      setSelectedOwnerEntityIds([]);
       setIsCreateModalOpen(false);
     } catch (err: any) {
       console.error('Lỗi tạo tài khoản trực tiếp:', err);
       toast.error(err.message || 'Không thể tạo tài khoản');
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  // Handle Save User Edit
+  const handleSaveUserEdit = async (updates: Partial<Profile>) => {
+    if (!editingUser) return;
+    setIsSavingEdit(true);
+    try {
+      const updated = await updateUserDirect(editingUser.id, updates);
+      setProfiles(prev => prev.map(p => p.id === editingUser.id ? { ...p, ...updated } : p));
+      toast.success(`Cập nhật thông tin tài khoản ${updated.full_name} thành công!`);
+      setEditingUser(null);
+    } catch (err: any) {
+      console.error('Lỗi cập nhật người dùng:', err);
+      toast.error(err.message || 'Không thể cập nhật người dùng');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -435,9 +284,9 @@ export const UserManagement: React.FC = () => {
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Quản lý người dùng & Phê duyệt tra cứu</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Quản lý người dùng &amp; Phê duyệt tra cứu</h1>
               <p className="text-sm text-gray-500 mt-0.5">
-                Phê duyệt tài khoản tự đăng ký tra cứu tạm thời và quản lý ủy quyền dành cho Ban Quản Trị & Thủ Kho
+                Phê duyệt tài khoản tự đăng ký tra cứu tạm thời và quản lý ủy quyền dành cho Ban Quản Trị &amp; Thủ Kho
               </p>
             </div>
           </div>
@@ -447,7 +296,7 @@ export const UserManagement: React.FC = () => {
           <button
             onClick={loadData}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-lg transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-lg transition cursor-pointer"
             title="Làm mới danh sách"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -456,7 +305,7 @@ export const UserManagement: React.FC = () => {
 
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg shadow-sm transition"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg shadow-sm transition cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>Tạo tài khoản trực tiếp</span>
@@ -465,113 +314,19 @@ export const UserManagement: React.FC = () => {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Pending Card */}
-        <button
-          onClick={() => setActiveTab('pending')}
-          className={`p-5 rounded-xl border text-left transition-all ${
-            activeTab === 'pending'
-              ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-400/50 shadow-sm'
-              : 'bg-white border-gray-200 hover:border-amber-300 hover:bg-amber-50/40 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                {stats.pendingCount > 0 && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                )}
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-              </span>
-              Chờ phê duyệt
-            </span>
-            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
-              <Clock className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-amber-900">{stats.pendingCount}</span>
-            <span className="text-xs text-amber-700 font-medium">tài khoản tự đăng ký</span>
-          </div>
-        </button>
+      <UserManagementStats
+        stats={stats}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+      />
 
-        {/* Active Approved Card */}
-        <button
-          onClick={() => setActiveTab('approved')}
-          className={`p-5 rounded-xl border text-left transition-all ${
-            activeTab === 'approved'
-              ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-400/50 shadow-sm'
-              : 'bg-white border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/40 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
-              Đã duyệt & Còn hạn
-            </span>
-            <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-emerald-900">{stats.approvedActiveCount}</span>
-            <span className="text-xs text-emerald-700 font-medium">đang có quyền tra cứu</span>
-          </div>
-        </button>
-
-        {/* Expired Card */}
-        <button
-          onClick={() => setActiveTab('expired')}
-          className={`p-5 rounded-xl border text-left transition-all ${
-            activeTab === 'expired'
-              ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-400/50 shadow-sm'
-              : 'bg-white border-gray-200 hover:border-rose-300 hover:bg-rose-50/40 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-rose-800">
-              Hết hạn tra cứu
-            </span>
-            <div className="p-2 bg-rose-100 text-rose-700 rounded-lg">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-rose-900">{stats.expiredCount}</span>
-            <span className="text-xs text-rose-700 font-medium">cần gia hạn lại</span>
-          </div>
-        </button>
-
-        {/* Total Card */}
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`p-5 rounded-xl border text-left transition-all ${
-            activeTab === 'all'
-              ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-400/50 shadow-sm'
-              : 'bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-blue-800">
-              Tổng số người dùng
-            </span>
-            <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
-              <Users className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-blue-900">{stats.total}</span>
-            <span className="text-xs text-blue-700 font-medium">toàn hệ thống</span>
-          </div>
-        </button>
-      </div>
-
-      {/* Tabs & Search Filter */}
+      {/* Tabs & Search Filter & User Table */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         {/* Navigation Tabs */}
         <div className="border-b border-gray-200 px-4 flex flex-wrap gap-2 pt-2">
           <button
             onClick={() => setActiveTab('pending')}
-            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition ${
+            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition cursor-pointer ${
               activeTab === 'pending'
                 ? 'border-amber-600 text-amber-800 font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -587,13 +342,13 @@ export const UserManagement: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('approved')}
-            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition ${
+            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition cursor-pointer ${
               activeTab === 'approved'
                 ? 'border-emerald-600 text-emerald-800 font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>Đã duyệt & Còn hạn</span>
+            <span>Đã duyệt &amp; Còn hạn</span>
             <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
               {stats.approvedActiveCount}
             </span>
@@ -601,7 +356,7 @@ export const UserManagement: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('expired')}
-            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition ${
+            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition cursor-pointer ${
               activeTab === 'expired'
                 ? 'border-rose-600 text-rose-800 font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -615,7 +370,7 @@ export const UserManagement: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('internal')}
-            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition ${
+            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition cursor-pointer ${
               activeTab === 'internal'
                 ? 'border-[#1E3A8A] text-[#1E3A8A] font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -629,7 +384,7 @@ export const UserManagement: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('all')}
-            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition ${
+            className={`pb-3 px-3.5 text-sm font-medium border-b-2 flex items-center gap-2 transition cursor-pointer ${
               activeTab === 'all'
                 ? 'border-gray-800 text-gray-900 font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -678,1183 +433,61 @@ export const UserManagement: React.FC = () => {
         </div>
 
         {/* User Table */}
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="p-12 text-center text-gray-500">
-              <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-[#1E3A8A]" />
-              <p className="text-sm">Đang tải danh sách người dùng...</p>
-            </div>
-          ) : filteredProfiles.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">
-              <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <h3 className="text-base font-semibold text-gray-800">Không có người dùng nào</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                {activeTab === 'pending'
-                  ? 'Hiện không có tài khoản nào đang chờ phê duyệt.'
-                  : 'Không tìm thấy tài khoản phù hợp với điều kiện tìm kiếm.'}
-              </p>
-            </div>
-          ) : (
-            <table className="w-full text-left text-sm text-gray-600">
-              <thead className="bg-gray-50 text-xs font-semibold text-gray-600 uppercase border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3.5">Người dùng / Liên hệ</th>
-                  <th className="px-6 py-3.5">Đơn vị & Mục đích</th>
-                  <th className="px-6 py-3.5">Vai trò</th>
-                  <th className="px-6 py-3.5">Trạng thái & Thời hạn</th>
-                  <th className="px-6 py-3.5 text-right">Hành động</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {filteredProfiles.map(u => {
-                  const accessCheck = checkLookupAccess(u);
-                  const isInternal = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept'].includes(u.role);
-                  const roleMeta = ROLE_LABELS[u.role] || { label: u.role, color: 'bg-gray-100 text-gray-700', desc: '' };
-
-                  return (
-                    <tr key={u.id} className="hover:bg-gray-50/80 transition">
-                      {/* Name & Contact */}
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-gray-900">{u.full_name || 'Chưa cập nhật tên'}</div>
-                        <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
-                          <Mail className="w-3.5 h-3.5 text-gray-400" />
-                          <span>{u.email}</span>
-                        </div>
-                        {u.phone && (
-                          <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
-                            <Phone className="w-3.5 h-3.5 text-gray-400" />
-                            <span>{u.phone}</span>
-                          </div>
-                        )}
-                        {u.created_at && (
-                          <div className="text-[11px] text-gray-400 mt-1">
-                            Tạo ngày: {format(new Date(u.created_at), 'dd/MM/yyyy HH:mm')}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Organization & Purpose */}
-                      <td className="px-6 py-4 max-w-xs">
-                        {u.organization ? (
-                          <div className="font-medium text-gray-800 text-xs flex items-center gap-1.5">
-                            <Building className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                            <span className="truncate" title={u.organization}>{u.organization}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">Cá nhân</span>
-                        )}
-                        {u.purpose && (
-                          <div className="text-xs text-gray-500 mt-1 line-clamp-2" title={u.purpose}>
-                            {u.purpose}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Role */}
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${roleMeta.color}`}>
-                          {roleMeta.label}
-                        </span>
-                        {u.role === 'warehouse_manager' && u.managed_warehouse_ids && u.managed_warehouse_ids.length > 0 && (
-                          <div className="text-[11px] text-amber-700 font-medium mt-1">
-                            Quản lý {u.managed_warehouse_ids.length} kho sổ
-                          </div>
-                        )}
-                        {['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(u.role) && u.assigned_warehouse_ids && u.assigned_warehouse_ids.length > 0 && (
-                          <div className="text-[11px] text-blue-700 font-medium mt-1">
-                            Phụ trách {u.assigned_warehouse_ids.length} kho
-                          </div>
-                        )}
-                        {u.role === 'investor' && u.owner_entity_ids && u.owner_entity_ids.length > 0 && (
-                          <div className="text-[11px] text-rose-700 font-medium mt-1" title={
-                            u.owner_entity_ids
-                              .map(id => {
-                                const found = investorEntities.find(ie => ie.id === id);
-                                return found ? `${found.name} (${found.company_code || 'Chưa có mã'})` : id;
-                              })
-                              .join(', ')
-                          }>
-                            Đại diện {u.owner_entity_ids.length} pháp nhân CĐT/NĐT
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Status & Expiry */}
-                      <td className="px-6 py-4">
-                        {u.status === 'pending' && (
-                          <div>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-                              <Clock className="w-3.5 h-3.5 animate-pulse" />
-                              Chờ phê duyệt
-                            </span>
-                            <div className="text-[11px] text-amber-700 mt-1">
-                              Chưa được phép tra cứu dữ liệu
-                            </div>
-                          </div>
-                        )}
-
-                        {u.status === 'approved' && (
-                          <div>
-                            {accessCheck.allowed ? (
-                              <div>
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  Đã duyệt • Còn {accessCheck.remainingText}
-                                </span>
-                                {u.access_expires_at && (
-                                  <div className="text-[11px] text-gray-500 mt-1">
-                                    Hết hạn: {format(new Date(u.access_expires_at), 'dd/MM/yyyy HH:mm')}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div>
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">
-                                  <AlertTriangle className="w-3.5 h-3.5" />
-                                  Đã hết hạn tra cứu
-                                </span>
-                                {u.access_expires_at && (
-                                  <div className="text-[11px] text-rose-600 mt-1">
-                                    Hết hạn lúc: {format(new Date(u.access_expires_at), 'dd/MM/yyyy HH:mm')}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {u.status === 'active' && (
-                          <div>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                              Đang hoạt động (Nội bộ)
-                            </span>
-                          </div>
-                        )}
-
-                        {u.status === 'rejected' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
-                            <XCircle className="w-3.5 h-3.5" />
-                            Đã từ chối
-                          </span>
-                        )}
-
-                        {u.status === 'disabled' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                            <Lock className="w-3.5 h-3.5" />
-                            Đã khóa truy cập
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {/* Pending actions */}
-                          {u.status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => setApprovingUser(u)}
-                                className="px-3 py-1.5 bg-[#1E3A8A] text-white text-xs font-semibold rounded-lg hover:bg-blue-800 shadow-sm transition flex items-center gap-1"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Duyệt & Cấp hạn</span>
-                              </button>
-                              <button
-                                onClick={() => handleReject(u)}
-                                className="px-2.5 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-rose-50 hover:text-rose-700 transition"
-                                title="Từ chối yêu cầu"
-                              >
-                                <span>Từ chối</span>
-                              </button>
-                            </>
-                          )}
-
-                          {/* Approved actions: Extend & Lock */}
-                          {u.status === 'approved' && (
-                            <>
-                              <button
-                                onClick={() => setExtendingUser(u)}
-                                className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded-lg hover:bg-emerald-800 shadow-sm transition flex items-center gap-1"
-                              >
-                                <Calendar className="w-3.5 h-3.5" />
-                                <span>Gia hạn / Đổi hạn</span>
-                              </button>
-                              <button
-                                onClick={() => handleToggleStatus(u)}
-                                className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-gray-100 transition"
-                                title="Khóa tài khoản"
-                              >
-                                <Lock className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-
-                          {/* Active / Disabled actions */}
-                          {u.status !== 'pending' && u.status !== 'approved' && (
-                            <button
-                              onClick={() => handleToggleStatus(u)}
-                              className={`px-3 py-1 text-xs font-medium rounded-lg transition ${
-                                u.status === 'disabled'
-                                  ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-rose-50 hover:text-rose-700'
-                              }`}
-                            >
-                              {u.status === 'disabled' ? 'Mở khóa' : 'Khóa'}
-                            </button>
-                          )}
-                          {/* Edit button */}
-                          <button
-                            onClick={() => openEditModal(u)}
-                            className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-lg transition"
-                            title="Sửa thông tin & phân quyền"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <UserTable
+          profiles={filteredProfiles}
+          loading={loading}
+          warehouses={warehouses}
+          investorEntities={investorEntities}
+          activeTab={activeTab}
+          onApproveClick={setApprovingUser}
+          onRejectClick={handleReject}
+          onExtendClick={setExtendingUser}
+          onToggleStatus={handleToggleStatus}
+          onEditClick={setEditingUser}
+        />
       </div>
 
-      {/* Modal 1: Phê duyệt tài khoản & Thiết lập thời gian tra cứu tạm thời */}
+      {/* Modal 1: Approve User & Set Expiry */}
       {approvingUser && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Phê duyệt & Cấp hạn tra cứu</h3>
-                  <p className="text-xs text-gray-500">Cập nhật status = 'approved' và thiết lập thời gian tra cứu tạm thời</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setApprovingUser(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* User Details */}
-            <div className="my-4 p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Họ và tên:</span>
-                <span className="font-semibold text-gray-900">{approvingUser.full_name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Email:</span>
-                <span className="font-medium text-gray-800">{approvingUser.email}</span>
-              </div>
-              {approvingUser.organization && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Cơ quan:</span>
-                  <span className="font-medium text-gray-800 text-right max-w-xs truncate">{approvingUser.organization}</span>
-                </div>
-              )}
-              {approvingUser.purpose && (
-                <div className="flex flex-col gap-1 pt-1 border-t border-gray-200">
-                  <span className="text-gray-500 text-xs">Mục đích tra cứu:</span>
-                  <span className="text-xs text-gray-700 bg-white p-2 rounded border border-gray-200">{approvingUser.purpose}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Expiry Presets */}
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-800">
-                Chọn thời gian tra cứu tạm thời:
-              </label>
-
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { key: '24h', label: '24 Giờ (1 Ngày)' },
-                  { key: '3d', label: '3 Ngày' },
-                  { key: '7d', label: '7 Ngày (1 Tuần)' },
-                  { key: '30d', label: '30 Ngày (1 Tháng)' },
-                  { key: '90d', label: '90 Ngày (3 Tháng)' },
-                  { key: 'custom', label: 'Tùy chỉnh' },
-                ].map(item => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setExpiryPreset(item.key as any)}
-                    className={`py-2 px-2 text-xs font-medium rounded-lg border text-center transition ${
-                      expiryPreset === item.key
-                        ? 'bg-[#1E3A8A] text-white border-[#1E3A8A] shadow-sm'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {expiryPreset === 'custom' && (
-                <div className="pt-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Ngày & Giờ hết hạn chính xác:
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={customExpiryDate}
-                    onChange={e => setCustomExpiryDate(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-              )}
-
-              {/* Calculated Expiry Preview */}
-              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 flex items-start gap-2">
-                <Clock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                <div className="text-xs text-emerald-900">
-                  <span>Thời hạn truy cập sẽ kết thúc vào: </span>
-                  <strong className="block text-sm text-emerald-950 mt-0.5">
-                    {format(new Date(calculateExpiryDate(expiryPreset, customExpiryDate)), 'HH:mm:ss - dd/MM/yyyy')}
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setApprovingUser(null)}
-                disabled={isApproving}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmApproval}
-                disabled={isApproving}
-                className="px-5 py-2 text-sm font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg shadow-sm transition flex items-center gap-2"
-              >
-                {isApproving && <RefreshCw className="w-4 h-4 animate-spin" />}
-                <span>Xác nhận Phê duyệt</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <ApproveUserModal
+          user={approvingUser}
+          onClose={() => setApprovingUser(null)}
+          onApprove={handleApprove}
+          loading={isApproving}
+        />
       )}
 
-      {/* Modal 2: Gia hạn thời gian tra cứu tạm thời */}
+      {/* Modal 2: Extend User Access */}
       {extendingUser && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Gia hạn quyền tra cứu</h3>
-                  <p className="text-xs text-gray-500">Cập nhật thời gian hết hạn mới (access_expires_at)</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setExtendingUser(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="my-4 p-3 bg-gray-50 rounded-xl border border-gray-200 text-sm">
-              <div className="font-semibold text-gray-900">{extendingUser.full_name} ({extendingUser.email})</div>
-              {extendingUser.access_expires_at && (
-                <div className="text-xs text-gray-500 mt-1">
-                  Hạn hiện tại: {format(new Date(extendingUser.access_expires_at), 'dd/MM/yyyy HH:mm')}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-800">
-                Chọn thời gian gia hạn:
-              </label>
-
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { key: '24h', label: '+24 Giờ' },
-                  { key: '3d', label: '+3 Ngày' },
-                  { key: '7d', label: '+7 Ngày' },
-                  { key: '30d', label: '+30 Ngày' },
-                  { key: 'custom', label: 'Chọn ngày cụ thể' },
-                ].map(item => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setExtendPreset(item.key as any)}
-                    className={`py-2 px-2 text-xs font-medium rounded-lg border text-center transition ${
-                      extendPreset === item.key
-                        ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {extendPreset === 'custom' && (
-                <div className="pt-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Ngày & Giờ kết thúc mới:
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={extendCustomDate}
-                    onChange={e => setExtendCustomDate(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-              )}
-
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex items-start gap-2">
-                <Clock className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
-                <div className="text-xs text-blue-900">
-                  <span>Hạn mới sẽ kéo dài đến: </span>
-                  <strong className="block text-sm text-blue-950 mt-0.5">
-                    {format(new Date(calculateExpiryDate(extendPreset, extendCustomDate)), 'HH:mm:ss - dd/MM/yyyy')}
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setExtendingUser(null)}
-                disabled={isExtending}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmExtend}
-                disabled={isExtending}
-                className="px-5 py-2 text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm transition flex items-center gap-2"
-              >
-                {isExtending && <RefreshCw className="w-4 h-4 animate-spin" />}
-                <span>Cập nhật Hạn Tra Cứu</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <ExtendAccessModal
+          user={extendingUser}
+          onClose={() => setExtendingUser(null)}
+          onExtend={handleExtend}
+          loading={isExtending}
+        />
       )}
 
-      {/* Modal 3: Admin chủ động tạo mới tài khoản trực tiếp (kích hoạt ngay) */}
+      {/* Modal 3: Create Direct User */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-gray-100 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-[#1E3A8A] text-white rounded-lg">
-                  <UserPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Tạo tài khoản trực tiếp</h3>
-                  <p className="text-xs text-gray-500">Tài khoản được kích hoạt ngay, không cần qua bước chờ duyệt</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateDirectUser} className="space-y-4 my-4">
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
-                <span>
-                  <strong>Kích hoạt trực tiếp:</strong> Tài khoản tạo bởi Ban Quản Trị / Thủ kho có trạng thái kích hoạt ngay lập tức mà không cần qua quy trình duyệt đơn.
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Họ và tên <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Nguyễn Văn A"
-                    value={newFullName}
-                    onChange={e => setNewFullName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Email đăng nhập <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="user@example.com"
-                    value={newEmail}
-                    onChange={e => {
-                      setNewEmail(e.target.value);
-                      if (!newUsername) {
-                        setNewUsername(e.target.value.split('@')[0]);
-                      }
-                    }}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Tên đăng nhập (Username)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Tùy chọn (mặc định lấy từ email)"
-                    value={newUsername}
-                    onChange={e => setNewUsername(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Mật khẩu khởi tạo
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Mặc định: 123456"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Vai trò tài khoản <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={newRole}
-                    onChange={e => setNewRole(e.target.value as Role)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] bg-white font-medium"
-                  >
-                    <option value="user">Tra cứu tạm thời (user)</option>
-                    <option value="viewer">Khách tra cứu (viewer)</option>
-                    <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
-                    <option value="btc_manager">Ban Tài Chính (btc_manager)</option>
-                    <option value="capital_dept">Phòng Nguồn Vốn (capital_dept)</option>
-                    <option value="project_dept">Ban PTDA/BĐN (project_dept)</option>
-                    <option value="re_dept">Khối SPG (re_dept)</option>
-                    <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn) (supervisor)</option>
-                    <option value="investor">Chủ đầu tư/Nhà đầu tư (investor)</option>
-                    <option value="admin">Quản trị viên (admin)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Số điện thoại liên hệ
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="0912345678"
-                    value={newPhone}
-                    onChange={e => setNewPhone(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Cơ quan / Đơn vị công tác
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Ngân hàng Vietcombank, Cty Thẩm định giá, v.v."
-                  value={newOrganization}
-                  onChange={e => setNewOrganization(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                />
-              </div>
-
-              {/* Expiry option for user / viewer */}
-              {(newRole === 'user' || newRole === 'viewer') && (
-                <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl space-y-2">
-                  <label className="block text-xs font-semibold text-orange-950">
-                    Thời gian tra cứu tạm thời:
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { key: '7d', label: '7 Ngày' },
-                      { key: '30d', label: '30 Ngày' },
-                      { key: '90d', label: '90 Ngày' },
-                      { key: 'permanent', label: 'Không giới hạn' },
-                      { key: 'custom', label: 'Tùy chỉnh' },
-                    ].map(item => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setNewExpiryPreset(item.key as any)}
-                        className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition ${
-                          newExpiryPreset === item.key
-                            ? 'bg-orange-600 text-white border-orange-600'
-                            : 'bg-white text-gray-700 border-orange-200 hover:bg-orange-100/50'
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {newExpiryPreset === 'custom' && (
-                    <input
-                      type="datetime-local"
-                      value={newCustomExpiry}
-                      onChange={e => setNewCustomExpiry(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg mt-2"
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Warehouse selector for warehouse_manager */}
-              {newRole === 'warehouse_manager' && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-amber-950 flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-amber-700" />
-                      Phân công kho sổ quản lý: <span className="font-normal text-amber-700">({selectedWarehouseIds.length} kho đã chọn)</span>
-                    </label>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedWarehouseIds(warehouses.map(w => w.id))}
-                        className="text-amber-800 hover:underline font-medium"
-                      >
-                        Chọn tất cả
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedWarehouseIds([])}
-                        className="text-gray-500 hover:underline"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                    {warehouses.map(wh => (
-                      <label key={wh.id} className="flex items-center gap-2 text-xs text-gray-700 bg-white p-2 rounded border border-gray-200 cursor-pointer hover:bg-amber-50/50">
-                        <input
-                          type="checkbox"
-                          checked={selectedWarehouseIds.includes(wh.id)}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setSelectedWarehouseIds(prev => [...prev, wh.id]);
-                            } else {
-                              setSelectedWarehouseIds(prev => prev.filter(id => id !== wh.id));
-                            }
-                          }}
-                          className="rounded text-[#1E3A8A]"
-                        />
-                        <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Multi-select "Kho phụ trách" for capital_dept, project_dept, re_dept, supervisor */}
-              {['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(newRole) && (
-                <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-blue-950 flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-blue-700" />
-                      Kho phụ trách: <span className="font-normal text-blue-700">({assignedWarehouseIds.length} kho đã chọn)</span>
-                    </label>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setAssignedWarehouseIds(warehouses.map(w => w.id))}
-                        className="text-blue-700 hover:text-blue-900 font-medium hover:underline"
-                      >
-                        Chọn tất cả
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setAssignedWarehouseIds([])}
-                        className="text-gray-500 hover:text-gray-700 hover:underline"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-blue-800">
-                    Phân quyền cho tài khoản phụ trách các kho chỉ định (lập đề xuất, giám sát hoặc duyệt).
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                    {warehouses.map(wh => {
-                      const isChecked = assignedWarehouseIds.includes(wh.id);
-                      return (
-                        <label key={wh.id} className={`flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer transition ${
-                          isChecked ? 'bg-blue-100/70 border-blue-300 text-blue-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setAssignedWarehouseIds(prev => [...prev, wh.id]);
-                              } else {
-                                setAssignedWarehouseIds(prev => prev.filter(id => id !== wh.id));
-                              }
-                            }}
-                            className="rounded text-[#1E3A8A]"
-                          />
-                          <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Multi-select "Pháp nhân đại diện" for investor */}
-              {newRole === 'investor' && (
-                <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-rose-950 flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-rose-700" />
-                      Pháp nhân đại diện: <span className="font-normal text-rose-700">({selectedOwnerEntityIds.length} pháp nhân đã chọn)</span>
-                    </label>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOwnerEntityIds(investorEntities.map(e => e.id))}
-                        className="text-rose-700 hover:text-rose-900 font-medium hover:underline"
-                      >
-                        Chọn tất cả
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOwnerEntityIds([])}
-                        className="text-gray-500 hover:text-gray-700 hover:underline"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-rose-800">
-                    Chỉ định các pháp nhân CĐT/NĐT mà tài khoản đại diện để có quyền xem và gửi yêu cầu mượn/trả GCN sở hữu.
-                  </div>
-                  {investorEntities.length === 0 ? (
-                    <div className="p-3 bg-white rounded-lg border border-rose-200 text-xs text-rose-600 text-center">
-                      Chưa có dữ liệu danh mục pháp nhân CĐT/NĐT. Vui lòng vào mục Quản trị &gt; Pháp nhân CĐT/NĐT để thêm mới.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
-                      {investorEntities.map(ent => {
-                        const isChecked = selectedOwnerEntityIds.includes(ent.id);
-                        return (
-                          <label key={ent.id} className={`flex items-center gap-2 text-xs p-2.5 rounded-lg border cursor-pointer transition ${
-                            isChecked ? 'bg-rose-100/70 border-rose-300 text-rose-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                          }`}>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  setSelectedOwnerEntityIds(prev => [...prev, ent.id]);
-                                } else {
-                                  setSelectedOwnerEntityIds(prev => prev.filter(id => id !== ent.id));
-                                }
-                              }}
-                              className="rounded text-rose-600"
-                            />
-                            <span className="flex-1 truncate">
-                              {ent.name} {ent.company_code ? `(${ent.company_code})` : ''}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  disabled={isCreating}
-                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg shadow-sm transition flex items-center gap-2"
-                >
-                  {isCreating && <RefreshCw className="w-4 h-4 animate-spin" />}
-                  <span>Kích hoạt ngay</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CreateUserModal
+          warehouses={warehouses}
+          investorEntities={investorEntities}
+          onClose={() => setIsCreateModalOpen(false)}
+          onCreate={handleCreateDirectUser}
+          loading={isCreating}
+        />
       )}
 
-      {/* Modal: Chỉnh sửa thông tin & Phân quyền người dùng */}
+      {/* Modal 4: Edit User & Permissions */}
       {editingUser && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-100 text-[#1E3A8A] rounded-lg">
-                  <Edit2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Sửa thông tin & Phân quyền</h3>
-                  <p className="text-xs text-gray-500">Cập nhật vai trò, trạng thái, kho phụ trách và pháp nhân đại diện</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setEditingUser(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveUserEdit} className="space-y-4 mt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Email đăng nhập
-                  </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={editingUser.email || ''}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 bg-gray-100 text-gray-500 rounded-lg cursor-not-allowed"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Họ và tên <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editFullName}
-                    onChange={e => setEditFullName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Vai trò tài khoản <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={editRole}
-                    onChange={e => setEditRole(e.target.value as Role)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] bg-white font-medium"
-                  >
-                    <option value="user">Tra cứu tạm thời (user)</option>
-                    <option value="viewer">Khách tra cứu (viewer)</option>
-                    <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
-                    <option value="btc_manager">Ban Tài Chính (btc_manager)</option>
-                    <option value="capital_dept">Phòng Nguồn Vốn (capital_dept)</option>
-                    <option value="project_dept">Ban PTDA/BĐN (project_dept)</option>
-                    <option value="re_dept">Khối SPG (re_dept)</option>
-                    <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn) (supervisor)</option>
-                    <option value="investor">Chủ đầu tư/Nhà đầu tư (investor)</option>
-                    <option value="admin">Quản trị viên (admin)</option>
-                    <option value="super_admin">Quản trị tối cao (super_admin)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Trạng thái tài khoản <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={editStatus}
-                    onChange={e => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] bg-white font-medium"
-                  >
-                    <option value="active">Hoạt động (active)</option>
-                    <option value="approved">Đã duyệt tra cứu (approved)</option>
-                    <option value="pending">Chờ phê duyệt (pending)</option>
-                    <option value="disabled">Đã khóa (disabled)</option>
-                    <option value="rejected">Từ chối (rejected)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Số điện thoại liên hệ
-                  </label>
-                  <input
-                    type="tel"
-                    value={editPhone}
-                    onChange={e => setEditPhone(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Cơ quan / Đơn vị công tác
-                  </label>
-                  <input
-                    type="text"
-                    value={editOrganization}
-                    onChange={e => setEditOrganization(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-              </div>
-
-              {/* Expiry date setting */}
-              {(editStatus === 'approved' || editRole === 'user' || editRole === 'viewer') && (
-                <div className="p-3.5 bg-orange-50/80 border border-orange-200 rounded-xl space-y-1.5">
-                  <label className="block text-xs font-semibold text-orange-950 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-orange-700" />
-                    Hạn thời gian tra cứu tạm thời:
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={editExpiresAt}
-                    onChange={e => setEditExpiresAt(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg"
-                  />
-                  <p className="text-[11px] text-orange-800">
-                    Để trống nếu muốn cấp quyền không thời hạn hoặc không áp dụng hạn tra cứu.
-                  </p>
-                </div>
-              )}
-
-              {/* Edit Warehouse Manager: Managed warehouses */}
-              {editRole === 'warehouse_manager' && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-amber-950 flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-amber-700" />
-                      Kho sổ quản lý: <span className="font-normal text-amber-700">({editManagedWarehouseIds.length} kho)</span>
-                    </label>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setEditManagedWarehouseIds(warehouses.map(w => w.id))}
-                        className="text-amber-800 hover:underline font-medium"
-                      >
-                        Chọn tất cả
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setEditManagedWarehouseIds([])}
-                        className="text-gray-500 hover:underline"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                    {warehouses.map(wh => (
-                      <label key={wh.id} className="flex items-center gap-2 text-xs text-gray-700 bg-white p-2 rounded border border-gray-200 cursor-pointer hover:bg-amber-50/50">
-                        <input
-                          type="checkbox"
-                          checked={editManagedWarehouseIds.includes(wh.id)}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setEditManagedWarehouseIds(prev => [...prev, wh.id]);
-                            } else {
-                              setEditManagedWarehouseIds(prev => prev.filter(id => id !== wh.id));
-                            }
-                          }}
-                          className="rounded text-[#1E3A8A]"
-                        />
-                        <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Edit Multi-select "Kho phụ trách" for capital_dept, project_dept, re_dept, supervisor */}
-              {['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(editRole) && (
-                <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-blue-950 flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-blue-700" />
-                      Kho phụ trách: <span className="font-normal text-blue-700">({editAssignedWarehouseIds.length} kho)</span>
-                    </label>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setEditAssignedWarehouseIds(warehouses.map(w => w.id))}
-                        className="text-blue-700 hover:text-blue-900 font-medium hover:underline"
-                      >
-                        Chọn tất cả
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setEditAssignedWarehouseIds([])}
-                        className="text-gray-500 hover:text-gray-700 hover:underline"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-blue-800">
-                    Gán danh sách kho sổ mà tài khoản có thẩm quyền nghiệp vụ (theo dõi báo cáo, duyệt, tra cứu).
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                    {warehouses.map(wh => {
-                      const isChecked = editAssignedWarehouseIds.includes(wh.id);
-                      return (
-                        <label key={wh.id} className={`flex items-center gap-2 text-xs p-2 rounded-lg border cursor-pointer transition ${
-                          isChecked ? 'bg-blue-100/70 border-blue-300 text-blue-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setEditAssignedWarehouseIds(prev => [...prev, wh.id]);
-                              } else {
-                                setEditAssignedWarehouseIds(prev => prev.filter(id => id !== wh.id));
-                              }
-                            }}
-                            className="rounded text-[#1E3A8A]"
-                          />
-                          <span className="truncate">{wh.name} {wh.is_central ? '(Kho TT)' : ''}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Edit Multi-select "Pháp nhân đại diện" for investor */}
-              {editRole === 'investor' && (
-                <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-rose-950 flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-rose-700" />
-                      Pháp nhân đại diện: <span className="font-normal text-rose-700">({editOwnerEntityIds.length} pháp nhân)</span>
-                    </label>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setEditOwnerEntityIds(investorEntities.map(e => e.id))}
-                        className="text-rose-700 hover:text-rose-900 font-medium hover:underline"
-                      >
-                        Chọn tất cả
-                      </button>
-                      <span className="text-gray-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setEditOwnerEntityIds([])}
-                        className="text-gray-500 hover:text-gray-700 hover:underline"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-rose-800">
-                    Chỉ định các pháp nhân CĐT/NĐT mà tài khoản đại diện sở hữu để phân quyền truy cập và gửi đề xuất mượn/trả GCN.
-                  </div>
-                  {investorEntities.length === 0 ? (
-                    <div className="p-3 bg-white rounded-lg border border-rose-200 text-xs text-rose-600 text-center">
-                      Chưa có dữ liệu danh mục pháp nhân CĐT/NĐT. Vui lòng vào mục Quản trị &gt; Pháp nhân CĐT/NĐT để thêm mới.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
-                      {investorEntities.map(ent => {
-                        const isChecked = editOwnerEntityIds.includes(ent.id);
-                        return (
-                          <label key={ent.id} className={`flex items-center gap-2 text-xs p-2.5 rounded-lg border cursor-pointer transition ${
-                            isChecked ? 'bg-rose-100/70 border-rose-300 text-rose-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                          }`}>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  setEditOwnerEntityIds(prev => [...prev, ent.id]);
-                                } else {
-                                  setEditOwnerEntityIds(prev => prev.filter(id => id !== ent.id));
-                                }
-                              }}
-                              className="rounded text-rose-600"
-                            />
-                            <span className="flex-1 truncate">
-                              {ent.name} {ent.company_code ? `(${ent.company_code})` : ''}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setEditingUser(null)}
-                  disabled={isSavingEdit}
-                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEdit}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg shadow-sm transition flex items-center gap-2"
-                >
-                  {isSavingEdit && <RefreshCw className="w-4 h-4 animate-spin" />}
-                  <span>Lưu thay đổi</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <EditUserModal
+          user={editingUser}
+          warehouses={warehouses}
+          investorEntities={investorEntities}
+          onClose={() => setEditingUser(null)}
+          onSave={handleSaveUserEdit}
+          loading={isSavingEdit}
+        />
       )}
     </div>
   );
