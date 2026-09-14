@@ -241,7 +241,7 @@ export const UserManagement: React.FC = () => {
     setIsCreating(true);
     try {
       const created = await createUserDirect(userData);
-      setProfiles(prev => [created, ...prev]);
+      setProfiles(prev => [created, ...prev.filter(p => p.id !== created.id)]);
       toast.success(
         `Tạo tài khoản ${created.full_name} (${created.email}) thành công! Tài khoản đã được kích hoạt trực tiếp ngay lập tức.`,
         { duration: 5000 }

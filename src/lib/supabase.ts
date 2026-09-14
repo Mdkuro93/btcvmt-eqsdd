@@ -4,18 +4,31 @@ import { canLookupData, checkLookupAccess } from './accessGuard';
 import { mockStore } from './mockStore';
 
 // Direct Supabase configuration with environment variables support
+const FALLBACK_SUPABASE_URL = 'https://dkzfjwrrlnupdflrxxao.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRremZqd3JybG51cGRmbHJ4eGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTgxNTgsImV4cCI6MjEwMzk5NDE1OH0.gaOgF8u-_rkg2qNsT2jePAFrjDyTHyXK58hZHwTGvRQ';
+
+// Kiểm tra URL THỰC SỰ hợp lệ (đúng https://*.supabase.co), thay vì chỉ so khớp
+// đúng 1 chuỗi placeholder cụ thể như "your-project" — cách cũ có thể lọt qua
+// nếu container đưa vào 1 giá trị placeholder khác, gây crash toàn bộ app
+// ("Invalid supabaseUrl") ngay lúc khởi động (màn hình trắng).
+function isValidSupabaseUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const u = new URL(value.trim());
+    return (u.protocol === 'https:' || u.protocol === 'http:') && u.hostname.includes('supabase.co');
+  } catch {
+    return false;
+  }
+}
+
 const envUrl = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_URL = (
-  envUrl && !envUrl.includes('your-project')
-    ? envUrl
-    : 'https://dkzfjwrrlnupdflrxxao.supabase.co'
-).trim();
+const SUPABASE_URL = (isValidSupabaseUrl(envUrl) ? envUrl : FALLBACK_SUPABASE_URL).trim();
 
 const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_ANON_KEY = (
-  envKey && !envKey.includes('your-anon-key')
+  typeof envKey === 'string' && envKey.trim().length > 20 && !envKey.includes('your-anon-key')
     ? envKey
-    : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRremZqd3JybG51cGRmbHJ4eGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTgxNTgsImV4cCI6MjEwMzk5NDE1OH0.gaOgF8u-_rkg2qNsT2jePAFrjDyTHyXK58hZHwTGvRQ'
+    : FALLBACK_SUPABASE_ANON_KEY
 ).trim();
 
 export const supabaseUrl = SUPABASE_URL;
@@ -601,13 +614,17 @@ export function isSchemaMissingError(err: any): boolean {
     code === '42P01' ||    // relation does not exist
     code === 'PGRST202' || // function not found in schema cache
     code === 'PGRST200' || // Could not embed / relation not found
+    code === 'PGRST201' || // multiple relationships found
     code === 'PGRST204' || // column not found in schema cache
     code === '42703' ||    // undefined_column
+    code === '42P17' ||    // infinite recursion detected in policy
     message.includes('schema cache') ||
     message.includes('does not exist') ||
     message.includes('Could not find the table') ||
     message.includes('relation') ||
-    message.includes('Could not find')
+    message.includes('Could not find') ||
+    message.includes('infinite recursion') ||
+    message.includes('foreign key relationship')
   ) {
     return true;
   }
@@ -663,4 +680,3 @@ export async function safeSupabaseQuery<T>(
     count: res.count !== undefined && res.count !== null ? res.count : undefined,
   };
 }
-
