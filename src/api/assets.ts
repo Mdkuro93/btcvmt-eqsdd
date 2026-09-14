@@ -39,7 +39,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     id, asset_code, collateral_type, certificate_no, subdivision, lot_no, area,
     owner_name, map_sheet_no, land_lot_no, province, district, ward, address_detail,
     business_project_name, business_plot_code,
-    land_use_purpose, land_use_term, custody_status, lifecycle_status, sale_status,
+    usage_purpose, usage_term, custody_status, lifecycle_status, sale_status,
     mortgage_status, mortgage_bank, mortgage_unit, mortgage_bank_2, mortgage_unit_2,
     mortgage_valuation, collateral_ratio, collateral_value, mortgage_expected_release_date,
     expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,
@@ -81,32 +81,22 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
   try {
     const { data, count, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Lỗi bảng/quan hệ trong fetchAssets từ Supabase, chuyển sang mockStore:', error.message);
-        const allFiltered = mockStore.getAssets(filters);
-        const totalCount = allFiltered.length;
-        const startIndex = (page - 1) * pageSize;
-        const pageData = allFiltered.slice(startIndex, startIndex + pageSize);
-        return { data: pageData, totalCount, source: 'mock' };
-      }
-      throw error;
+      throw new Error('Không thể tải danh sách tài sản từ Supabase: ' + error.message);
     }
-    
+
+    const mapped = (data || []).map((item: any) => ({
+      ...item,
+      land_use_purpose: item.land_use_purpose || item.usage_purpose,
+      land_use_term: item.land_use_term || item.usage_term,
+    }));
+
     return { 
-      data: (data || []) as unknown as Asset[], 
+      data: mapped as unknown as Asset[], 
       totalCount: count ?? (data?.length || 0),
       source: 'supabase'
     };
   } catch (err: any) {
-    if (isSchemaMissingError(err)) {
-      console.warn('Ngoại lệ bảng/quan hệ trong fetchAssets, chuyển sang mockStore:', err);
-      const allFiltered = mockStore.getAssets(filters);
-      const totalCount = allFiltered.length;
-      const startIndex = (page - 1) * pageSize;
-      const pageData = allFiltered.slice(startIndex, startIndex + pageSize);
-      return { data: pageData, totalCount, source: 'mock' };
-    }
-    throw err;
+    throw err instanceof Error ? err : new Error('Không thể tải danh sách tài sản: ' + String(err));
   }
 }
 
@@ -900,17 +890,11 @@ export async function fetchProjects(): Promise<Project[]> {
     );
 
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng projects chưa có trong Supabase, sử dụng mockStore:', error.message);
-        return mockStore.getProjects();
-      }
-      console.warn('Lỗi khi tải danh sách dự án từ Supabase, sử dụng mockStore:', error);
-      return mockStore.getProjects();
+      throw new Error('Không thể tải danh sách dự án từ Supabase: ' + error.message);
     }
     return data || [];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchProjects, fallback sang mockStore:', err);
-    return mockStore.getProjects();
+    throw err instanceof Error ? err : new Error('Không thể tải danh sách dự án: ' + String(err));
   }
 }
 
@@ -1022,17 +1006,11 @@ export async function fetchRegions(): Promise<Region[]> {
       DEFAULT_READ_TIMEOUT
     );
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng regions chưa có trong Supabase, sử dụng mockStore:', error.message);
-        return mockStore.getRegions();
-      }
-      console.warn('Lỗi khi tải danh sách vùng miền từ Supabase, sử dụng mockStore:', error);
-      return mockStore.getRegions();
+      throw new Error('Không thể tải danh sách vùng miền từ Supabase: ' + error.message);
     }
     return data || [];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchRegions, fallback sang mockStore:', err);
-    return mockStore.getRegions();
+    throw err instanceof Error ? err : new Error('Không thể tải danh sách vùng miền: ' + String(err));
   }
 }
 
@@ -1129,17 +1107,11 @@ export async function fetchAreas(): Promise<Area[]> {
       DEFAULT_READ_TIMEOUT
     );
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng areas chưa có trong Supabase, sử dụng mockStore:', error.message);
-        return mockStore.getAreas();
-      }
-      console.warn('Lỗi khi tải danh sách khu vực từ Supabase, sử dụng mockStore:', error);
-      return mockStore.getAreas();
+      throw new Error('Không thể tải danh sách khu vực từ Supabase: ' + error.message);
     }
     return data || [];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchAreas, fallback sang mockStore:', err);
-    return mockStore.getAreas();
+    throw err instanceof Error ? err : new Error('Không thể tải danh sách khu vực: ' + String(err));
   }
 }
 
@@ -1236,17 +1208,11 @@ export async function fetchWarehouses(): Promise<Warehouse[]> {
       DEFAULT_READ_TIMEOUT
     );
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng warehouses chưa có trong Supabase, sử dụng mockStore:', error.message);
-        return mockStore.getWarehouses();
-      }
-      console.warn('Lỗi khi tải danh sách kho từ Supabase, sử dụng mockStore:', error);
-      return mockStore.getWarehouses();
+      throw new Error('Không thể tải danh sách kho từ Supabase: ' + error.message);
     }
     return data || [];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchWarehouses, fallback sang mockStore:', err);
-    return mockStore.getWarehouses();
+    throw err instanceof Error ? err : new Error('Không thể tải danh sách kho: ' + String(err));
   }
 }
 
