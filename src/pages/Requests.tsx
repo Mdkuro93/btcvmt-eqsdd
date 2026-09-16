@@ -70,6 +70,7 @@ export const Requests: React.FC = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [overdueAssets, setOverdueAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [decidingItemId, setDecidingItemId] = useState<string | null>(null);
 
@@ -118,6 +119,7 @@ export const Requests: React.FC = () => {
 
   const loadTransactions = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await fetchTransactions();
       const overdue = await fetchOverdueAssets();
@@ -127,8 +129,10 @@ export const Requests: React.FC = () => {
       if (data && data.length > 0) {
         setExpanded(new Set(data.slice(0, 3).map((t: any) => t.id)));
       }
-    } catch (error) {
-      toast.error('Lỗi tải danh sách phiếu yêu cầu');
+    } catch (error: any) {
+      const errMsg = error?.message || 'Lỗi tải danh sách phiếu yêu cầu';
+      setLoadError(errMsg);
+      toast.error(errMsg);
       console.error(error);
     } finally {
       setLoading(false);
@@ -388,6 +392,21 @@ export const Requests: React.FC = () => {
               toast.success('Đã tải dữ liệu phiếu cục bộ');
             }}
           />
+        ) : loadError ? (
+          <div className="p-8 text-center bg-red-50/50">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 text-red-600 mb-3">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-red-900 mb-1">Không thể tải dữ liệu phiếu yêu cầu</h3>
+            <p className="text-sm text-red-700 max-w-xl mx-auto mb-4">{loadError}</p>
+            <button
+              onClick={() => loadTransactions()}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold rounded-lg shadow-xs transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Thử lại
+            </button>
+          </div>
         ) : filteredTransactions.length === 0 ? (
           <div className="px-6 py-12 text-center text-gray-500">
             Không có phiếu yêu cầu nào phù hợp với bộ lọc hiện tại.

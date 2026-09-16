@@ -18,6 +18,7 @@ import {
   Clock, 
   ChevronRight,
   ShieldCheck,
+  Landmark,
   Users,
   ClipboardCheck
 } from 'lucide-react';
@@ -196,13 +197,20 @@ export const MainLayout: React.FC = () => {
     <div className="flex h-screen bg-[#F8F9FA]">
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        <div className="h-16 flex items-center px-6 border-b border-gray-200 gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#1E3A8A] text-white font-black flex items-center justify-center text-sm shadow-sm">
-            VMT
+        <div className="h-16 flex items-center px-4 border-b border-gray-200 gap-3">
+          {/* Icon Logo Badge - Banking & Corporate */}
+          <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-[#1E3A8A] to-slate-900 border border-white/10 flex items-center justify-center shadow-xs shrink-0">
+            <Landmark className="w-4.5 h-4.5 text-white stroke-[2]" />
           </div>
-          <div>
-            <h1 className="text-sm font-bold text-[#1E3A8A] leading-none">eQSDĐ & TSĐB</h1>
-            <p className="text-[10px] text-gray-500 mt-0.5">Ban Tài Chính Tập Đoàn</p>
+
+          {/* Tên thương hiệu & Hệ thống */}
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm font-bold text-slate-900 leading-none tracking-tight truncate">
+              eQSDĐ &amp; TSĐB
+            </h1>
+            <p className="text-[11px] font-medium tracking-wider uppercase text-slate-400 mt-1 truncate">
+              Ban Tài chính
+            </p>
           </div>
         </div>
         

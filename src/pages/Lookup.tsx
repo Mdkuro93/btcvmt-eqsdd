@@ -25,11 +25,6 @@ export const Lookup: React.FC = () => {
   const [searched, setSearched] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Kiểm tra nếu người dùng chưa đăng nhập -> Chuyển về trang Login
-  if (!profile) {
-    return <Navigate to="/login" replace />;
-  }
-
   const accessCheck = checkLookupAccess(profile);
 
   useEffect(() => {
@@ -37,6 +32,11 @@ export const Lookup: React.FC = () => {
       loadProjects();
     }
   }, [accessCheck.allowed]);
+
+  // Kiểm tra nếu người dùng chưa đăng nhập -> Chuyển về trang Login
+  if (!profile) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleRefreshStatus = async () => {
     setRefreshing(true);

@@ -21,18 +21,15 @@ import { AdminAppUsers } from '../components/admin/AdminAppUsers';
 export const Admin: React.FC = () => {
   const { profile } = useAuth();
 
-  // Dành cho Admin, Quản lý kho (warehouse_manager) và Ban Tài chính
-  if (profile && profile.role !== 'admin' && profile.role !== 'super_admin' && profile.role !== 'warehouse_manager' && profile.role !== 'btc_manager') {
-    return <Navigate to="/lookup" replace />;
-  }
-
   const [activeTab, setActiveTab] = useState<'regions' | 'areas' | 'warehouses' | 'projects' | 'users' | 'app_users' | 'investor_entities'>(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
-    if (tabParam === 'investor_entities') return 'investor_entities';
-    if (tabParam === 'app_users') return 'app_users';
-    if (profile?.role === 'warehouse_manager') return 'investor_entities';
-    return 'users';
+    if (tabParam === 'regions' || tabParam === 'areas' || tabParam === 'projects' || 
+        tabParam === 'warehouses' || tabParam === 'investor_entities' || 
+        tabParam === 'users' || tabParam === 'app_users') {
+      return tabParam;
+    }
+    return 'regions';
   });
 
   // Reset standard data modal
@@ -40,6 +37,11 @@ export const Admin: React.FC = () => {
   const [isResetting, setIsResetting] = useState(false);
   // Key to force refresh sub-components after standard data reset
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Dành cho Admin, Quản lý kho (warehouse_manager) và Ban Tài chính
+  if (profile && profile.role !== 'admin' && profile.role !== 'super_admin' && profile.role !== 'warehouse_manager' && profile.role !== 'btc_manager') {
+    return <Navigate to="/lookup" replace />;
+  }
 
   // Reset standard corporate dataset
   const handleResetToStandardData = () => {
@@ -85,14 +87,6 @@ export const Admin: React.FC = () => {
       {/* Tabs */}
       <div className="flex border-b border-gray-200 bg-white px-4 rounded-t-xl overflow-x-auto gap-1">
         <button
-          onClick={() => setActiveTab('areas')}
-          className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
-            activeTab === 'areas' ? 'border-[#1E3A8A] text-[#1E3A8A]' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <MapPin className="w-4 h-4" /> Địa bàn
-        </button>
-        <button
           onClick={() => setActiveTab('regions')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
             activeTab === 'regions' ? 'border-[#1E3A8A] text-[#1E3A8A]' : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -101,12 +95,12 @@ export const Admin: React.FC = () => {
           <Building2 className="w-4 h-4" /> Vùng
         </button>
         <button
-          onClick={() => setActiveTab('warehouses')}
+          onClick={() => setActiveTab('areas')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
-            activeTab === 'warehouses' ? 'border-[#1E3A8A] text-[#1E3A8A]' : 'border-transparent text-gray-500 hover:text-gray-700'
+            activeTab === 'areas' ? 'border-[#1E3A8A] text-[#1E3A8A]' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          <WarehouseIcon className="w-4 h-4" /> Kho lưu trữ
+          <MapPin className="w-4 h-4" /> Địa bàn
         </button>
         <button
           onClick={() => setActiveTab('projects')}
@@ -115,6 +109,14 @@ export const Admin: React.FC = () => {
           }`}
         >
           <FolderGit2 className="w-4 h-4" /> Dự án
+        </button>
+        <button
+          onClick={() => setActiveTab('warehouses')}
+          className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
+            activeTab === 'warehouses' ? 'border-[#1E3A8A] text-[#1E3A8A]' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <WarehouseIcon className="w-4 h-4" /> Kho lưu trữ
         </button>
         <button
           onClick={() => setActiveTab('investor_entities')}
@@ -143,10 +145,10 @@ export const Admin: React.FC = () => {
       </div>
 
       <div className="bg-white p-6 rounded-b-xl border border-gray-200 shadow-xs" key={refreshKey}>
-        {activeTab === 'areas' && <AdminAreas />}
         {activeTab === 'regions' && <AdminRegions />}
-        {activeTab === 'warehouses' && <AdminWarehouses />}
+        {activeTab === 'areas' && <AdminAreas />}
         {activeTab === 'projects' && <AdminProjects />}
+        {activeTab === 'warehouses' && <AdminWarehouses />}
         {activeTab === 'investor_entities' && <AdminInvestorEntities />}
         {activeTab === 'users' && <AdminInternalUsers />}
         {activeTab === 'app_users' && <AdminAppUsers />}

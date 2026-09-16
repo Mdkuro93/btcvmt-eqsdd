@@ -300,28 +300,45 @@ export async function createUserDirect(profileData: {
   const finalStatus = profileData.status || (profileData.role === 'user' ? 'approved' : 'active');
   const permissions = DEFAULT_PERMISSIONS_BY_ROLE[profileData.role] || DEFAULT_PERMISSIONS_BY_ROLE['viewer'];
 
-  const { data, error } = await supabase.functions.invoke('admin-create-user', {
-    body: {
-      email: cleanEmail,
-      password: profileData.password, // Mật khẩu do admin nhập
-      full_name: profileData.full_name.trim(),
-      username: derivedUsername,
-      role: profileData.role,
-      permissions,
-      status: finalStatus,
-      phone: profileData.phone?.trim() || null,
-      organization: profileData.organization?.trim() || null,
-      region_id: profileData.region_id || null,
-      area_id: profileData.area_id || null,
-      managed_warehouse_ids: profileData.managed_warehouse_ids || null,
-      assigned_warehouse_ids: profileData.assigned_warehouse_ids || null,
-      owner_entity_ids: profileData.owner_entity_ids || null,
-      access_expires_at: profileData.access_expires_at || null,
-    }
-  });
+  let invokeRes: { data: any; error: any };
+  try {
+    invokeRes = await supabase.functions.invoke('admin-create-user', {
+      body: {
+        email: cleanEmail,
+        password: profileData.password, // Mật khẩu do admin nhập
+        full_name: profileData.full_name.trim(),
+        username: derivedUsername,
+        role: profileData.role,
+        permissions,
+        status: finalStatus,
+        phone: profileData.phone?.trim() || null,
+        organization: profileData.organization?.trim() || null,
+        region_id: profileData.region_id || null,
+        area_id: profileData.area_id || null,
+        managed_warehouse_ids: profileData.managed_warehouse_ids || null,
+        assigned_warehouse_ids: profileData.assigned_warehouse_ids || null,
+        owner_entity_ids: profileData.owner_entity_ids || null,
+        access_expires_at: profileData.access_expires_at || null,
+      }
+    });
+  } catch (invokeErr: any) {
+    throw new Error(
+      `Lỗi kết nối Edge Function (admin-create-user): ${invokeErr?.message || 'Không thể gửi yêu cầu'}. ` +
+      `Vui lòng kiểm tra Supabase Edge Function 'admin-create-user' đã được deploy lên dự án Supabase chưa (supabase functions deploy admin-create-user).`
+    );
+  }
+
+  const { data, error } = invokeRes;
 
   if (error) {
-    throw new Error(`Lỗi gọi Edge Function: ${error.message}`);
+    const errorMsg = error.message || 'Lỗi không xác định';
+    if (errorMsg.includes('Failed to send a request') || errorMsg.includes('404') || errorMsg.includes('not found')) {
+      throw new Error(
+        `Edge Function 'admin-create-user' chưa được triển khai hoặc không phản hồi trên Supabase (${errorMsg}). ` +
+        `Vui lòng deploy hàm bằng lệnh: npx supabase functions deploy admin-create-user`
+      );
+    }
+    throw new Error(`Lỗi gọi Edge Function: ${errorMsg}`);
   }
 
   if (!data?.success) {

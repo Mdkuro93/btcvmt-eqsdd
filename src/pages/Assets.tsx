@@ -170,7 +170,7 @@ export const Assets: React.FC = () => {
 
       setAssets(res.data || []);
       setTotalCount(res.totalCount || 0);
-      setDataSource(res.source || (isSupabaseConfigured ? 'supabase' : 'mock'));
+      setDataSource((res.source || (isSupabaseConfigured ? 'supabase' : 'mock')) as 'supabase' | 'mock');
 
       if (res.error) {
         setFetchError(res.error);

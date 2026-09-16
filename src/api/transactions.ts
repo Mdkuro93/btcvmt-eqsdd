@@ -22,7 +22,6 @@ export async function fetchTransactions(): Promise<any[]> {
         items:transaction_items(
           *,
           asset:assets(*, projects(name)),
-          confirmed_asset:assets!transaction_items_confirmed_asset_id_fkey(*, projects(name)),
           decided_by:profiles!transaction_items_decided_by_fkey(full_name, email)
         )
       `)
@@ -30,8 +29,24 @@ export async function fetchTransactions(): Promise<any[]> {
     DEFAULT_READ_TIMEOUT
   );
 
-  if (error) throw error;
-  return data || [];
+  if (error) {
+    if (error.code === '42P17') {
+      throw new Error(
+        'Lỗi đệ quy chính sách RLS (42P17) trên bảng transaction_items / transactions: ' +
+        'Vui lòng thực thi migration 0019_fix_transaction_policies_recursion.sql trên Supabase SQL Editor để gỡ bỏ các policy cũ bị đệ quy chéo.'
+      );
+    }
+    throw error;
+  }
+  
+  return (data || []).map((tx: any) => ({
+    ...tx,
+    items: (tx.items || []).map((item: any) => ({
+      ...item,
+      confirmed_asset_id: item.confirmed_asset_id || item.details?.confirmed_asset_id || null,
+      confirmed_asset: item.confirmed_asset || item.asset
+    }))
+  }));
 }
 
 export async function createTransaction(
@@ -254,15 +269,16 @@ export async function decideTransactionItem(
   }
 
   if (isSupabaseConfigured) {
+    const rpcDetails = confirmedAssetId ? { ...details, confirmed_asset_id: confirmedAssetId } : details;
+
     // Call secure RPC with timeout
     const { error } = await withTimeout(
       supabase.rpc('decide_transaction_item', {
         p_item_id: itemId,
         p_status: decision,
         p_notes: notes || null,
-        p_details: details,
+        p_details: rpcDetails,
         p_voucher_code: generatedVoucher || null,
-        p_confirmed_asset_id: confirmedAssetId || null,
       }),
       DEFAULT_WRITE_TIMEOUT
     );

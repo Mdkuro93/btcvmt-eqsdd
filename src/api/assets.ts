@@ -39,7 +39,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     id, asset_code, collateral_type, certificate_no, subdivision, lot_no, area,
     owner_name, map_sheet_no, land_lot_no, province, district, ward, address_detail,
     business_project_name, business_plot_code,
-    usage_purpose, usage_term, custody_status, lifecycle_status, sale_status,
+    usage_purpose, custody_status, lifecycle_status, sale_status,
     mortgage_status, mortgage_bank, mortgage_unit, mortgage_bank_2, mortgage_unit_2,
     mortgage_valuation, collateral_ratio, collateral_value, mortgage_expected_release_date,
     expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,

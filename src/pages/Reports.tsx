@@ -290,7 +290,7 @@ export const Reports: React.FC = () => {
           idx + 1,
           // Thông tin chung
           projectDisplayName,
-          asset.usage_purpose || '-',
+          asset.asset_type || '-',
           asset.parent_asset_id ? 'Sổ con (Tách thửa)' : (asset.lifecycle_status === 'invalidated' ? 'Sổ gốc (Đã tách)' : 'Sổ chính'),
           asset.subdivision || '-',
           asset.lot_no || asset.land_lot_no || '-',
@@ -303,16 +303,18 @@ export const Reports: React.FC = () => {
           asset.address_detail || (asset.province ? `${asset.district || ''}, ${asset.province}` : '-'),
           asset.certificate_no,
           asset.registry_no || '-',
-          asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : (asset.created_at ? new Date(asset.created_at).toLocaleDateString('vi-VN') : '-'),
-          asset.warehouses?.name || '-',
+          asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : 'Chưa cập nhật',
+          asset.managing_unit || '-',
           asset.usage_purpose || '-',
-          asset.usage_term || '-',
+          asset.usage_term_type === 'long_term'
+            ? 'Lâu dài'
+            : (asset.usage_term_date ? new Date(asset.usage_term_date).toLocaleDateString('vi-VN') : '-'),
           // Thế chấp
           isMortgaged ? 'Đã thế chấp' : 'Chưa thế chấp',
           isMortgaged ? (asset.mortgage_bank || 'Chưa cập nhật') : '-',
           isMortgaged ? (asset.mortgage_unit || 'Chưa cập nhật') : '-',
-          '-',
-          '-',
+          isMortgaged ? (asset.mortgage_bank_2 || '-') : '-',
+          isMortgaged ? (asset.mortgage_unit_2 || '-') : '-',
           valuation ? valuation : 0,
           guaranteeRatio ? `${guaranteeRatio}%` : '-',
           guaranteeVal ? guaranteeVal : 0,
@@ -436,20 +438,15 @@ export const Reports: React.FC = () => {
           {/* HEADER BANNER LIKE EXCEL SPREADSHEET */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-amber-500 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-md border border-amber-600">
-              SUN
-            </div>
-            <div>
-              <div className="text-xs font-bold text-amber-700 uppercase tracking-widest">TẬP ĐOÀN SUN GROUP / TẬP ĐOÀN VMT</div>
-              <h1 className="text-xl sm:text-2xl font-black text-red-700 uppercase tracking-tight">
-                BÁO CÁO THEO DÕI CHI TIẾT TỒN KHO BẤT ĐỘNG SẢN {selectedRegion.toUpperCase()}
-              </h1>
-              <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                <span>Kỳ báo cáo: <strong className="text-gray-800">{reportPeriod}</strong></span>
-                <span>•</span>
-                <span>Ngày lập: <strong className="text-gray-800">{new Date().toLocaleDateString('vi-VN')}</strong></span>
-              </div>
+          <div>
+            <div className="text-xs font-bold text-amber-700 uppercase tracking-widest">TẬP ĐOÀN SUN GROUP</div>
+            <h1 className="text-xl sm:text-2xl font-black text-red-700 uppercase tracking-tight">
+              BÁO CÁO THEO DÕI CHI TIẾT TỒN KHO BẤT ĐỘNG SẢN {selectedRegion.toUpperCase()}
+            </h1>
+            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+              <span>Kỳ báo cáo: <strong className="text-gray-800">{reportPeriod}</strong></span>
+              <span>•</span>
+              <span>Ngày lập: <strong className="text-gray-800">{new Date().toLocaleDateString('vi-VN')}</strong></span>
             </div>
           </div>
 
@@ -820,7 +817,7 @@ export const Reports: React.FC = () => {
                       </td>
 
                       {/* THÔNG TIN CHUNG */}
-                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.usage_purpose || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.asset_type || '-'}</td>
                       <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>
                         {asset.parent_asset_id ? (
                           <span className="text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded font-medium">Sổ con (Tách)</span>
@@ -856,13 +853,17 @@ export const Reports: React.FC = () => {
                       <td className={`${cellPadding} font-bold text-[#1E3A8A] border-r border-gray-200`}>{asset.certificate_no}</td>
                       <td className={`${cellPadding} text-gray-600 font-mono border-r border-gray-200`}>{asset.registry_no || '-'}</td>
                       <td className={`${cellPadding} text-gray-600 border-r border-gray-200`}>
-                        {asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : (asset.created_at ? new Date(asset.created_at).toLocaleDateString('vi-VN') : '-')}
+                        {asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}
                       </td>
                       <td className={`${cellPadding} font-medium text-gray-800 border-r border-gray-200 min-w-[150px]`}>
-                        {asset.warehouses?.name || '-'}
+                        {asset.managing_unit || '-'}
                       </td>
                       <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[150px]`}>{asset.usage_purpose || '-'}</td>
-                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.usage_term || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>
+                        {asset.usage_term_type === 'long_term'
+                          ? 'Lâu dài'
+                          : (asset.usage_term_date ? new Date(asset.usage_term_date).toLocaleDateString('vi-VN') : '-')}
+                      </td>
 
                       {/* THÔNG TIN THẾ CHẤP NGÂN HÀNG */}
                       <td className={`${cellPadding} border-r border-gray-200 text-center font-bold`}>
@@ -878,8 +879,12 @@ export const Reports: React.FC = () => {
                       <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[130px]`}>
                         {isMortgaged ? (asset.mortgage_unit || 'Chưa cập nhật') : '-'}
                       </td>
-                      <td className={`${cellPadding} text-center text-gray-400 border-r border-gray-200`}>-</td>
-                      <td className={`${cellPadding} text-center text-gray-400 border-r border-gray-200`}>-</td>
+                      <td className={`${cellPadding} font-semibold text-red-900 border-r border-gray-200 min-w-[160px]`}>
+                        {isMortgaged ? (asset.mortgage_bank_2 || '-') : '-'}
+                      </td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[130px]`}>
+                        {isMortgaged ? (asset.mortgage_unit_2 || '-') : '-'}
+                      </td>
                       <td className={`${cellPadding} font-bold text-gray-900 border-r border-gray-200 text-right min-w-[130px]`}>
                         {valuation ? `${valuation.toLocaleString('vi-VN')} đ` : '-'}
                       </td>
@@ -953,4 +958,3 @@ export const Reports: React.FC = () => {
 </div>
 );
 };
-
