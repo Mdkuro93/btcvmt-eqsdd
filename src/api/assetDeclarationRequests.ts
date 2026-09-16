@@ -70,3 +70,16 @@ export async function rejectDeclarationRequest(requestId: string, reason: string
 
   if (error) throw new Error('Lỗi rejectDeclarationRequest: ' + error.message);
 }
+
+export async function updateDeclarationRequest(requestId: string, payload: any): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Tính năng này yêu cầu kết nối Supabase.');
+  }
+
+  const { error } = await withTimeout(
+    supabase.from('asset_declaration_requests').update(payload).eq('id', requestId),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) throw new Error('Lỗi updateDeclarationRequest: ' + error.message);
+}

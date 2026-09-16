@@ -3,6 +3,7 @@ import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems  }
 import { fetchOverdueAssets } from '../api/assets';
 import { fetchWarehouses, fetchAssets } from '../api/assets';
 import { fetchDeclarationRequests, approveDeclarationRequest, rejectDeclarationRequest } from '../api/assetDeclarationRequests';
+import { ReviewDeclarationRequestModal } from '../components/ReviewDeclarationRequestModal';
 import { generateNextAssetCode } from '../lib/assetIdentifier';
 import { DecideRequestModal } from '../components/DecideRequestModal';
 import { BulkDecideModal } from '../components/BulkDecideModal';
@@ -71,6 +72,7 @@ export const Requests: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'giao_dich' | 'gcn_moi'>('giao_dich');
   const [declarationRequests, setDeclarationRequests] = useState<any[]>([]);
   const [loadingDeclarations, setLoadingDeclarations] = useState(false);
+  const [reviewRequest, setReviewRequest] = useState<any>(null);
   const { profile, user } = useAuth();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [overdueAssets, setOverdueAssets] = useState<any[]>([]);
@@ -653,7 +655,17 @@ export const Requests: React.FC = () => {
             })}
           </div>
         )}
+
       </div>
+      
+      {reviewRequest && (
+        <ReviewDeclarationRequestModal
+          isOpen={!!reviewRequest}
+          onClose={() => setReviewRequest(null)}
+          onSuccess={loadDeclarationRequests}
+          request={reviewRequest}
+        />
+      )}
       </>) : (
       <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
         {loadingDeclarations ? (
@@ -693,12 +705,15 @@ export const Requests: React.FC = () => {
                       <ItemStatusBadge status={req.status} />
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {isApprover && req.status === 'pending' && (
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => handleRejectDeclaration(req)} className="px-3 py-1 rounded text-red-700 hover:bg-red-50 border border-red-200 font-semibold">Từ chối</button>
-                          <button onClick={() => handleApproveDeclaration(req)} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm">Duyệt</button>
-                        </div>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => setReviewRequest(req)} className="px-3 py-1 rounded text-blue-700 hover:bg-blue-50 border border-blue-200 font-semibold">Chi tiết</button>
+                        {isApprover && req.status === 'pending' && (
+                          <>
+                            <button onClick={() => handleRejectDeclaration(req)} className="px-3 py-1 rounded text-red-700 hover:bg-red-50 border border-red-200 font-semibold">Từ chối</button>
+                            <button onClick={() => handleApproveDeclaration(req)} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm">Duyệt</button>
+                          </>
+                        )}
+                      </div>
                       {req.status === 'rejected' && req.rejection_reason && (
                         <div className="text-red-600 text-[11px] mt-1 text-right">Lý do: {req.rejection_reason}</div>
                       )}
