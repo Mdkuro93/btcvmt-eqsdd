@@ -53,6 +53,7 @@ import { supabase, isSupabaseConfigured, supabaseUrl } from '../lib/supabase';
 import { canTransferAsset, canBulkTransferAssets } from '../lib/permissions';
 import { AssetTransferModal } from '../components/AssetTransferModal';
 import { AssetTransferHistory } from '../components/AssetTransferHistory';
+import { DeclareNewAssetModal } from '../components/DeclareNewAssetModal';
 
 import { LoadingFallback } from '../components/LoadingFallback';
 import { mockStore } from '../lib/mockStore';
@@ -93,6 +94,7 @@ export const Assets: React.FC = () => {
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDeclareModalOpen, setIsDeclareModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
@@ -395,12 +397,22 @@ export const Assets: React.FC = () => {
               </button>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-xs font-bold rounded-lg shadow-xs text-white bg-[#1E3A8A] hover:bg-blue-800 transition-colors"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-xs font-bold rounded-lg shadow-xs text-white bg-indigo-700 hover:bg-indigo-800 transition-colors"
               >
                 <Plus className="mr-1.5 h-4 w-4" />
-                Khai báo GCN mới
+                Tạo GCN thủ công (Admin)
               </button>
             </>
+          )}
+          
+          {['super_admin', 'admin', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'investor'].includes(profile?.role || '') && (
+            <button
+              onClick={() => setIsDeclareModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-xs font-bold rounded-lg shadow-xs text-white bg-[#1E3A8A] hover:bg-blue-800 transition-colors"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Đề xuất khai báo GCN mới
+            </button>
           )}
         </div>
       </div>
@@ -1489,6 +1501,12 @@ export const Assets: React.FC = () => {
         onSuccess={handleTransferSuccess}
         assets={transferTargetAssets}
         currentUser={profile}
+      />
+
+      <DeclareNewAssetModal
+        isOpen={isDeclareModalOpen}
+        onClose={() => setIsDeclareModalOpen(false)}
+        onSuccess={loadAssets}
       />
     </div>
   );
