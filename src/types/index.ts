@@ -121,6 +121,8 @@ export type CustodyStatus = 'in_stock' | 'checked_out' | 'in_transit';
 export type LifecycleStatus = 'active' | 'split' | 'invalidated';
 export type SaleStatus = 'not_ready' | 'ready_for_sale' | 'sold';
 export type MortgageStatus = 'none' | 'mortgaged';
+export type RelationshipType = 'SPLIT_FULL' | 'SPLIT_PARTIAL' | 'RENEW' | 'MERGE';
+export type InvalidationType = 'NONE' | 'PARTIAL' | 'FULL';
 
 export interface Asset {
   id: string;
@@ -166,9 +168,17 @@ export interface Asset {
   // Ghi chú
   notes?: string | null;              // Ghi chú tự do cấp tài sản
 
-  // File scan & Tách sổ
+  // File scan & Tách sổ / Phả hệ (Lineage)
   scan_file_url?: string | null;      // Đường dẫn / Upload scan GCN
-  parent_asset_id?: string | null;    // Sổ gốc (nếu là sổ con sau tách)
+  parent_asset_id?: string | null;    // Sổ gốc (nếu là sổ con sau tách/cấp đổi)
+  relationship_type?: RelationshipType | null; // SPLIT_FULL, SPLIT_PARTIAL, RENEW, MERGE
+  invalidation_type?: InvalidationType | null; // NONE, PARTIAL, FULL
+  remaining_area?: number | null;     // Diện tích còn lại của sổ gốc khi tách 1 phần
+  original_area?: number | null;      // Diện tích ban đầu trước khi tách
+  is_in_warehouse?: boolean;          // Đang thực tế lưu kho hay đã xuất kho
+  status?: 'ACTIVE' | 'REVOKED' | 'DISPOSED' | 'PENDING' | string;
+  parent_asset?: Asset | null;
+  child_assets?: Asset[];
 
   // Thông tin mượn
   expected_return_date?: string | null; // Hạn trả mượn dự kiến

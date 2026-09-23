@@ -118,39 +118,72 @@ export async function createTransaction(
     return newTx;
   }
 
-  const { data: tx, error: txErr } = await withTimeout(
-    supabase
-      .from('transactions')
-      .insert([{ type: txType, notes: txNotes, created_by: createdBy }])
-      .select()
-      .single(),
-    DEFAULT_WRITE_TIMEOUT
-  );
-
-  if (txErr) throw txErr;
-
-  const itemsToInsert = items.map(it => ({
-    transaction_id: tx.id,
+  const itemsPayload = items.map(it => ({
     asset_id: it.asset_id,
     type: it.type,
     reason: it.details?.reason || null,
-    details: it.details,
-    status: 'pending',
+    details: it.details || {},
   }));
 
-  const { data: insertedItems, error: itErr } = await withTimeout(
-    supabase
-      .from('transaction_items')
-      .insert(itemsToInsert)
-      .select(),
+  // Ưu tiên gọi RPC atomic create_transaction_request
+  const { data: rpcResult, error: rpcErr } = await withTimeout(
+    supabase.rpc('create_transaction_request', {
+      p_type: txType,
+      p_notes: txNotes || null,
+      p_items: itemsPayload,
+    }),
     DEFAULT_WRITE_TIMEOUT
   );
 
-  if (itErr) throw itErr;
+  let finalTx: any = null;
+  let finalItems: any[] = [];
+
+  if (!rpcErr && rpcResult) {
+    finalTx = rpcResult;
+    finalItems = rpcResult.items || [];
+  } else {
+    // Nếu RPC chưa được nạp (PGRST202) hoặc lỗi khác, thực hiện insert trực tiếp qua bảng
+    const { data: tx, error: txErr } = await withTimeout(
+      supabase
+        .from('transactions')
+        .insert([{ type: txType, notes: txNotes, created_by: createdBy }])
+        .select()
+        .single(),
+      DEFAULT_WRITE_TIMEOUT
+    );
+
+    if (txErr) {
+      throw new Error('Lỗi tạo phiếu yêu cầu: ' + (txErr.message || 'Không thể ghi nhận phiếu vào hệ thống'));
+    }
+
+    const itemsToInsert = items.map(it => ({
+      transaction_id: tx.id,
+      asset_id: it.asset_id,
+      type: it.type,
+      reason: it.details?.reason || null,
+      details: it.details,
+      status: 'pending',
+    }));
+
+    const { data: insertedItems, error: itErr } = await withTimeout(
+      supabase
+        .from('transaction_items')
+        .insert(itemsToInsert)
+        .select(),
+      DEFAULT_WRITE_TIMEOUT
+    );
+
+    if (itErr) {
+      throw new Error('Lỗi lưu danh sách GCN vào phiếu: ' + (itErr.message || 'Chưa thỏa mãn chính sách bảo mật RLS'));
+    }
+
+    finalTx = tx;
+    finalItems = insertedItems || [];
+  }
 
   try {
     const current = mockStore.getTransactions();
-    const newTxId = tx.id;
+    const newTxId = finalTx.id;
     const assets = mockStore.getAssets();
 
     const newTx = {
@@ -160,7 +193,7 @@ export async function createTransaction(
       created_at: new Date().toISOString(),
       created_by: { full_name: 'Người dùng hiện tại', email: 'user@btcvmt.vn' },
       items: items.map((it, idx) => ({
-        id: insertedItems?.[idx]?.id || 'txi-' + Date.now() + '-' + idx,
+        id: finalItems?.[idx]?.id || 'txi-' + Date.now() + '-' + idx,
         asset_id: it.asset_id,
         type: it.type,
         reason: it.details?.reason || null,
@@ -181,7 +214,7 @@ export async function createTransaction(
     });
   }
 
-  return { ...tx, items: insertedItems };
+  return { ...finalTx, items: finalItems };
 }
 
 export async function decideTransactionItem(

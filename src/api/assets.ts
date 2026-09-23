@@ -46,6 +46,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,
     current_holder_dept, notes, asset_type, registry_no, registry_date, managing_unit,
     certificate_group, usage_term_type, usage_term_date, parent_asset_id, created_at,
+    relationship_type, invalidation_type, remaining_area, original_area, is_in_warehouse, status,
     updated_at, updated_by,
     updater:profiles!updated_by(id, full_name, email),
     projects:projects(name, areas(name, region_id, regions(name))),
@@ -106,8 +107,10 @@ export async function fetchAssetIdentifierCandidates(projectId?: string): Promis
   let query = supabase.from('assets').select(`
     id, asset_code, collateral_type, certificate_no, project_id,
     legal_lot_code, map_sheet_no, land_lot_no, lifecycle_status,
+    custody_status, is_in_warehouse, area, original_area, remaining_area,
+    relationship_type, invalidation_type, status,
     business_project_name, business_plot_code,
-    warehouse_id, created_at, projects(name)
+    warehouse_id, created_at, projects(name), warehouses(name)
   `).order('created_at', { ascending: false }).limit(2000);
 
   if (projectId) {
@@ -116,7 +119,60 @@ export async function fetchAssetIdentifierCandidates(projectId?: string): Promis
 
   const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
   if (error) throw error;
-  return (data || []) as unknown as Asset[];
+  return (data || []).map((a: any) => ({
+    ...a,
+    is_in_warehouse: (a.is_in_warehouse !== undefined && a.is_in_warehouse !== null)
+      ? Boolean(a.is_in_warehouse)
+      : (a.custody_status === 'in_stock')
+  })) as unknown as Asset[];
+}
+
+/**
+ * Fetch asset lineage: Parent certificate and any child certificates created from it
+ */
+export async function fetchAssetLineage(assetId: string): Promise<{ parent: Asset | null; children: Asset[] }> {
+  if (!isSupabaseConfigured) {
+    return { parent: null, children: [] };
+  }
+
+  // 1. Fetch the target asset to know its parent_asset_id
+  const { data: currentAsset, error: currErr } = await withTimeout(
+    supabase.from('assets').select('id, parent_asset_id').eq('id', assetId).single(),
+    DEFAULT_READ_TIMEOUT
+  );
+  if (currErr && currErr.code !== 'PGRST116') {
+    console.error('Error fetching asset for lineage:', currErr);
+  }
+
+  let parent: Asset | null = null;
+  if (currentAsset?.parent_asset_id) {
+    const { data: parentData, error: parentErr } = await withTimeout(
+      supabase.from('assets').select(`
+        id, asset_code, certificate_no, area, original_area, remaining_area,
+        invalidation_type, relationship_type, custody_status, is_in_warehouse,
+        status, lifecycle_status, warehouse_id, warehouses(name), projects(name)
+      `).eq('id', currentAsset.parent_asset_id).single(),
+      DEFAULT_READ_TIMEOUT
+    );
+    if (!parentErr && parentData) {
+      parent = parentData as unknown as Asset;
+    }
+  }
+
+  // 2. Fetch all child assets where parent_asset_id = assetId
+  const { data: childrenData, error: childErr } = await withTimeout(
+    supabase.from('assets').select(`
+      id, asset_code, certificate_no, area, original_area, remaining_area,
+      invalidation_type, relationship_type, custody_status, is_in_warehouse,
+      status, lifecycle_status, warehouse_id, created_at, warehouses(name), projects(name)
+    `).eq('parent_asset_id', assetId).order('created_at', { ascending: true }),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  return {
+    parent,
+    children: (childErr || !childrenData) ? [] : (childrenData as unknown as Asset[])
+  };
 }
 
 /**

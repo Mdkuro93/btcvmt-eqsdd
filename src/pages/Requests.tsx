@@ -784,12 +784,23 @@ export const Requests: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button onClick={() => setReviewRequest(req)} className="px-3 py-1 rounded text-blue-700 hover:bg-blue-50 border border-blue-200 font-semibold">Chi tiết</button>
+                        <button
+                          onClick={() => setReviewRequest(req)}
+                          className={`px-3 py-1 rounded font-semibold text-xs transition-colors cursor-pointer ${
+                            isApprover && req.status === 'pending'
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                              : 'text-blue-700 hover:bg-blue-50 border border-blue-200'
+                          }`}
+                        >
+                          {isApprover && req.status === 'pending' ? 'Xem & Phê duyệt' : 'Chi tiết'}
+                        </button>
                         {isApprover && req.status === 'pending' && (
-                          <>
-                            <button onClick={() => handleRejectDeclaration(req)} className="px-3 py-1 rounded text-red-700 hover:bg-red-50 border border-red-200 font-semibold">Từ chối</button>
-                            <button onClick={() => handleApproveDeclaration(req)} className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm">Duyệt</button>
-                          </>
+                          <button
+                            onClick={() => handleRejectDeclaration(req)}
+                            className="px-3 py-1 rounded text-red-700 hover:bg-red-50 border border-red-200 font-semibold text-xs cursor-pointer"
+                          >
+                            Từ chối
+                          </button>
                         )}
                       </div>
                       {req.status === 'rejected' && req.rejection_reason && (

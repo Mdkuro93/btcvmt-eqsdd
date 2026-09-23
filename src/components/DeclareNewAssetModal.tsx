@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, FileText } from 'lucide-react';
+import { X, Search, FileText, AlertTriangle, GitFork } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchProjects, fetchWarehouses, fetchAssetIdentifierCandidates } from '../api/assets';
 import { createDeclarationRequest } from '../api/assetDeclarationRequests';
@@ -21,6 +21,8 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const [investorEntities, setInvestorEntities] = useState<any[]>([]);
 
   const [requestType, setRequestType] = useState<'cap_moi' | 'tach_so' | 'cap_doi'>('cap_moi');
+  const [splitMode, setSplitMode] = useState<'SPLIT_FULL' | 'SPLIT_PARTIAL'>('SPLIT_FULL');
+  const [remainingArea, setRemainingArea] = useState('');
   const [oldAssetId, setOldAssetId] = useState('');
   
   // Search state for entity
@@ -41,15 +43,15 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const [mapSheetNo, setMapSheetNo] = useState('');
   const [businessProjectName, setBusinessProjectName] = useState('');
   const [businessPlotCode, setBusinessPlotCode] = useState('');
-    const [area, setArea] = useState('');
+  const [area, setArea] = useState('');
   const [currentOwnerEntityId, setCurrentOwnerEntityId] = useState('');
   const [certificateGroup, setCertificateGroup] = useState<'so_lon' | 'so_nho'>('so_nho');
-    const [usagePurpose, setUsagePurpose] = useState('');
+  const [usagePurpose, setUsagePurpose] = useState('');
   const [usageTermType, setUsageTermType] = useState('');
   const [usageTermDate, setUsageTermDate] = useState('');
   const [assetType, setAssetType] = useState('Đất nền');
   const [collateralType, setCollateralType] = useState('BDS');
-    const [warehouseId, setWarehouseId] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [notes, setNotes] = useState('');
   const [keepOpen, setKeepOpen] = useState(false);
 
@@ -89,8 +91,26 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const filteredAssets = allAssets.filter(a => {
     if (!searchOldAsset) return false;
     const s = searchOldAsset.toLowerCase();
-    return (a.certificate_no?.toLowerCase().includes(s) || a.asset_code?.toLowerCase().includes(s));
-  }).slice(0, 5);
+    return (a.certificate_no?.toLowerCase().includes(s) || a.asset_code?.toLowerCase().includes(s) || a.legal_lot_code?.toLowerCase().includes(s));
+  }).slice(0, 20);
+
+  const selectedParentAsset = allAssets.find(a => a.id === oldAssetId);
+  const isParentInWarehouse = selectedParentAsset ? (
+    selectedParentAsset.is_in_warehouse !== undefined
+      ? Boolean(selectedParentAsset.is_in_warehouse)
+      : (selectedParentAsset.custody_status === 'in_stock')
+  ) : false;
+
+  const handleChildAreaChange = (newAreaStr: string) => {
+    setArea(newAreaStr);
+    if (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && selectedParentAsset?.area) {
+      const childVal = Number(newAreaStr);
+      if (!isNaN(childVal) && childVal > 0) {
+        const rem = Math.max(0, Number((selectedParentAsset.area - childVal).toFixed(2)));
+        setRemainingArea(rem.toString());
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,15 +118,39 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
       toast.error('Vui lòng nhập số GCN');
       return;
     }
-    if ((requestType === 'tach_so' || requestType === 'cap_doi') && !oldAssetId) {
-      toast.error('Vui lòng chọn sổ cũ');
-      return;
+    if ((requestType === 'tach_so' || requestType === 'cap_doi')) {
+      if (!oldAssetId) {
+        toast.error('Vui lòng chọn sổ gốc / GCN cũ');
+        return;
+      }
+      // CHẶN CỨNG (Hard Block): Nếu Sổ gốc chọn có is_in_warehouse === true
+      if (isParentInWarehouse) {
+        toast.error(
+          '⚠️ KHÔNG THỂ THỰC HIỆN: GCN gốc hiện vẫn đang LƯU KHO.\n' +
+          'Nếu chọn nhầm sổ: Vui lòng chọn lại đúng Mã TSĐB.\n' +
+          'Nếu đúng sổ: Vui lòng lập Phiếu Xuất Kho cho GCN gốc trước khi làm thủ tục nhập kho GCN mới!',
+          { duration: 7000 }
+        );
+        return;
+      }
+    }
+
+    if (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL') {
+      if (!remainingArea || Number(remainingArea) <= 0) {
+        toast.error('Vui lòng nhập diện tích còn lại hợp lệ cho Sổ gốc khi tách 1 phần');
+        return;
+      }
     }
 
     setLoading(true);
     try {
       await createDeclarationRequest({
         request_type: requestType,
+        relationship_type: requestType === 'cap_doi' ? 'RENEW' : (requestType === 'tach_so' ? splitMode : null),
+        invalidation_type: requestType === 'cap_doi' ? 'FULL' : (requestType === 'tach_so' ? (splitMode === 'SPLIT_PARTIAL' ? 'PARTIAL' : 'FULL') : 'NONE'),
+        parent_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
+        old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
+        remaining_area: (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && remainingArea) ? Number(remainingArea) : null,
         certificate_no: certificateNo.trim(),
         registry_no: registryNo.trim() || null,
         registry_date: registryDate || null,
@@ -116,15 +160,14 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
         map_sheet_no: mapSheetNo.trim() || null,
         business_project_name: businessProjectName.trim() || null,
         business_plot_code: businessPlotCode.trim() || null,
-                area: area ? Number(area) : null,
+        area: area ? Number(area) : null,
         current_owner_entity_id: currentOwnerEntityId || null,
         certificate_group: certificateGroup,
-                usage_purpose: usagePurpose.trim() || null,
+        usage_purpose: usagePurpose.trim() || null,
         usage_term_type: usageTermType.trim() || null,
         usage_term_date: usageTermDate || null,
         asset_type: assetType.trim() || null,
         collateral_type: collateralType || 'BDS',
-                old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
         warehouse_id: warehouseId || null,
         requester_id: profile?.id,
         notes: notes.trim() || null,
@@ -144,6 +187,7 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
         setBusinessProjectName('');
         setBusinessPlotCode('');
         setArea('');
+        setRemainingArea('');
         setOldAssetId('');
         setSearchOldAsset('');
         setNotes('');
@@ -189,24 +233,54 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Loại yêu cầu <span className="text-red-500">*</span></label>
                 <select
                   value={requestType}
-                  onChange={(e) => setRequestType(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                  onChange={(e) => {
+                    const val = e.target.value as any;
+                    setRequestType(val);
+                    if (val === 'cap_moi') {
+                      setOldAssetId('');
+                      setSearchOldAsset('');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium"
                   required
                 >
-                  <option value="cap_moi">Cấp mới</option>
-                  <option value="tach_so">Tách sổ</option>
-                  <option value="cap_doi">Cấp đổi</option>
+                  <option value="cap_moi">Cấp mới (GCN lần đầu nhập kho)</option>
+                  <option value="tach_so">Tách sổ (Tách từ Sổ gốc đang có)</option>
+                  <option value="cap_doi">Cấp đổi (Đổi số GCN mới từ Sổ cũ)</option>
                 </select>
               </div>
 
+              {/* HÌNH THỨC TÁCH SỔ (NẾU CHỌN TÁCH SỔ) */}
+              {requestType === 'tach_so' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Hình thức tách sổ <span className="text-red-500">*</span></label>
+                  <select
+                    value={splitMode}
+                    onChange={(e) => setSplitMode(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium"
+                  >
+                    <option value="SPLIT_FULL">Tách toàn phần (Vô hiệu / Thu hồi toàn bộ Sổ gốc)</option>
+                    <option value="SPLIT_PARTIAL">Tách 1 phần (Giảm diện tích Sổ gốc, Sổ gốc tiếp tục lưu hành)</option>
+                  </select>
+                </div>
+              )}
+
+              {/* CHỌN SỔ GỐC / GCN CŨ */}
               {(requestType === 'tach_so' || requestType === 'cap_doi') && (
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Chọn sổ cũ <span className="text-red-500">*</span></label>
+                <div className="relative md:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <GitFork className="w-3.5 h-3.5 text-blue-600" />
+                      Chọn Sổ gốc / GCN cũ (parent_asset_id) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[11px] text-gray-500">Bắt buộc Sổ gốc phải đã lập Phiếu Xuất Kho</span>
+                  </div>
+
                   <div className="relative">
-                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
                       type="text"
-                      placeholder="Tìm theo số GCN hoặc mã tài sản..."
+                      placeholder="Tìm theo Mã TSĐB, Số GCN, Mã lô pháp lý..."
                       value={searchOldAsset}
                       onChange={(e) => {
                         setSearchOldAsset(e.target.value);
@@ -214,33 +288,150 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                         setOldAssetId('');
                       }}
                       onFocus={() => setShowDropdown(true)}
-                      onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
                       required={!oldAssetId}
                     />
                   </div>
+
                   {showDropdown && filteredAssets.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
-                      {filteredAssets.map(a => (
-                        <button
-                          key={a.id}
-                          type="button"
-                          onClick={() => {
-                            setOldAssetId(a.id);
-                            setSearchOldAsset(`${a.certificate_no} (${a.asset_code})`);
-                            setShowDropdown(false);
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm border-b last:border-0"
-                        >
-                          <div className="font-semibold">{a.certificate_no}</div>
-                          <div className="text-xs text-gray-500">{a.asset_code}</div>
-                        </button>
-                      ))}
+                    <div className="absolute z-20 left-4 right-4 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto divide-y divide-gray-100">
+                      {filteredAssets.map(a => {
+                        const inWh = a.is_in_warehouse !== undefined ? Boolean(a.is_in_warehouse) : (a.custody_status === 'in_stock');
+                        const whName = a.warehouses?.name || 'Kho lưu trữ';
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => {
+                              setOldAssetId(a.id);
+                              setSearchOldAsset(`[${a.asset_code || 'Chưa cấp mã'}] - ${a.certificate_no} - ${inWh ? `🔴 Đang lưu tại ${whName}` : '🟢 Đã xuất kho'}`);
+                              setShowDropdown(false);
+                              if (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && a.area && area) {
+                                const rem = Math.max(0, Number((a.area - Number(area)).toFixed(2)));
+                                setRemainingArea(rem.toString());
+                              }
+                            }}
+                            className={`w-full text-left px-4 py-3 hover:bg-blue-50/50 transition-colors ${
+                              inWh ? 'bg-red-50/20' : 'bg-green-50/20'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-bold text-gray-900 font-mono text-sm">
+                                [{a.asset_code || 'Chưa cấp mã'}] - {a.certificate_no}
+                              </span>
+                              {inWh ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200 shrink-0">
+                                  🔴 Đang lưu tại {whName}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200 shrink-0">
+                                  🟢 Đã xuất kho
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-3">
+                              <span>Diện tích gốc: <strong className="text-gray-800">{a.area ? `${a.area} m²` : 'Chưa có'}</strong></span>
+                              <span>·</span>
+                              <span>Dự án: {a.projects?.name || 'Chưa gán DA'}</span>
+                              {a.legal_lot_code && (
+                                <>
+                                  <span>·</span>
+                                  <span>Mã lô: {a.legal_lot_code}</span>
+                                </>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* THÔNG TIN SỔ GỐC ĐÃ CHỌN & CẢNH BÁO CHẶN CỨNG */}
+                  {selectedParentAsset && (
+                    <div className="mt-3">
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-gray-900">Sổ gốc: [{selectedParentAsset.asset_code || 'Chưa có mã'}] - {selectedParentAsset.certificate_no}</span>
+                          <span className="text-gray-500 ml-2">({selectedParentAsset.area ? `${selectedParentAsset.area} m²` : 'Chưa rõ DT'})</span>
+                        </div>
+                        {isParentInWarehouse ? (
+                          <span className="px-2.5 py-1 rounded text-xs font-bold bg-red-100 text-red-800 border border-red-300">
+                            🔴 Đang lưu tại {selectedParentAsset.warehouses?.name || 'Kho'}
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded text-xs font-bold bg-green-100 text-green-800 border border-green-300">
+                            🟢 Đã xuất kho (Hợp lệ để khai báo)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* CHẶN CỨNG BẢO MẬT & NGHIỆP VỤ */}
+                      {isParentInWarehouse && (
+                        <div className="mt-2.5 p-3.5 bg-red-50 border-2 border-red-500 rounded-lg text-red-900 text-xs leading-relaxed space-y-1 shadow-sm animate-in fade-in">
+                          <div className="font-bold flex items-center gap-2 text-red-700 text-sm">
+                            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                            ⚠️ KHÔNG THỂ THỰC HIỆN: GCN gốc hiện vẫn đang LƯU KHO.
+                          </div>
+                          <p>• <strong>Nếu chọn nhầm sổ:</strong> Vui lòng chọn lại đúng Mã TSĐB / Số GCN khác.</p>
+                          <p>• <strong>Nếu đúng sổ:</strong> Vui lòng lập <strong>Phiếu Xuất Kho</strong> cho GCN gốc trước khi làm thủ tục nhập kho GCN mới!</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
             </div>
+
+            {/* DIỆN TÍCH VÀ DIỆN TÍCH CÒN LẠI KHI TÁCH 1 PHẦN */}
+            {requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && (
+              <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3">
+                <div className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  Tính Toán Diện Tích Tách Sổ Một Phần
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div className="bg-white p-3 rounded-lg border border-amber-200">
+                    <span className="text-gray-500 block">Diện tích Sổ gốc (m²)</span>
+                    <span className="text-base font-bold text-gray-900">
+                      {selectedParentAsset?.area ? `${selectedParentAsset.area} m²` : 'Chưa có thông tin'}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Diện tích Sổ con mới tách (m²) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="VD: 150.5"
+                      value={area}
+                      onChange={(e) => handleChildAreaChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Diện tích còn lại của Sổ gốc (m²) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Tự động tính hoặc nhập tay..."
+                      value={remainingArea}
+                      onChange={(e) => setRemainingArea(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-semibold text-amber-900"
+                      required
+                    />
+                  </div>
+                </div>
+                {selectedParentAsset?.area && area && remainingArea && (
+                  <p className="text-[11px] text-amber-800 italic">
+                    Công thức: {selectedParentAsset.area} m² (Gốc) - {area} m² (Mới) = {remainingArea} m² (Còn lại của Sổ gốc sau duyệt)
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
