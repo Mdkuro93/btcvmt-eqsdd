@@ -37,25 +37,20 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({ isOpen, onClose
   const [registryNo, setRegistryNo] = useState('');
   const [registryDate, setRegistryDate] = useState('');
   const [projectId, setProjectId] = useState('');
-  const [subdivision, setSubdivision] = useState('');
-  const [lotNo, setLotNo] = useState('');
+  const [legalLotCode, setLegalLotCode] = useState('');
   const [landLotNo, setLandLotNo] = useState('');
   const [mapSheetNo, setMapSheetNo] = useState('');
-  const [area, setArea] = useState('');
-  const [ownerName, setOwnerName] = useState('');
+  const [businessProjectName, setBusinessProjectName] = useState('');
+  const [businessPlotCode, setBusinessPlotCode] = useState('');
+    const [area, setArea] = useState('');
   const [currentOwnerEntityId, setCurrentOwnerEntityId] = useState('');
-  const [province, setProvince] = useState('');
-  const [district, setDistrict] = useState('');
-  const [ward, setWard] = useState('');
-  const [addressDetail, setAddressDetail] = useState('');
-  const [usagePurpose, setUsagePurpose] = useState('');
+  const [certificateGroup, setCertificateGroup] = useState<'so_lon' | 'so_nho'>('so_nho');
+    const [usagePurpose, setUsagePurpose] = useState('');
   const [usageTermType, setUsageTermType] = useState('');
   const [usageTermDate, setUsageTermDate] = useState('');
   const [assetType, setAssetType] = useState('Đất nền');
   const [collateralType, setCollateralType] = useState('BDS');
-  const [businessProjectName, setBusinessProjectName] = useState('');
-  const [businessPlotCode, setBusinessPlotCode] = useState('');
-  const [warehouseId, setWarehouseId] = useState('');
+    const [warehouseId, setWarehouseId] = useState('');
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
@@ -65,7 +60,7 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({ isOpen, onClose
   }, [isOpen]);
 
   useEffect(() => {
-    if (request && isOpen && investorEntities.length > 0 && allAssets.length > 0) {
+    if (request && isOpen) {
       setRequestType(request.request_type || 'cap_moi');
       setOldAssetId(request.old_asset_id || '');
       if (request.old_asset_id) {
@@ -78,13 +73,14 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({ isOpen, onClose
       setRegistryNo(request.registry_no || '');
       setRegistryDate(request.registry_date ? request.registry_date.substring(0, 10) : '');
       setProjectId(request.project_id || '');
-      setSubdivision(request.subdivision || '');
-      setLotNo(request.lot_no || '');
+      setLegalLotCode(request.legal_lot_code || '');
       setLandLotNo(request.land_lot_no || '');
       setMapSheetNo(request.map_sheet_no || '');
+      setBusinessProjectName(request.business_project_name || '');
+      setBusinessPlotCode(request.business_plot_code || '');
       setArea(request.area ? request.area.toString() : '');
-      setOwnerName(request.owner_name || '');
       setCurrentOwnerEntityId(request.current_owner_entity_id || '');
+      setCertificateGroup(request.certificate_group || 'so_nho');
       
       if (request.current_owner_entity_id) {
         const entity = investorEntities.find(e => e.id === request.current_owner_entity_id);
@@ -97,11 +93,7 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({ isOpen, onClose
         setSearchEntityText('');
       }
 
-      setProvince(request.province || '');
-      setDistrict(request.district || '');
-      setWard(request.ward || '');
-      setAddressDetail(request.address_detail || '');
-      setUsagePurpose(request.usage_purpose || '');
+            setUsagePurpose(request.usage_purpose || '');
       setUsageTermType(request.usage_term_type || '');
       setUsageTermDate(request.usage_term_date ? request.usage_term_date.substring(0, 10) : '');
       setAssetType(request.asset_type || 'Đất nền');
@@ -160,25 +152,20 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({ isOpen, onClose
         registry_no: registryNo.trim() || null,
         registry_date: registryDate || null,
         project_id: projectId || null,
-        subdivision: subdivision.trim() || null,
-        lot_no: lotNo.trim() || null,
+        legal_lot_code: legalLotCode.trim() || null,
         land_lot_no: landLotNo.trim() || null,
         map_sheet_no: mapSheetNo.trim() || null,
-        area: area ? Number(area) : null,
-        owner_name: ownerName.trim() || null,
+        business_project_name: businessProjectName.trim() || null,
+        business_plot_code: businessPlotCode.trim() || null,
+                area: area ? Number(area) : null,
         current_owner_entity_id: currentOwnerEntityId || null,
-        province: province.trim() || null,
-        district: district.trim() || null,
-        ward: ward.trim() || null,
-        address_detail: addressDetail.trim() || null,
-        usage_purpose: usagePurpose.trim() || null,
+        certificate_group: certificateGroup,
+                usage_purpose: usagePurpose.trim() || null,
         usage_term_type: usageTermType.trim() || null,
         usage_term_date: usageTermDate || null,
         asset_type: assetType.trim() || null,
         collateral_type: collateralType || 'BDS',
-        business_project_name: businessProjectName.trim() || null,
-        business_plot_code: businessPlotCode.trim() || null,
-        old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
+                old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
         warehouse_id: warehouseId || null,
         notes: notes.trim() || null,
       });
@@ -396,31 +383,30 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({ isOpen, onClose
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Phân khu</label>
-                <input type="text" value={subdivision} onChange={e => setSubdivision(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Tên Dự Án Kinh Doanh</label>
+                <input type="text" value={businessProjectName} onChange={e => setBusinessProjectName(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Số lô / Thửa</label>
-                <input type="text" value={lotNo} onChange={e => setLotNo(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Lô Kinh Doanh</label>
+                <input type="text" value={businessPlotCode} onChange={e => setBusinessPlotCode(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Lô Pháp Lý</label>
+                <input type="text" value={legalLotCode} onChange={e => setLegalLotCode(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Diện tích (m²)</label>
                 <input type="number" step="0.01" value={area} onChange={e => setArea(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Tỉnh / Thành phố</label>
-                <input type="text" value={province} onChange={e => setProvince(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" placeholder="Ví dụ: Đà Nẵng, QNM" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Quận / Huyện</label>
-                <input type="text" value={district} onChange={e => setDistrict(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Xã / Phường</label>
-                <input type="text" value={ward} onChange={e => setWard(e.target.value)} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Nhóm Sổ</label>
+                <select value={certificateGroup} onChange={e => setCertificateGroup(e.target.value as 'so_lon' | 'so_nho')} disabled={!canEdit} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white disabled:bg-gray-100">
+                  <option value="so_nho">Sổ nhỏ</option>
+                  <option value="so_lon">Sổ lớn</option>
+                </select>
               </div>
             </div>
 

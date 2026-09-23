@@ -29,8 +29,9 @@ export const VoucherPrintModal: React.FC<Props> = ({
 
   // Helper to extract legal owner of the land asset
   const getAssetOwner = (ast: any, itm: any): string => {
-    if (ast?.owner_name && typeof ast.owner_name === 'string' && !ast.owner_name.toLowerCase().includes('ban nguồn vốn')) {
-      return ast.owner_name;
+    const astOwnerName = ast?.current_owner_entity?.name || ast?.investor_entities?.name;
+    if (astOwnerName && typeof astOwnerName === 'string' && !astOwnerName.toLowerCase().includes('ban nguồn vốn')) {
+      return astOwnerName;
     }
     if (itm?.details?.owner_name && typeof itm.details.owner_name === 'string' && !itm.details.owner_name.toLowerCase().includes('ban nguồn vốn')) {
       return itm.details.owner_name;
@@ -42,23 +43,18 @@ export const VoucherPrintModal: React.FC<Props> = ({
       if (ast.projects.name.includes('Spana')) return 'Công ty CP Đầu tư BĐS VMT Sài Gòn';
       if (ast.projects.name.includes('Sunset')) return 'Công ty CP Đầu tư Du lịch Sunset Horizon';
     }
-    return ast?.owner_name || 'Công ty Cổ phần Tập đoàn VMT';
+    return astOwnerName || 'Công ty Cổ phần Tập đoàn VMT';
   };
 
-  // Helper to extract Lot Number / Plot Code
-  const getAssetLotNo = (ast: any, itm: any): string => {
+  // Helper to extract Mã Lô Pháp Lý (gộp Phân khu + Số lô cũ)
+  const getAssetLegalLotCode = (ast: any, itm: any): string => {
     return (
-      ast?.lot_no ||
+      ast?.legal_lot_code ||
       ast?.land_lot_no ||
       ast?.business_plot_code ||
-      itm?.details?.lot_no ||
+      itm?.details?.legal_lot_code ||
       '-'
     );
-  };
-
-  // Helper to extract Subdivision
-  const getAssetSubdivision = (ast: any, itm: any): string => {
-    return ast?.subdivision || itm?.details?.subdivision || '-';
   };
 
   // Transaction items parsing
@@ -75,8 +71,7 @@ export const VoucherPrintModal: React.FC<Props> = ({
       return [{
         item,
         asset: singleAsset,
-        subdivision: getAssetSubdivision(singleAsset, item),
-        lot_no: getAssetLotNo(singleAsset, item),
+        legal_lot_code: getAssetLegalLotCode(singleAsset, item),
         area: singleAsset.area || item.details?.area || 0,
         owner_name: getAssetOwner(singleAsset, item),
         certificate_no: singleAsset.certificate_no || item.details?.certificate_no || '-',
@@ -89,8 +84,7 @@ export const VoucherPrintModal: React.FC<Props> = ({
       return {
         item: it,
         asset: ast,
-        subdivision: getAssetSubdivision(ast, it),
-        lot_no: getAssetLotNo(ast, it),
+        legal_lot_code: getAssetLegalLotCode(ast, it),
         area: ast.area || it.details?.area || 0,
         owner_name: getAssetOwner(ast, it),
         certificate_no: ast.certificate_no || it.details?.certificate_no || '-',
@@ -119,9 +113,8 @@ export const VoucherPrintModal: React.FC<Props> = ({
     }
 
     const count = activeAssetList.length;
-    const firstSub = activeAssetList[0]?.subdivision !== '-' ? activeAssetList[0]?.subdivision : '';
-    const firstLot = activeAssetList[0]?.lot_no !== '-' ? `lô ${activeAssetList[0]?.lot_no}` : '';
-    const targetLoc = firstSub || firstLot ? `(${[firstSub, firstLot].filter(Boolean).join(', ')})` : '';
+    const firstLotCode = activeAssetList[0]?.legal_lot_code !== '-' ? activeAssetList[0]?.legal_lot_code : '';
+    const targetLoc = firstLotCode ? `(${firstLotCode})` : '';
 
     if (txType === 'checkout') {
       return `Bàn giao ${count} Giấy chứng nhận QSD đất ${targetLoc} cho Ban PTDA phục vụ công tác thủ tục sang tên & cấp đổi cho khách hàng`;
@@ -202,9 +195,9 @@ export const VoucherPrintModal: React.FC<Props> = ({
     wsData.push([]); // Empty row
 
     // Table Header Row 1
-    wsData.push(['STT', 'CHỦ SỞ HỮU', 'SỐ SỔ', 'PHÂN KHU', 'LÔ', 'DIỆN TÍCH', 'GHI CHÚ']);
+    wsData.push(['STT', 'CHỦ SỞ HỮU', 'SỐ SỔ', 'MÃ LÔ PHÁP LÝ', 'DIỆN TÍCH', 'GHI CHÚ']);
     // Table Header Row 2 (Column letters)
-    wsData.push(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+    wsData.push(['A', 'B', 'C', 'D', 'E', 'F']);
 
     // Data rows
     activeAssetList.forEach((a, idx) => {
@@ -212,8 +205,7 @@ export const VoucherPrintModal: React.FC<Props> = ({
         idx + 1,
         a.owner_name,
         a.certificate_no || '-',
-        a.subdivision || '-',
-        a.lot_no || '-',
+        a.legal_lot_code || '-',
         Number(a.area) || 0,
         a.notes || '',
       ]);
@@ -563,12 +555,11 @@ export const VoucherPrintModal: React.FC<Props> = ({
                     <th className="border border-gray-900 px-2 py-2 w-12">STT</th>
                     <th className="border border-gray-900 px-3 py-2">CHỦ SỞ HỮU</th>
                     <th className="border border-gray-900 px-3 py-2">SỐ SỔ</th>
-                    <th className="border border-gray-900 px-3 py-2">PHÂN KHU</th>
-                    <th className="border border-gray-900 px-2 py-2 w-16">LÔ</th>
+                    <th className="border border-gray-900 px-3 py-2">MÃ LÔ PHÁP LÝ</th>
                     <th className="border border-gray-900 px-3 py-2 w-28">DIỆN TÍCH</th>
                     <th className="border border-gray-900 px-3 py-2">GHI CHÚ</th>
                   </tr>
-                  {/* Table Header Row 2 (Columns Letters A-G) */}
+                  {/* Table Header Row 2 (Columns Letters A-F) */}
                   <tr className="bg-gray-50 text-gray-700 font-semibold text-center text-[11px] border-b border-gray-900">
                     <th className="border border-gray-900 py-1">A</th>
                     <th className="border border-gray-900 py-1">B</th>
@@ -576,7 +567,6 @@ export const VoucherPrintModal: React.FC<Props> = ({
                     <th className="border border-gray-900 py-1">D</th>
                     <th className="border border-gray-900 py-1">E</th>
                     <th className="border border-gray-900 py-1">F</th>
-                    <th className="border border-gray-900 py-1">G</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -592,10 +582,7 @@ export const VoucherPrintModal: React.FC<Props> = ({
                         {row.certificate_no}
                       </td>
                       <td className="border border-gray-900 px-3 py-1.5 text-center font-semibold text-red-600 print:text-red-700">
-                        {row.subdivision}
-                      </td>
-                      <td className="border border-gray-900 px-2 py-1.5 text-center font-medium text-red-600 print:text-red-700">
-                        {row.lot_no}
+                        {row.legal_lot_code}
                       </td>
                       <td className="border border-gray-900 px-3 py-1.5 text-right font-medium text-gray-900">
                         {row.area ? Number(row.area).toLocaleString('vi-VN') : '-'}

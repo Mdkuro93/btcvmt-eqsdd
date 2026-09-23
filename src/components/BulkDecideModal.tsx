@@ -204,8 +204,8 @@ export const BulkDecideModal: React.FC<BulkDecideModalProps> = ({
     const q = assetSearchQuery.toLowerCase();
     return (
       a.certificate_no?.toLowerCase().includes(q) ||
-      a.owner_name?.toLowerCase().includes(q) ||
-      a.subdivision?.toLowerCase().includes(q) ||
+      a.current_owner_entity?.name?.toLowerCase().includes(q) ||
+      a.legal_lot_code?.toLowerCase().includes(q) ||
       a.land_lot_no?.toLowerCase().includes(q)
     );
   });
@@ -326,9 +326,9 @@ export const BulkDecideModal: React.FC<BulkDecideModalProps> = ({
                     <div key={asset.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs hover:bg-gray-50 p-1.5 rounded">
                       <div>
                         <span className="font-bold text-gray-900 font-mono">{asset.certificate_no}</span>
-                        <span className="text-gray-500 ml-2">({asset.owner_name || 'Chưa có tên'})</span>
+                        <span className="text-gray-500 ml-2">({asset.current_owner_entity?.name || 'Chưa có tên'})</span>
                         <div className="text-[11px] text-gray-400">
-                          PK: {asset.subdivision || '-'} · Thửa: {asset.land_lot_no || '-'} · DT: {asset.area ? asset.area.toLocaleString('vi-VN') + ' m²' : '-'}
+                          Mã Lô: {asset.legal_lot_code || '-'} · Thửa: {asset.land_lot_no || '-'} · DT: {asset.area ? asset.area.toLocaleString('vi-VN') + ' m²' : '-'}
                         </div>
                       </div>
                       <button
@@ -389,8 +389,8 @@ export const BulkDecideModal: React.FC<BulkDecideModalProps> = ({
                               </span>
                             </div>
                             <div className="text-xs text-gray-500 mt-0.5">
-                              {asset?.owner_name && <span>Chủ sở hữu: <strong className="text-gray-700">{asset.owner_name}</strong> · </span>}
-                              {asset?.subdivision && <span>Phân khu: <strong>{asset.subdivision}</strong> · </span>}
+                              {asset?.current_owner_entity?.name && <span>Chủ sở hữu: <strong className="text-gray-700">{asset.current_owner_entity.name}</strong> · </span>}
+                              {asset?.legal_lot_code && <span>Mã Lô Pháp Lý: <strong>{asset.legal_lot_code}</strong> · </span>}
                               {asset?.land_lot_no && <span>Thửa: <strong>{asset.land_lot_no}</strong> · </span>}
                               <span>Diện tích: <strong>{asset?.area ? asset.area.toLocaleString('vi-VN') + ' m²' : '-'}</strong></span>
                             </div>

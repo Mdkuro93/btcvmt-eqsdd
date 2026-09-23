@@ -3,6 +3,7 @@ import { X, Loader2, ShieldCheck, AlertTriangle, Building2, FileText, MapPin } f
 import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAssetIdentifierCandidates } from '../api/assets';
+import { fetchInvestorEntities } from '../api/investorEntities';
 import { COLLATERAL_TYPES, PROPERTY_TYPES, resolveRegionCode, generateNextAssetCode, checkAssetDuplicate, PROVINCE_CODES, getProvinceCode } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
@@ -30,21 +31,23 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
   const [certificateNo, setCertificateNo] = useState('');
   const [projectId, setProjectId] = useState('');
   const [businessProjectName, setBusinessProjectName] = useState('');
-  const [subdivision, setSubdivision] = useState('');
-  const [lotNo, setLotNo] = useState('');
+  const [legalLotCode, setLegalLotCode] = useState('');
   const [businessPlotCode, setBusinessPlotCode] = useState('');
   const [area, setArea] = useState('');
-  const [ownerName, setOwnerName] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
+
+  // Chủ sở hữu (liên kết Pháp nhân/NĐT)
+  const [investorEntities, setInvestorEntities] = useState<any[]>([]);
+  const [currentOwnerEntityId, setCurrentOwnerEntityId] = useState('');
+  const [searchEntityText, setSearchEntityText] = useState('');
+  const [showEntityDropdown, setShowEntityDropdown] = useState(false);
 
   // Extended Land & Legal Fields
   const [mapSheetNo, setMapSheetNo] = useState('');
   const [landLotNo, setLandLotNo] = useState('');
-  const [province, setProvince] = useState('Đà Nẵng');
-  const [district, setDistrict] = useState('');
-  const [ward, setWard] = useState('');
-  const [addressDetail, setAddressDetail] = useState('');
-  const [usagePurpose, setUsagePurpose] = useState('Đất ở tại đô thị (ODT)');
+  // Tỉnh/Thành chỉ dùng để sinh Mã Tài Sản (asset_code), KHÔNG lưu vào bảng assets
+  const [provinceCodeHint, setProvinceCodeHint] = useState('Đà Nẵng');
+    const [usagePurpose, setUsagePurpose] = useState('Đất ở tại đô thị (ODT)');
   const [assetType, setAssetType] = useState('Đất nền');
   const [registryNo, setRegistryNo] = useState('');
   const [registryDate, setRegistryDate] = useState('');
@@ -61,10 +64,7 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
   const [mortgageUnit, setMortgageUnit] = useState('');
   const [mortgageValuation, setMortgageValuation] = useState('');
   const [mortgageReleaseDate, setMortgageReleaseDate] = useState('');
-  const [hasSecondBank, setHasSecondBank] = useState(false);
-  const [mortgageBank2, setMortgageBank2] = useState('');
-  const [mortgageUnit2, setMortgageUnit2] = useState('');
-  const [collateralRatio, setCollateralRatio] = useState('');
+        const [collateralRatio, setCollateralRatio] = useState('');
   const [collateralValue, setCollateralValue] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -76,9 +76,10 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
       fetchAssetIdentifierCandidates(projectId || undefined)
         .then(candidates => {
           setAllAssets(candidates);
-          updateCode(candidates, projectId, province, collateralType, warehouseId);
+          updateCode(candidates, projectId, provinceCodeHint, collateralType, warehouseId);
         })
         .catch(() => {});
+      fetchInvestorEntities().then(setInvestorEntities).catch(() => {});
     }
   }, [isOpen, projectId]);
 
@@ -91,8 +92,27 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
   };
 
   useEffect(() => {
-    updateCode(allAssets, projectId, province, collateralType, warehouseId);
-  }, [projectId, province, collateralType, warehouseId, allAssets]);
+    updateCode(allAssets, projectId, provinceCodeHint, collateralType, warehouseId);
+  }, [projectId, provinceCodeHint, collateralType, warehouseId, allAssets]);
+
+  // Tự động lấy mã tỉnh/thành từ Địa bàn đã khai báo của Dự án được chọn,
+  // để hạn chế phải chọn tay và tránh sai lệch số liệu giữa Dự án và Mã Tài Sản.
+  useEffect(() => {
+    if (!projectId) return;
+    const selectedProject = projects.find(p => p.id === projectId);
+    const provinceCode = (selectedProject?.areas as any)?.province_code;
+    const areaName = selectedProject?.areas?.name;
+    if (provinceCode) {
+      setProvinceCodeHint(provinceCode);
+    } else if (areaName) {
+      setProvinceCodeHint(areaName);
+    }
+  }, [projectId, projects]);
+
+  const filteredEntities = investorEntities.filter(e => {
+    const s = searchEntityText.toLowerCase();
+    return (e.name?.toLowerCase().includes(s) || e.company_code?.toLowerCase().includes(s));
+  }).slice(0, 50);
 
   // Live duplicate check
   useEffect(() => {
@@ -101,8 +121,7 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
       {
         certificate_no: certificateNo,
         project_id: projectId || null,
-        subdivision: subdivision || null,
-        lot_no: lotNo || null,
+        legal_lot_code: legalLotCode || null,
         map_sheet_no: mapSheetNo || null,
         land_lot_no: landLotNo || null,
       },
@@ -116,7 +135,7 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
     } else {
       setDuplicateWarning(null);
     }
-  }, [certificateNo, projectId, subdivision, lotNo, mapSheetNo, landLotNo, allAssets, isOpen]);
+  }, [certificateNo, projectId, legalLotCode, mapSheetNo, landLotNo, allAssets, isOpen]);
 
   const handleValuationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -155,20 +174,15 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
         certificate_no: certificateNo.trim(),
         project_id: projectId || null,
         business_project_name: businessProjectName.trim() || null,
-        subdivision: subdivision.trim() || null,
-        lot_no: lotNo.trim() || null,
+        legal_lot_code: legalLotCode.trim() || null,
         business_plot_code: businessPlotCode.trim() || null,
         area: area ? Number(area) : null,
-        owner_name: ownerName.trim() || null,
+        current_owner_entity_id: currentOwnerEntityId || null,
         warehouse_id: warehouseId || null,
 
         map_sheet_no: mapSheetNo.trim() || null,
         land_lot_no: landLotNo.trim() || null,
-        province: province.trim() || null,
-        district: district.trim() || null,
-        ward: ward.trim() || null,
-        address_detail: addressDetail.trim() || null,
-        usage_purpose: usagePurpose || null,
+                usage_purpose: usagePurpose || null,
         asset_type: assetType || null,
         registry_no: registryNo.trim() || null,
         registry_date: registryDate || null,
@@ -184,9 +198,7 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
         mortgage_status: isMortgaged ? 'mortgaged' : 'none',
         mortgage_bank: isMortgaged ? mortgageBank.trim() : null,
         mortgage_unit: isMortgaged ? mortgageUnit.trim() : null,
-        mortgage_bank_2: isMortgaged && hasSecondBank ? mortgageBank2.trim() : null,
-        mortgage_unit_2: isMortgaged && hasSecondBank ? mortgageUnit2.trim() : null,
-        mortgage_valuation: isMortgaged && mortgageValuation ? Number(mortgageValuation) : null,
+                        mortgage_valuation: isMortgaged && mortgageValuation ? Number(mortgageValuation) : null,
         collateral_ratio: isMortgaged && collateralRatio ? Number(collateralRatio) : null,
         collateral_value: isMortgaged && collateralValue ? Number(collateralValue) : null,
         mortgage_expected_release_date: isMortgaged ? (mortgageReleaseDate || null) : null,
@@ -199,29 +211,22 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
       setCertificateNo('');
       setProjectId('');
       setBusinessProjectName('');
-      setSubdivision('');
-      setLotNo('');
+      setLegalLotCode('');
       setBusinessPlotCode('');
       setArea('');
-      setOwnerName('');
+      setCurrentOwnerEntityId('');
+      setSearchEntityText('');
       setWarehouseId('');
       setCustomAssetCode('');
       setMapSheetNo('');
       setLandLotNo('');
-      setProvince('');
-      setDistrict('');
-      setWard('');
-      setAddressDetail('');
-      setScanFileUrl('');
+            setScanFileUrl('');
       setIsMortgaged(false);
       setMortgageBank('');
       setMortgageUnit('');
       setMortgageValuation('');
       setMortgageReleaseDate('');
-      setHasSecondBank(false);
-      setMortgageBank2('');
-      setMortgageUnit2('');
-      setCollateralRatio('');
+                        setCollateralRatio('');
       setCollateralValue('');
       setNotes('');
     } catch (error: any) {
@@ -368,17 +373,45 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 relative">
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Chủ Sở Hữu Đứng Tên Trên GCN
+                  Chủ Sở Hữu (Pháp nhân)
                 </label>
-                <input
-                  type="text"
-                  value={ownerName}
-                  onChange={e => setOwnerName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                  placeholder="Công ty Cổ phần Đầu tư VMT..."
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchEntityText}
+                    onChange={e => {
+                      setSearchEntityText(e.target.value);
+                      setShowEntityDropdown(true);
+                      if (e.target.value === '') setCurrentOwnerEntityId('');
+                    }}
+                    onFocus={() => setShowEntityDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowEntityDropdown(false), 200)}
+                    placeholder="Nhập tên hoặc mã pháp nhân..."
+                    className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                {showEntityDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredEntities.length > 0 ? filteredEntities.map(entity => (
+                      <button
+                        key={entity.id}
+                        type="button"
+                        onClick={() => {
+                          setCurrentOwnerEntityId(entity.id);
+                          setSearchEntityText(entity.company_code ? `[${entity.company_code}] ${entity.name}` : entity.name);
+                          setShowEntityDropdown(false);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-50 text-xs border-b last:border-0"
+                      >
+                        {entity.company_code ? `[${entity.company_code}] ` : ''}{entity.name}
+                      </button>
+                    )) : (
+                      <div className="px-4 py-2 text-xs text-gray-500">Không tìm thấy pháp nhân phù hợp</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -436,27 +469,14 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Phân Khu <span className="text-blue-600 font-bold">(Cột riêng)</span>
+                  Mã Lô Pháp Lý
                 </label>
                 <input
                   type="text"
-                  value={subdivision}
-                  onChange={e => setSubdivision(e.target.value)}
+                  value={legalLotCode}
+                  onChange={e => setLegalLotCode(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                  placeholder="VD: Phân khu A, Block B..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Số Lô / Thửa (Mã Lô Pháp Lý)
-                </label>
-                <input
-                  type="text"
-                  value={lotNo}
-                  onChange={e => setLotNo(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                  placeholder="VD: Lô A-12, LK-04..."
+                  placeholder="VD: Phân khu A-Lô 12, Block B-LK04..."
                 />
               </div>
 
@@ -475,7 +495,7 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Số Thửa Đất</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Số Thửa Bản Đồ</label>
                 <input
                   type="text"
                   value={landLotNo}
@@ -511,14 +531,14 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-gray-700">Tỉnh / Thành Phố <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-medium text-gray-700">Tỉnh / Thành Phố (để sinh Mã Tài Sản) <span className="text-red-500">*</span></label>
                   <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
-                    Mã: {getProvinceCode(province)}
+                    Mã: {getProvinceCode(provinceCodeHint)}
                   </span>
                 </div>
                 <select
-                  value={province}
-                  onChange={e => setProvince(e.target.value)}
+                  value={provinceCodeHint}
+                  onChange={e => setProvinceCodeHint(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-medium text-gray-800"
                 >
                   <option value="">-- Chọn Tỉnh / Thành phố --</option>
@@ -528,39 +548,11 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Quận / Huyện</label>
-                <input
-                  type="text"
-                  value={district}
-                  onChange={e => setDistrict(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                  placeholder="Quận 2..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Phường / Xã</label>
-                <input
-                  type="text"
-                  value={ward}
-                  onChange={e => setWard(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                  placeholder="Phường An Phú..."
-                />
-              </div>
-
-              <div className="md:col-span-3">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Địa Chỉ Chi Tiết</label>
-                <input
-                  type="text"
-                  value={addressDetail}
-                  onChange={e => setAddressDetail(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                  placeholder="Số nhà, đường phố..."
-                />
+                {projectId && projects.find(p => p.id === projectId)?.areas?.name && (
+                  <p className="text-[10px] text-emerald-600 mt-1">
+                    ✓ Tự động lấy theo Địa bàn của dự án "{projects.find(p => p.id === projectId)?.areas?.name}". Chỉ đổi thủ công nếu dự án nằm ở địa bàn khác.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -728,58 +720,19 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
                     />
                   </div>
 
-                  <div className="flex items-center pt-5">
-                    <label className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hasSecondBank}
-                        onChange={e => setHasSecondBank(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300"
-                      />
-                      <span className="text-xs text-gray-700">Có đồng thế chấp / NH 2</span>
-                    </label>
-                  </div>
+
                 </div>
 
-                {hasSecondBank && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-amber-200">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Ngân hàng nhận thế chấp 2
-                      </label>
-                      <input
-                        type="text"
-                        value={mortgageBank2}
-                        onChange={e => setMortgageBank2(e.target.value)}
-                        placeholder="Tên NH 2..."
-                        className="w-full px-3 py-2 border rounded-md text-xs bg-white border-gray-300"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Đơn vị vay 2
-                      </label>
-                      <input
-                        type="text"
-                        value={mortgageUnit2}
-                        onChange={e => setMortgageUnit2(e.target.value)}
-                        placeholder="Đơn vị 2..."
-                        className="w-full px-3 py-2 border rounded-md text-xs bg-white border-gray-300"
-                      />
-                    </div>
-                  </div>
-                )}
+                
               </div>
             )}
           </div>
-
           {/* SECTION 5: FILE SCAN & GHI CHÚ */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center border-b pb-2">
               <FileText className="w-4 h-4 text-[#1E3A8A] mr-1.5" />
               5. File Scan GCN & Ghi Chú
             </h4>
-
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
@@ -791,7 +744,6 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
                   onPreview={(url) => setPreviewFileUrl(url)}
                 />
               </div>
-
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Ghi Chú</label>
                 <input
@@ -804,7 +756,6 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
               </div>
             </div>
           </div>
-
           {/* Footer */}
           <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
             <button
@@ -825,7 +776,6 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
           </div>
         </form>
       </div>
-
       {previewFileUrl && (
         <DocumentPreviewModal
           isOpen={!!previewFileUrl}

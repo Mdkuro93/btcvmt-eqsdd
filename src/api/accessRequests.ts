@@ -163,12 +163,24 @@ export async function approveAccessRequest(params: {
         area_id: null,
         project_ids: null,
         managed_warehouse_ids: null,
+        organization: targetReq.organization || null,
+        purpose: targetReq.purpose || null,
+        phone: targetReq.phone || null,
       };
       mockStore.saveProfiles([userProfile, ...profiles]);
     } else {
       userProfile.status = 'active';
       if (!userProfile.username) {
         userProfile.username = derivedUsername;
+      }
+      if (!userProfile.organization && targetReq.organization) {
+        userProfile.organization = targetReq.organization;
+      }
+      if (!userProfile.purpose && targetReq.purpose) {
+        userProfile.purpose = targetReq.purpose;
+      }
+      if (!userProfile.phone && targetReq.phone) {
+        userProfile.phone = targetReq.phone;
       }
       mockStore.saveProfiles([...profiles]);
     }
@@ -223,7 +235,12 @@ export async function approveAccessRequest(params: {
 
     if (existingProfile) {
       targetUserId = existingProfile.id;
-      await supabase.from('profiles').update({ status: 'active' }).eq('id', targetUserId);
+      await supabase.from('profiles').update({ 
+        status: 'active',
+        organization: reqData.organization || undefined,
+        purpose: reqData.purpose || undefined,
+        phone: reqData.phone || undefined,
+      }).eq('id', targetUserId);
     } else {
       const { data: newProf, error: pErr } = await supabase.from('profiles').insert([{
         email: reqData.email.toLowerCase(),
@@ -231,6 +248,9 @@ export async function approveAccessRequest(params: {
         role: 'viewer',
         status: 'active',
         permissions: ['asset.view'],
+        organization: reqData.organization || null,
+        purpose: reqData.purpose || null,
+        phone: reqData.phone || null,
       }]).select().single();
       if (pErr) throw pErr;
       targetUserId = newProf.id;

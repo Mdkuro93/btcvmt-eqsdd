@@ -58,10 +58,12 @@ export function computeReportSummary(assets: Asset[], filters: ReportFilters): R
     if (filters.searchTerm) {
       const term = filters.searchTerm.toLowerCase();
       const matchNo = asset.certificate_no.toLowerCase().includes(term);
-      const matchOwner = (asset.owner_name || '').toLowerCase().includes(term);
+      const ownerName = asset.current_owner_entity?.name || asset.investor_entities?.name || '';
+      const matchOwner = ownerName.toLowerCase().includes(term);
       const matchProject = (asset.projects?.name || '').toLowerCase().includes(term);
       const matchLot = (asset.land_lot_no || '').toLowerCase().includes(term);
-      if (!matchNo && !matchOwner && !matchProject && !matchLot) return false;
+      const matchLegalLot = (asset.legal_lot_code || '').toLowerCase().includes(term);
+      if (!matchNo && !matchOwner && !matchProject && !matchLot && !matchLegalLot) return false;
     }
 
     return true;

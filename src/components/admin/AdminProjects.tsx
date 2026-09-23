@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Project, Area } from '../../types';
+import { Project, Area, InvestorEntity } from '../../types';
 import { fetchProjects, createProject, updateProject, deleteProject, fetchAreas } from '../../api/assets';
+import { fetchInvestorEntities } from '../../api/investorEntities';
 import { mockStore } from '../../lib/mockStore';
 import { FolderGit2, Plus, Edit2, Trash2, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -10,13 +11,15 @@ import { LoadingFallback } from '../LoadingFallback';
 export const AdminProjects: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [entities, setEntities] = useState<InvestorEntity[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form states
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectAreaId, setNewProjectAreaId] = useState('');
+  const [newProjectDefaultOwnerId, setNewProjectDefaultOwnerId] = useState('');
   const [projectSearch, setProjectSearch] = useState('');
-  const [editingProject, setEditingProject] = useState<{ id: string; name: string; area_id: string } | null>(null);
+  const [editingProject, setEditingProject] = useState<{ id: string; name: string; area_id: string; default_owner_entity_id?: string | null } | null>(null);
 
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -25,12 +28,14 @@ export const AdminProjects: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [p, a] = await Promise.all([
+      const [p, a, e] = await Promise.all([
         fetchProjects().catch(() => mockStore.getProjects()),
         fetchAreas().catch(() => mockStore.getAreas()),
+        fetchInvestorEntities().catch(() => mockStore.getInvestorEntities()),
       ]);
       setProjects(p || []);
       setAreas(a || []);
+      setEntities(e || []);
     } catch (err) {
       console.error(err);
       toast.error('Lỗi tải dữ liệu dự án BĐS');
@@ -50,9 +55,14 @@ export const AdminProjects: React.FC = () => {
       return;
     }
     try {
-      await createProject({ name: newProjectName.trim(), area_id: newProjectAreaId });
+      await createProject({
+        name: newProjectName.trim(),
+        area_id: newProjectAreaId,
+        default_owner_entity_id: newProjectDefaultOwnerId || null,
+      });
       toast.success('Thêm dự án thành công');
       setNewProjectName('');
+      setNewProjectDefaultOwnerId('');
       loadData();
     } catch (err: any) {
       toast.error('Lỗi: ' + (err.message || 'Không thể thêm dự án'));
@@ -69,6 +79,7 @@ export const AdminProjects: React.FC = () => {
       await updateProject(editingProject.id, {
         name: editingProject.name.trim(),
         area_id: editingProject.area_id,
+        default_owner_entity_id: editingProject.default_owner_entity_id || null,
       });
       toast.success('Cập nhật dự án thành công');
       setEditingProject(null);
@@ -109,6 +120,7 @@ export const AdminProjects: React.FC = () => {
         onForceLocal={() => {
           setProjects(mockStore.getProjects());
           setAreas(mockStore.getAreas());
+          setEntities(mockStore.getInvestorEntities());
           setLoading(false);
         }}
       />
@@ -123,7 +135,7 @@ export const AdminProjects: React.FC = () => {
           <Plus className="w-4 h-4" /> Thêm Dự án Bất động sản mới
         </h3>
         <form onSubmit={handleAddProject} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-          <div className="sm:col-span-6">
+          <div className="sm:col-span-4">
             <label className="block text-xs font-semibold text-gray-700 mb-1">Tên Dự án *</label>
             <input
               type="text"
@@ -133,7 +145,7 @@ export const AdminProjects: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="sm:col-span-4">
+          <div className="sm:col-span-3">
             <label className="block text-xs font-semibold text-gray-700 mb-1">Địa bàn trực thuộc *</label>
             <select
               value={newProjectAreaId}
@@ -143,6 +155,19 @@ export const AdminProjects: React.FC = () => {
               <option value="">-- Chọn Địa bàn --</option>
               {areas.map((a) => (
                 <option key={a.id} value={a.id}>{a.name} ({a.regions?.name || ''})</option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-3">
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Chủ đầu tư mặc định</label>
+            <select
+              value={newProjectDefaultOwnerId}
+              onChange={(e) => setNewProjectDefaultOwnerId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">-- Chọn CĐT (Tùy chọn) --</option>
+              {entities.map((ent) => (
+                <option key={ent.id} value={ent.id}>{ent.name} {ent.company_code ? `(${ent.company_code})` : ''}</option>
               ))}
             </select>
           </div>
@@ -182,6 +207,7 @@ export const AdminProjects: React.FC = () => {
           filteredProjects.map((p) => {
             const area = areas.find(a => a.id === p.area_id);
             const areaName = p.areas?.name || area?.name || 'Chưa gán địa bàn';
+            const defaultOwner = entities.find(e => e.id === p.default_owner_entity_id);
             return (
               <div key={p.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                 <div className="flex items-center gap-3">
@@ -190,15 +216,23 @@ export const AdminProjects: React.FC = () => {
                   </div>
                   <div>
                     <span className="font-semibold text-gray-900 text-sm">{p.name}</span>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      Địa bàn: <span className="font-medium text-gray-700">{areaName}</span>
+                    <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                      <span>Địa bàn: <span className="font-medium text-gray-700">{areaName}</span></span>
+                      {defaultOwner && (
+                        <span>• CĐT mặc định: <span className="font-medium text-blue-700">{defaultOwner.name}</span></span>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setEditingProject({ id: p.id, name: p.name, area_id: p.area_id })}
+                    onClick={() => setEditingProject({
+                      id: p.id,
+                      name: p.name,
+                      area_id: p.area_id,
+                      default_owner_entity_id: p.default_owner_entity_id || '',
+                    })}
                     className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
                     title="Sửa dự án"
                   >
@@ -253,6 +287,19 @@ export const AdminProjects: React.FC = () => {
                   <option value="">-- Chọn Địa bàn --</option>
                   {areas.map((a) => (
                     <option key={a.id} value={a.id}>{a.name} ({a.regions?.name || ''})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Chủ đầu tư mặc định</label>
+                <select
+                  value={editingProject.default_owner_entity_id || ''}
+                  onChange={(e) => setEditingProject({ ...editingProject, default_owner_entity_id: e.target.value || null })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                >
+                  <option value="">-- Chọn CĐT mặc định (Tùy chọn) --</option>
+                  {entities.map((ent) => (
+                    <option key={ent.id} value={ent.id}>{ent.name} {ent.company_code ? `(${ent.company_code})` : ''}</option>
                   ))}
                 </select>
               </div>

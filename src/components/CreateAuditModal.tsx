@@ -203,7 +203,7 @@ export const CreateAuditModal: React.FC<Props> = ({
             </div>
             <ul className="list-disc pl-5 space-y-1 text-gray-600 text-[11px] leading-relaxed">
               <li>Hệ thống tự động chốt danh sách toàn bộ GCN tại kho tại thời điểm tạo đợt.</li>
-              <li>Thủ kho tick xác nhận từng hồ sơ: <strong>Đúng vị trí</strong>, <strong>Sai vị trí</strong> (ghi nhận vị trí thực tế), hoặc <strong>Không tìm thấy</strong>.</li>
+              <li>Quản lý kho tick xác nhận từng hồ sơ: <strong>Đúng vị trí</strong>, <strong>Sai vị trí</strong> (ghi nhận vị trí thực tế), hoặc <strong>Không tìm thấy</strong>.</li>
               <li>Hệ thống tự động xuất bảng tổng hợp chênh lệch để lập biên bản xử lý sau kiểm kê.</li>
             </ul>
           </div>

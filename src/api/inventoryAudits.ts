@@ -86,13 +86,13 @@ export async function getInventoryAuditDetail(auditId: string): Promise<Inventor
             id,
             asset_code,
             certificate_no,
-            subdivision,
-            lot_no,
+            legal_lot_code,
             land_lot_no,
             map_sheet_no,
             business_project_name,
             business_plot_code,
-            owner_name,
+            current_owner_entity_id,
+            current_owner_entity:investor_entities(id, name, company_code),
             area,
             custody_status,
             scan_file_url,
@@ -155,7 +155,7 @@ export async function createInventoryAudit(
     const { data: assets, error: assetErr } = await withTimeout(
       supabase
         .from('assets')
-        .select('id, subdivision, lot_no, land_lot_no, certificate_no, custody_status')
+        .select('id, legal_lot_code, land_lot_no, certificate_no, custody_status')
         .eq('warehouse_id', warehouseId)
         .eq('custody_status', 'in_stock'),
       DEFAULT_READ_TIMEOUT
@@ -202,7 +202,7 @@ export async function createInventoryAudit(
         audit_id: audit.id,
         asset_id: a.id,
         expected_status: 'in_stock',
-        expected_location: a.subdivision ? `${a.subdivision} - Lô ${a.lot_no || ''}` : 'Vị trí kho tiêu chuẩn',
+        expected_location: a.legal_lot_code || 'Vị trí kho tiêu chuẩn',
         actual_found: false,
         actual_location: null,
         finding_status: 'pending',

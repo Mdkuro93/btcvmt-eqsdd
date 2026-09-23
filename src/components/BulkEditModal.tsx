@@ -26,8 +26,8 @@ export const BulkEditModal: React.FC<Props> = ({
   const [applyBusinessPlot, setApplyBusinessPlot] = useState(false);
   const [businessPlotCode, setBusinessPlotCode] = useState('');
 
-  const [applySubdivision, setApplySubdivision] = useState(false);
-  const [subdivision, setSubdivision] = useState('');
+  const [applyLegalLotCode, setApplyLegalLotCode] = useState(false);
+  const [legalLotCode, setLegalLotCode] = useState('');
 
   const [applySaleStatus, setApplySaleStatus] = useState(false);
   const [saleStatus, setSaleStatus] = useState<SaleStatus>('ready_for_sale');
@@ -40,7 +40,7 @@ export const BulkEditModal: React.FC<Props> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!applyBusinessProject && !applyBusinessPlot && !applySubdivision && !applySaleStatus && !applyCustodyStatus) {
+    if (!applyBusinessProject && !applyBusinessPlot && !applyLegalLotCode && !applySaleStatus && !applyCustodyStatus) {
       toast.error('Vui lòng chọn ít nhất một trường dữ liệu cần cập nhật');
       return;
     }
@@ -55,8 +55,8 @@ export const BulkEditModal: React.FC<Props> = ({
       if (applyBusinessPlot) {
         updates.business_plot_code = businessPlotCode.trim() || null;
       }
-      if (applySubdivision) {
-        updates.subdivision = subdivision.trim() || null;
+      if (applyLegalLotCode) {
+        updates.legal_lot_code = legalLotCode.trim() || null;
       }
       if (applySaleStatus) {
         updates.sale_status = saleStatus;
@@ -112,7 +112,7 @@ export const BulkEditModal: React.FC<Props> = ({
                 key={a.id}
                 className="bg-white px-2 py-0.5 rounded border border-blue-200 text-[11px] font-mono font-medium text-blue-800"
               >
-                {a.certificate_no} {a.subdivision ? `(${a.subdivision})` : ''}
+                {a.certificate_no} {a.legal_lot_code ? `(${a.legal_lot_code})` : ''}
               </span>
             ))}
           </div>
@@ -187,28 +187,28 @@ export const BulkEditModal: React.FC<Props> = ({
               )}
             </div>
 
-            {/* 3. Phân khu */}
+            {/* 3. Mã Lô Pháp Lý */}
             <div className="border border-gray-200 rounded-xl p-4 transition-colors hover:border-blue-300">
               <label className="flex items-center gap-2 cursor-pointer mb-2">
                 <input
                   type="checkbox"
-                  checked={applySubdivision}
-                  onChange={e => setApplySubdivision(e.target.checked)}
+                  checked={applyLegalLotCode}
+                  onChange={e => setApplyLegalLotCode(e.target.checked)}
                   className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                 />
                 <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                   <Layers className="w-4 h-4 text-blue-600" />
-                  Cập nhật Phân Khu
+                  Cập nhật Mã Lô Pháp Lý
                 </span>
               </label>
 
-              {applySubdivision && (
+              {applyLegalLotCode && (
                 <div className="mt-2 pl-6">
                   <input
                     type="text"
-                    value={subdivision}
-                    onChange={e => setSubdivision(e.target.value)}
-                    placeholder="VD: Phân khu A, Block 3, Khu Biệt Thự..."
+                    value={legalLotCode}
+                    onChange={e => setLegalLotCode(e.target.value)}
+                    placeholder="VD: Phân khu A-Lô 12, Block B-LK04..."
                     className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>

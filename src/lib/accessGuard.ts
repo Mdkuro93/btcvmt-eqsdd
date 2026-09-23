@@ -21,7 +21,7 @@ export function canLookupData(profile: Profile | null): boolean {
   if (!profile) return false;
 
   // 1. Tài khoản Quản trị & Nội bộ có quyền xem/quản lý
-  const internalRoles = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept'];
+  const internalRoles = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'investor', 'supervisor', 'quan_ly', 'chuyen_vien'];
   if (internalRoles.includes(profile.role)) {
     return profile.status === 'active' || profile.status === 'approved';
   }
@@ -63,7 +63,7 @@ export function checkLookupAccess(profile: Profile | null): LookupAccessResult {
   }
 
   // 1. Kiểm tra tài khoản nội bộ / quản trị viên
-  const internalRoles = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept'];
+  const internalRoles = ['super_admin', 'admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'investor', 'supervisor', 'quan_ly', 'chuyen_vien'];
   if (internalRoles.includes(profile.role)) {
     if (profile.status === 'active' || profile.status === 'approved') {
       return {

@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { AuditLog } from '../types';
 import { mockStore } from '../lib/mockStore';
 
@@ -24,7 +24,15 @@ export const fetchAuditLogs = async (recordId?: string): Promise<AuditLog[]> => 
   }
 
   const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-  if (error) throw error;
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      throw new Error(
+        'Bảng audit_logs chưa có trong cơ sở dữ liệu Supabase hoặc quan hệ liên kết profiles chưa khớp. ' +
+        'Vui lòng chạy migration 0035_create_audit_logs.sql trong Supabase SQL Editor.'
+      );
+    }
+    throw new Error(`Lỗi khi tải lịch sử kiểm toán: ${error.message || 'Lỗi cơ sở dữ liệu'}`);
+  }
 
   return data || [];
 };
@@ -62,11 +70,15 @@ export const createAuditLog = async (
     DEFAULT_WRITE_TIMEOUT
   );
 
-  if (error) throw error;
-  
-  try {
-    mockStore.addAuditLog(log);
-  } catch {}
-  
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      throw new Error(
+        'Không thể lưu nhật ký kiểm toán: bảng audit_logs chưa có trong cơ sở dữ liệu Supabase. ' +
+        'Vui lòng chạy migration 0035_create_audit_logs.sql trong Supabase SQL Editor.'
+      );
+    }
+    throw new Error(`Không thể lưu nhật ký kiểm toán: ${error.message || 'Lỗi cơ sở dữ liệu'}`);
+  }
+
   return data;
 };

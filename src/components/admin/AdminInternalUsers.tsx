@@ -9,21 +9,26 @@ import {
   updateUserManagedWarehouses, 
   createProfile, 
   deleteProfile, 
-  ALL_PERMISSIONS 
+  ALL_PERMISSIONS,
+  DEFAULT_PERMISSIONS_BY_ROLE,
+  getEffectivePermissions,
+  isCustomizedPermissions
 } from '../../api/users';
 import { fetchWarehouses } from '../../api/assets';
 import { mockStore } from '../../lib/mockStore';
 import { 
-  Shield, UserPlus, Trash2, Check, Store 
+  Shield, UserPlus, Trash2, Check, Store, RotateCcw, KeyRound 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../ConfirmModal';
 import { LoadingFallback } from '../LoadingFallback';
+import { AdminResetPasswordModal } from '../user-management/AdminResetPasswordModal';
 
 export const AdminInternalUsers: React.FC = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [resetPasswordUser, setResetPasswordUser] = useState<Profile | null>(null);
 
   // Form states
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -84,7 +89,7 @@ export const AdminInternalUsers: React.FC = () => {
   const handleUserRoleChange = async (userId: string, newRole: Role) => {
     try {
       await updateUserRole(userId, newRole);
-      toast.success('Đã cập nhật vai trò người dùng');
+      toast.success('Đã cập nhật vai trò & tự động áp dụng bộ quyền mặc định');
       loadData();
     } catch (err: any) {
       toast.error('Lỗi đổi vai trò: ' + (err.message || 'Thao tác thất bại'));
@@ -103,7 +108,8 @@ export const AdminInternalUsers: React.FC = () => {
   };
 
   const handleTogglePermission = async (prof: Profile, permKey: string) => {
-    const currentPerms = prof.permissions || [];
+    // Luôn kế thừa từ tập quyền hiệu lực thực tế (không bao giờ bắt đầu từ rỗng khi permissions là null)
+    const currentPerms = getEffectivePermissions(prof);
     const newPerms = currentPerms.includes(permKey)
       ? currentPerms.filter(p => p !== permKey)
       : [...currentPerms, permKey];
@@ -113,7 +119,18 @@ export const AdminInternalUsers: React.FC = () => {
       toast.success('Đã cập nhật phân quyền chi tiết');
       loadData();
     } catch (err: any) {
-      toast.error('Lỗi cập nhật quyền');
+      toast.error('Lỗi cập nhật quyền: ' + (err.message || ''));
+    }
+  };
+
+  const handleResetDefaultPermissions = async (prof: Profile) => {
+    try {
+      const defaultPerms = DEFAULT_PERMISSIONS_BY_ROLE[prof.role] || [];
+      await updateUserPermissions(prof.id, defaultPerms);
+      toast.success(`Đã khôi phục bộ quyền mặc định cho vai trò "${prof.role}"`);
+      loadData();
+    } catch (err: any) {
+      toast.error('Lỗi khôi phục quyền mặc định');
     }
   };
 
@@ -211,19 +228,22 @@ export const AdminInternalUsers: React.FC = () => {
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
             >
               <option value="super_admin">Quản trị viên cấp cao (super_admin)</option>
-              <option value="btc_manager">Ban TC (btc_manager)</option>
-              <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
+              <option value="admin">Quản trị viên (admin)</option>
+              <option value="btc_manager">Ban TC Tập đoàn (btc_manager)</option>
+              <option value="warehouse_manager">Quản lý kho (warehouse_manager)</option>
               <option value="capital_dept">Ban Nguồn Vốn (capital_dept)</option>
-              <option value="project_dept">Ban DAĐT (project_dept)</option>
+              <option value="project_dept">Ban PTDA & Ban Đối Ngoại (project_dept)</option>
               <option value="re_dept">Ban KD BĐS (re_dept)</option>
-              <option value="viewer">Viewer (viewer)</option>
+              <option value="investor">Chủ đầu tư / NĐT (investor)</option>
+              <option value="supervisor">Ban Giám sát / Kiểm soát (supervisor)</option>
+              <option value="viewer">Người tra cứu (viewer)</option>
             </select>
           </div>
 
           {newUserRole === 'warehouse_manager' && (
             <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg space-y-2">
               <div className="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
-                <Store className="w-3.5 h-3.5 text-amber-700" /> Chọn các kho Thủ kho này phụ trách:
+                <Store className="w-3.5 h-3.5 text-amber-700" /> Chọn các kho Quản lý kho này phụ trách:
               </div>
               <div className="flex flex-wrap gap-2">
                 {warehouses.map((wh) => {
@@ -317,15 +337,18 @@ export const AdminInternalUsers: React.FC = () => {
                     <select
                       value={prof.role}
                       onChange={(e) => handleUserRoleChange(prof.id, e.target.value as Role)}
-                      className="text-xs border border-gray-300 rounded-md p-1.5 bg-white focus:border-blue-500"
+                      className="text-xs border border-gray-300 rounded-md p-1.5 bg-white focus:border-blue-500 font-medium text-gray-800"
                     >
                       <option value="super_admin">Quản trị viên cấp cao (super_admin)</option>
-                      <option value="btc_manager">Ban TC (btc_manager)</option>
-                      <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
+                      <option value="admin">Quản trị viên (admin)</option>
+                      <option value="btc_manager">Ban TC Tập đoàn (btc_manager)</option>
+                      <option value="warehouse_manager">Quản lý kho (warehouse_manager)</option>
                       <option value="capital_dept">Ban Nguồn Vốn (capital_dept)</option>
-                      <option value="project_dept">Ban DAĐT (project_dept)</option>
+                      <option value="project_dept">Ban PTDA & Ban Đối Ngoại (project_dept)</option>
                       <option value="re_dept">Ban KD BĐS (re_dept)</option>
-                      <option value="viewer">Viewer (viewer)</option>
+                      <option value="investor">Chủ đầu tư / NĐT (investor)</option>
+                      <option value="supervisor">Ban Giám sát / Kiểm soát (supervisor)</option>
+                      <option value="viewer">Người tra cứu (viewer)</option>
                     </select>
                   </td>
                   <td className="px-4 py-4 min-w-[200px]">
@@ -359,27 +382,75 @@ export const AdminInternalUsers: React.FC = () => {
                     )}
                   </td>
                   <td className="px-4 py-4">
-                    <div className="flex flex-wrap gap-1.5 max-w-xl">
-                      {ALL_PERMISSIONS.map((perm) => {
-                        const hasPerm = (prof.permissions || []).includes(perm.key);
-                        return (
-                          <button
-                            key={perm.key}
-                            onClick={() => handleTogglePermission(prof, perm.key)}
-                            className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1 cursor-pointer ${
-                              hasPerm
-                                ? 'bg-blue-100 text-[#1E3A8A] border-blue-300'
-                                : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
-                            }`}
-                          >
-                            {hasPerm && <Check className="w-3 h-3" />}
-                            {perm.label}
-                          </button>
-                        );
-                      })}
+                    <div className="space-y-2 max-w-2xl">
+                      {/* Trạng thái phân quyền (Mặc định hay Tùy biến) */}
+                      <div className="flex items-center justify-between text-[11px]">
+                        {['super_admin', 'admin', 'btc_manager'].includes(prof.role) ? (
+                          <span className="font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                            Toàn quyền theo vai trò Quản trị
+                          </span>
+                        ) : isCustomizedPermissions(prof) ? (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              Đã tùy biến quyền riêng
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleResetDefaultPermissions(prof)}
+                              className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                              title="Khôi phục về bộ quyền mặc định theo vai trò"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              Khôi phục mặc định
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Mặc định theo vai trò ({prof.role})
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Danh sách các nút quyền chi tiết */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {ALL_PERMISSIONS.map((perm) => {
+                          const effectivePerms = getEffectivePermissions(prof);
+                          const hasPerm = effectivePerms.includes(perm.key);
+                          const isSpecialAdmin = ['super_admin', 'admin', 'btc_manager'].includes(prof.role);
+
+                          return (
+                            <button
+                              key={perm.key}
+                              type="button"
+                              disabled={isSpecialAdmin}
+                              onClick={() => handleTogglePermission(prof, perm.key)}
+                              className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1 ${
+                                isSpecialAdmin
+                                  ? 'bg-blue-50 text-[#1E3A8A] border-blue-200 cursor-default opacity-90'
+                                  : hasPerm
+                                    ? 'bg-blue-100 text-[#1E3A8A] border-blue-300 hover:bg-blue-200 cursor-pointer font-semibold shadow-2xs'
+                                    : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100 hover:text-gray-600 cursor-pointer'
+                              }`}
+                              title={isSpecialAdmin ? 'Vai trò Quản trị luôn có toàn quyền' : `Bấm để ${hasPerm ? 'bỏ' : 'cấp'} quyền "${perm.label}"`}
+                            >
+                              {hasPerm && <Check className="w-3 h-3 text-[#1E3A8A]" />}
+                              {perm.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-4 text-right">
+                    <button
+                      onClick={() => setResetPasswordUser(prof)}
+                      className="text-amber-600 hover:text-amber-800 hover:bg-amber-50 p-1.5 rounded-md transition-colors cursor-pointer mr-1"
+                      title="Đặt lại mật khẩu"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => setDeleteTarget({ id: prof.id, name: prof.full_name || prof.email })}
                       className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
@@ -406,6 +477,15 @@ export const AdminInternalUsers: React.FC = () => {
         confirmVariant="danger"
         loading={isDeleting}
       />
+
+      {/* Reset Password Modal */}
+      {resetPasswordUser && (
+        <AdminResetPasswordModal
+          user={resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
+          onSuccess={loadData}
+        />
+      )}
     </div>
   );
 };

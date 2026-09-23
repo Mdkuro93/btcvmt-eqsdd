@@ -5,35 +5,76 @@ import { format } from 'date-fns';
 export interface ExcelAssetRow {
   'ID Hệ Thống'?: string;
   'Mã Tài Sản / TSĐB'?: string;
-  'Số GCN QSDĐ': string;
-  'Nhóm Sổ'?: string;
   'Dự Án (Pháp lý)'?: string;
   'Tên Dự Án Kinh Doanh'?: string;
-  'Phân Khu'?: string;
-  'Số Lô / Thửa (Mã Lô Pháp Lý)'?: string;
-  'Số Thửa Bản Đồ'?: string;
-  'Số Tờ Bản Đồ'?: string;
+  'Loại Tài Sản'?: string;
+  'Nhóm Sổ'?: string;
+  'Mã lô đất (Mã Lô Pháp Lý)'?: string;
   'Mã Lô Kinh Doanh'?: string;
   'Diện Tích (m²)'?: number | string;
   'Chủ Sở Hữu'?: string;
-  'Loại Tài Sản'?: string;
+  'Số Thửa Bản Đồ'?: string;
+  'Số Tờ Bản Đồ'?: string;
+  'Số GCN QSDĐ': string;
+  'Số vào sổ cấp'?: string;
+  'Ngày vào sổ'?: string;
   'Mục Đích Sử Dụng'?: string;
   'Thời Hạn Sử Dụng'?: string;
-  'Trạng Thái Pháp Lý'?: string;
-  'Trạng Thái Lưu Kho'?: string;
-  'Trạng Thái Kinh Doanh'?: string;
   'Trạng Thái Thế Chấp'?: string;
   'Ngân Hàng Thế Chấp'?: string;
-  'Kho Lưu Giữ'?: string;
-  'Người Cập Nhật Cuối'?: string;
-  'Thời Gian Cập Nhật Cuối'?: string;
-  'Mã công ty sở hữu'?: string;
-  'Phân loại'?: string;
-  'Ngày chuyển nhượng'?: string;
+  'Đơn vị vay'?: string;
+  'Giá trị định giá'?: number | string;
+  'Tỷ lệ đảm bảo'?: number | string;
+  'Giá trị TSĐB'?: number | string;
+  'Trạng Thái Pháp Lý'?: string;
+  'Trạng Thái Kinh Doanh'?: string;
+  'Trạng Thái Lưu Kho'?: string;
+  'Đơn vị quản lý sổ'?: string;
+  'Ghi chú'?: string;
 }
 
 export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_QSDD_VMT') {
-  const data: ExcelAssetRow[] = assets.map((a) => {
+  // Row 1: 4 Groups header
+  const groupRow = [
+    'THÔNG TIN CHUNG', '', '', '', '', '', '', '', '',
+    'THÔNG TIN PHÁP LÝ', '', '', '', '', '', '', '',
+    'THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG', '', '', '', '', '',
+    'TRẠNG THÁI TSĐB', '', '', '', ''
+  ];
+
+  // Row 2: 28 Column headers
+  const headerRow = [
+    'ID Hệ Thống',
+    'Mã Tài Sản / TSĐB',
+    'Dự Án (Pháp lý)',
+    'Tên Dự Án Kinh Doanh',
+    'Loại Tài Sản',
+    'Nhóm Sổ',
+    'Mã lô đất (Mã Lô Pháp Lý)',
+    'Mã Lô Kinh Doanh',
+    'Diện Tích (m²)',
+    'Chủ Sở Hữu',
+    'Số Thửa Bản Đồ',
+    'Số Tờ Bản Đồ',
+    'Số GCN QSDĐ',
+    'Số vào sổ cấp',
+    'Ngày vào sổ',
+    'Mục Đích Sử Dụng',
+    'Thời Hạn Sử Dụng',
+    'Trạng Thái Thế Chấp',
+    'Ngân Hàng Thế Chấp',
+    'Đơn vị vay',
+    'Giá trị định giá',
+    'Tỷ lệ đảm bảo',
+    'Giá trị TSĐB',
+    'Trạng Thái Pháp Lý',
+    'Trạng Thái Kinh Doanh',
+    'Trạng Thái Lưu Kho',
+    'Đơn vị quản lý sổ',
+    'Ghi chú'
+  ];
+
+  const dataRows = assets.map((a) => {
     let lifecycleText = 'Đang hiệu lực';
     if (a.lifecycle_status === 'split') lifecycleText = 'Đã tách thửa';
     if (a.lifecycle_status === 'invalidated') lifecycleText = 'Vô hiệu';
@@ -48,70 +89,90 @@ export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_Q
     let mortgageText = 'Không thế chấp';
     if (a.mortgage_status === 'mortgaged') mortgageText = 'Đang thế chấp';
 
-    return {
-      'ID Hệ Thống': a.id,
-      'Mã Tài Sản / TSĐB': a.asset_code || `VMT_${a.collateral_type || 'BDS'}_${a.id}`,
-      'Số GCN QSDĐ': a.certificate_no,
-      'Nhóm Sổ': a.certificate_group === 'so_lon' ? 'Sổ lớn' : 'Sổ nhỏ',
-      'Dự Án (Pháp lý)': a.projects?.name || '',
-      'Tên Dự Án Kinh Doanh': a.business_project_name || '',
-      'Phân Khu': a.subdivision || '',
-      'Số Lô / Thửa (Mã Lô Pháp Lý)': a.lot_no || '',
-      'Số Thửa Bản Đồ': a.land_lot_no || '',
-      'Số Tờ Bản Đồ': a.map_sheet_no || '',
-      'Mã Lô Kinh Doanh': a.business_plot_code || '',
-      'Diện Tích (m²)': a.area || 0,
-      'Chủ Sở Hữu': a.owner_name || '-',
-      'Loại Tài Sản': a.asset_type || 'Đất nền',
-      'Mục Đích Sử Dụng': a.land_use_purpose || a.usage_purpose || '',
-      'Thời Hạn Sử Dụng': a.land_use_term || a.usage_term || '',
-      'Trạng Thái Pháp Lý': lifecycleText,
-      'Trạng Thái Lưu Kho': custodyText,
-      'Trạng Thái Kinh Doanh': saleText,
-      'Trạng Thái Thế Chấp': mortgageText,
-      'Ngân Hàng Thế Chấp': a.mortgage_bank || '',
-      'Kho Lưu Giữ': a.warehouses?.name || '',
-      'Người Cập Nhật Cuối': a.updater?.full_name || a.updater?.email || (a.updated_by ? 'Người dùng hệ thống' : ''),
-      'Thời Gian Cập Nhật Cuối': a.updated_at ? format(new Date(a.updated_at), 'dd/MM/yyyy HH:mm') : (a.created_at ? format(new Date(a.created_at), 'dd/MM/yyyy HH:mm') : ''),
-      'Mã công ty sở hữu': a.current_owner_entity?.company_code || '',
-      'Phân loại': a.current_owner_role === 'cdt' ? 'CĐT' : (a.current_owner_role === 'ndt' ? 'NĐT' : ''),
-      'Ngày chuyển nhượng': '',
-    };
+    const maLoPhapLy = a.legal_lot_code || '';
+
+    const bankStr = a.mortgage_bank || '';
+    const unitStr = a.mortgage_unit || '';
+
+    const dateRegistry = a.registry_date ? format(new Date(a.registry_date), 'dd/MM/yyyy') : '';
+    const dateUsageTerm = a.usage_term_type === 'long_term' 
+      ? 'Lâu dài' 
+      : (a.usage_term_date ? format(new Date(a.usage_term_date), 'dd/MM/yyyy') : '');
+
+    return [
+      a.id || '',
+      a.asset_code || `VMT_${a.collateral_type || 'BDS'}_${a.id}`,
+      a.projects?.name || '',
+      a.business_project_name || '',
+      a.asset_type || 'Đất nền',
+      a.parent_asset_id ? 'Sổ con' : (a.certificate_group === 'so_lon' ? 'Sổ lớn' : 'Sổ nhỏ'),
+      maLoPhapLy,
+      a.business_plot_code || '',
+      a.area || 0,
+      a.current_owner_entity?.name || a.investor_entities?.name || '-',
+      a.land_lot_no || '',
+      a.map_sheet_no || '',
+      a.certificate_no || '',
+      a.registry_no || '',
+      dateRegistry,
+      a.usage_purpose || '',
+      dateUsageTerm,
+      mortgageText,
+      bankStr,
+      unitStr,
+      a.mortgage_valuation || '',
+      a.collateral_ratio ? `${a.collateral_ratio}%` : '',
+      a.collateral_value || '',
+      lifecycleText,
+      saleText,
+      custodyText,
+      a.managing_unit || a.warehouses?.name || '',
+      a.notes || ''
+    ];
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(data);
+  const wsData = [groupRow, headerRow, ...dataRows];
+  const worksheet = XLSX.utils.aoa_to_sheet(wsData);
 
-  // Set column widths
-  const colWidths = [
-    { wch: 20 }, // ID
-    { wch: 22 }, // Mã TS
-    { wch: 18 }, // Số GCN
-    { wch: 12 }, // Nhóm sổ
-    { wch: 28 }, // Dự án Pháp lý
-    { wch: 26 }, // Tên DA Kinh Doanh
-    { wch: 16 }, // Phân khu
-    { wch: 16 }, // Số Lô Pháp lý
-    { wch: 14 }, // Thửa
-    { wch: 12 }, // Tờ
-    { wch: 18 }, // Mã Lô KD
-    { wch: 14 }, // Diện tích
-    { wch: 28 }, // Chủ sở hữu
-    { wch: 20 }, // Loại TS
-    { wch: 22 }, // Mục đích
-    { wch: 16 }, // Thời hạn
-    { wch: 16 }, // TT Pháp lý
-    { wch: 18 }, // TT Lưu kho
-    { wch: 16 }, // TT Kinh doanh
-    { wch: 16 }, // TT Thế chấp
-    { wch: 22 }, // Ngân hàng
-    { wch: 24 }, // Kho
-    { wch: 24 }, // Người cập nhật
-    { wch: 20 }, // TG cập nhật
-    { wch: 22 }, // Mã công ty sở hữu
-    { wch: 12 }, // Phân loại
-    { wch: 20 }, // Ngày chuyển nhượng
+  // Merge headers on row 0 (0-indexed)
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },   // THÔNG TIN CHUNG: cols 0-8 (9 cols)
+    { s: { r: 0, c: 9 }, e: { r: 0, c: 16 } },  // THÔNG TIN PHÁP LÝ: cols 9-16 (8 cols)
+    { s: { r: 0, c: 17 }, e: { r: 0, c: 22 } }, // THÔNG TIN TÀI SẢN CẦM CỐ...: cols 17-22 (6 cols)
+    { s: { r: 0, c: 23 }, e: { r: 0, c: 27 } }, // TRẠNG THÁI TSĐB: cols 23-27 (5 cols)
   ];
-  worksheet['!cols'] = colWidths;
+
+  // Set column widths for 28 columns
+  worksheet['!cols'] = [
+    { wch: 18 }, // ID Hệ Thống
+    { wch: 22 }, // Mã TSĐB
+    { wch: 26 }, // Dự Án Pháp Lý
+    { wch: 24 }, // Tên DA KD
+    { wch: 16 }, // Loại TS
+    { wch: 12 }, // Nhóm Sổ
+    { wch: 24 }, // Mã lô đất (Mã Lô Pháp Lý)
+    { wch: 18 }, // Mã Lô KD
+    { wch: 14 }, // Diện Tích
+    { wch: 28 }, // Chủ Sở Hữu
+    { wch: 14 }, // Số Thửa
+    { wch: 12 }, // Số Tờ
+    { wch: 18 }, // Số GCN
+    { wch: 16 }, // Số vào sổ
+    { wch: 14 }, // Ngày vào sổ
+    { wch: 24 }, // Mục Đích
+    { wch: 16 }, // Thời Hạn
+    { wch: 18 }, // TT Thế Chấp
+    { wch: 28 }, // Ngân Hàng
+    { wch: 28 }, // Đơn Vị Vay
+    { wch: 18 }, // Định Giá
+    { wch: 14 }, // Tỷ Lệ ĐB
+    { wch: 18 }, // Giá Trị TSĐB
+    { wch: 18 }, // TT Pháp Lý
+    { wch: 18 }, // TT Kinh Doanh
+    { wch: 18 }, // TT Lưu Kho
+    { wch: 22 }, // Đơn vị QL Sổ
+    { wch: 24 }, // Ghi Chú
+  ];
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách GCN');
@@ -121,64 +182,148 @@ export function exportAssetsToExcel(assets: Asset[], fileName = 'Danh_sach_GCN_Q
 }
 
 export function downloadExcelTemplate() {
-  const sampleData: ExcelAssetRow[] = [
-    {
-      'ID Hệ Thống': 'asset-01 (Bỏ trống nếu tạo mới)',
-      'Mã Tài Sản / TSĐB': 'VMN_BDS_00000001 (Dùng để khớp)',
-      'Số GCN QSDĐ': 'GCN-VMT-001 (Bắt buộc)',
-      'Nhóm Sổ': 'Sổ nhỏ',
-      'Dự Án (Pháp lý)': 'Dự án Khu Đô Thị VMT Central',
-      'Tên Dự Án Kinh Doanh': 'Khu Đô Thị Central Palm',
-      'Phân Khu': 'Phân khu A',
-      'Số Lô / Thửa (Mã Lô Pháp Lý)': 'A-01',
-      'Số Thửa Bản Đồ': '112',
-      'Số Tờ Bản Đồ': '04',
-      'Mã Lô Kinh Doanh': 'PALM-A01',
-      'Diện Tích (m²)': 450.5,
-      'Chủ Sở Hữu': '-',
-      'Loại Tài Sản': 'Biệt thự',
-      'Mục Đích Sử Dụng': 'Đất ở tại đô thị (ODT)',
-      'Thời Hạn Sử Dụng': 'Lâu dài',
-      'Trạng Thái Pháp Lý': 'Đang hiệu lực',
-      'Trạng Thái Lưu Kho': 'Trong kho BTC',
-      'Trạng Thái Kinh Doanh': 'Sẵn sàng bán',
-      'Trạng Thái Thế Chấp': 'Không thế chấp',
-      'Ngân Hàng Thế Chấp': '',
-      'Kho Lưu Giữ': '-',
-      'Mã công ty sở hữu': 'VMT_HOLDINGS',
-      'Phân loại': 'CĐT',
-      'Ngày chuyển nhượng': '2023-12-01',
-    },
-    {
-      'ID Hệ Thống': '',
-      'Mã Tài Sản / TSĐB': '',
-      'Số GCN QSDĐ': 'GCN-VMT-002',
-      'Nhóm Sổ': 'Sổ nhỏ',
-      'Dự Án (Pháp lý)': 'Dự án Khu Dân Cư VMT Riverside',
-      'Tên Dự Án Kinh Doanh': 'Spana Riverside',
-      'Phân Khu': 'Khu B',
-      'Số Lô / Thửa (Mã Lô Pháp Lý)': 'B-15',
-      'Số Thửa Bản Đồ': '205',
-      'Số Tờ Bản Đồ': '08',
-      'Mã Lô Kinh Doanh': 'SP-SH-02',
-      'Diện Tích (m²)': 120.0,
-      'Chủ Sở Hữu': '-',
-      'Loại Tài Sản': 'Shophouse',
-      'Mục Đích Sử Dụng': 'Đất ở tại đô thị (ODT)',
-      'Thời Hạn Sử Dụng': 'Lâu dài',
-      'Trạng Thái Pháp Lý': 'Đang hiệu lực',
-      'Trạng Thái Lưu Kho': 'Trong kho BTC',
-      'Trạng Thái Kinh Doanh': 'Chưa sẵn sàng',
-      'Trạng Thái Thế Chấp': 'Đang thế chấp',
-      'Ngân Hàng Thế Chấp': 'BIDV Chi nhánh TP.HCM',
-      'Kho Lưu Giữ': 'Kho Dự Án Bình Dương',
-      'Mã công ty sở hữu': '',
-      'Phân loại': '',
-      'Ngày chuyển nhượng': '',
-    },
+  const groupRow = [
+    'THÔNG TIN CHUNG', '', '', '', '', '', '', '', '',
+    'THÔNG TIN PHÁP LÝ', '', '', '', '', '', '', '',
+    'THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG', '', '', '', '', '',
+    'TRẠNG THÁI TSĐB', '', '', '', ''
   ];
 
-  const worksheet = XLSX.utils.json_to_sheet(sampleData);
+  const headerRow = [
+    'ID Hệ Thống',
+    'Mã Tài Sản / TSĐB',
+    'Dự Án (Pháp lý)',
+    'Tên Dự Án Kinh Doanh',
+    'Loại Tài Sản',
+    'Nhóm Sổ',
+    'Mã lô đất (Mã Lô Pháp Lý)',
+    'Mã Lô Kinh Doanh',
+    'Diện Tích (m²)',
+    'Chủ Sở Hữu',
+    'Số Thửa Bản Đồ',
+    'Số Tờ Bản Đồ',
+    'Số GCN QSDĐ',
+    'Số vào sổ cấp',
+    'Ngày vào sổ',
+    'Mục Đích Sử Dụng',
+    'Thời Hạn Sử Dụng',
+    'Trạng Thái Thế Chấp',
+    'Ngân Hàng Thế Chấp',
+    'Đơn vị vay',
+    'Giá trị định giá',
+    'Tỷ lệ đảm bảo',
+    'Giá trị TSĐB',
+    'Trạng Thái Pháp Lý',
+    'Trạng Thái Kinh Doanh',
+    'Trạng Thái Lưu Kho',
+    'Đơn vị quản lý sổ',
+    'Ghi chú'
+  ];
+
+  const sampleRows = [
+    [
+      'asset-01 (Bỏ trống nếu tạo mới)',
+      'VMT_DN_BDS_00000001',
+      'Dự án Khu Đô Thị VMT Central',
+      'Khu Đô Thị Central Palm',
+      'Biệt thự',
+      'Sổ nhỏ',
+      'Phân khu A',
+      'PALM-A01',
+      450.5,
+      'Công ty Cổ phần Đầu tư VMT',
+      '112',
+      '04',
+      'GCN-VMT-001 (Bắt buộc)',
+      '',
+      '',
+      'Đất ở tại đô thị (ODT)',
+      'Lâu dài',
+      'Không thế chấp',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'Đang hiệu lực',
+      'Sẵn sàng bán',
+      'Trong kho BTC',
+      '',
+      ''
+    ],
+    [
+      '',
+      'VMT_BD_BDS_00000002',
+      'Dự án Khu Dân Cư VMT Riverside',
+      'Spana Riverside',
+      'Shophouse',
+      'Sổ nhỏ',
+      'Khu B - B-15',
+      'SP-SH-02',
+      120.0,
+      'Công ty TNHH MTV BĐS VMT',
+      '205',
+      '08',
+      'GCN-VMT-002 (Bắt buộc)',
+      'CH-00129',
+      '15/05/2023',
+      'Đất ở tại đô thị (ODT)',
+      'Lâu dài',
+      'Đang thế chấp',
+      'BIDV Chi nhánh TP.HCM; Vietcombank',
+      'Công ty Cổ phần Đầu tư VMT; Công ty BĐS Nam Hải',
+      45000000000,
+      '70%',
+      31500000000,
+      'Đang hiệu lực',
+      'Chưa sẵn sàng',
+      'Trong kho BTC',
+      'Ban QLDA Miền Trung',
+      'Thế chấp đồng thời 2 ngân hàng BIDV và VCB'
+    ]
+  ];
+
+  const wsData = [groupRow, headerRow, ...sampleRows];
+  const worksheet = XLSX.utils.aoa_to_sheet(wsData);
+
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+    { s: { r: 0, c: 9 }, e: { r: 0, c: 16 } },
+    { s: { r: 0, c: 17 }, e: { r: 0, c: 22 } },
+    { s: { r: 0, c: 23 }, e: { r: 0, c: 27 } },
+  ];
+
+  worksheet['!cols'] = [
+    { wch: 22 }, // ID Hệ Thống
+    { wch: 22 }, // Mã TSĐB
+    { wch: 28 }, // Dự Án Pháp Lý
+    { wch: 24 }, // Tên DA KD
+    { wch: 16 }, // Loại TS
+    { wch: 12 }, // Nhóm Sổ
+    { wch: 24 }, // Mã lô đất (Mã Lô Pháp Lý)
+    { wch: 18 }, // Mã Lô KD
+    { wch: 14 }, // Diện Tích
+    { wch: 28 }, // Chủ Sở Hữu
+    { wch: 14 }, // Số Thửa
+    { wch: 12 }, // Số Tờ
+    { wch: 22 }, // Số GCN
+    { wch: 16 }, // Số vào sổ
+    { wch: 14 }, // Ngày vào sổ
+    { wch: 24 }, // Mục Đích
+    { wch: 16 }, // Thời Hạn
+    { wch: 18 }, // TT Thế Chấp
+    { wch: 32 }, // Ngân Hàng
+    { wch: 36 }, // Đơn Vị Vay
+    { wch: 18 }, // Định Giá
+    { wch: 14 }, // Tỷ Lệ ĐB
+    { wch: 18 }, // Giá Trị TSĐB
+    { wch: 18 }, // TT Pháp Lý
+    { wch: 18 }, // TT Kinh Doanh
+    { wch: 18 }, // TT Lưu Kho
+    { wch: 22 }, // Đơn vị QL Sổ
+    { wch: 30 }, // Ghi Chú
+  ];
+
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Mẫu_Cap_Nhat_GCN');
   XLSX.writeFile(workbook, 'Mau_Nhap_Cap_Nhat_GCN_QSDD_VMT.xlsx');
@@ -190,7 +335,7 @@ export function exportInventoryAuditToExcel(
 ) {
   const items = audit.items || [];
   const warehouseName = audit.warehouses?.name || audit.warehouse?.name || 'Kho VMT';
-  const performerName = audit.performer?.full_name || audit.profiles?.full_name || 'Thủ kho';
+  const performerName = audit.performer?.full_name || audit.profiles?.full_name || 'Quản lý kho';
   const startedDateStr = audit.started_at ? format(new Date(audit.started_at), 'dd/MM/yyyy HH:mm') : '-';
   const completedDateStr = audit.completed_at ? format(new Date(audit.completed_at), 'dd/MM/yyyy HH:mm') : 'Chưa hoàn tất';
 
@@ -210,9 +355,8 @@ export function exportInventoryAuditToExcel(
       'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
       'Mã Tài Sản / TSĐB': a.asset_code || '-',
       'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
-      'Phân Khu': a.subdivision || '-',
-      'Số Lô / Thửa': a.lot_no || a.land_lot_no || '-',
-      'Chủ Sở Hữu': a.owner_name || '-',
+      'Mã Lô Pháp Lý': a.legal_lot_code || '-',
+      'Chủ Sở Hữu': a.current_owner_entity?.name || a.investor_entities?.name || '-',
       'Diện Tích (m²)': a.area || 0,
       'Hiện Trạng Kiểm Kê': statusText,
       'Vị Trí Dự Kiến': i.expected_location || '-',
@@ -235,9 +379,8 @@ export function exportInventoryAuditToExcel(
       'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
       'Mã Tài Sản / TSĐB': a.asset_code || '-',
       'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
-      'Phân Khu': a.subdivision || '-',
-      'Số Lô / Thửa': a.lot_no || a.land_lot_no || '-',
-      'Chủ Sở Hữu': a.owner_name || '-',
+      'Mã Lô Pháp Lý': a.legal_lot_code || '-',
+      'Chủ Sở Hữu': a.current_owner_entity?.name || a.investor_entities?.name || '-',
       'Diện Tích (m²)': a.area || 0,
       'Kết Quả Kiểm Kê': statusText,
       'Tìm Thấy Thực Tế': i.actual_found ? 'Có' : 'Không',

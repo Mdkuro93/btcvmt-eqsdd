@@ -330,9 +330,9 @@ export async function decideTransactionItem(
             if (details.expected_release_date) assetUpdates.mortgage_expected_release_date = details.expected_release_date;
           }
 
-          if (details.reason === 'xuất bán') {
+          if (details.reason === 'xuất bán' || details.reason === 'sang tên cho khách') {
             assetUpdates.sale_status = details.saleStatus || 'sold';
-            if (details.salePrice) assetUpdates.notes = `${currentAsset?.notes ? currentAsset.notes + ' | ' : ''}Xuất bán giá: ${details.salePrice}`;
+            if (details.salePrice) assetUpdates.notes = `${currentAsset?.notes ? currentAsset.notes + ' | ' : ''}${details.reason === 'sang tên cho khách' ? 'Sang tên cho khách' : 'Xuất bán'} giá: ${details.salePrice}`;
           }
 
           if (details.reason === 'tách sổ' || details.reason === 'đổi sổ') {
@@ -494,7 +494,7 @@ export async function decideTransactionItem(
           user_id: requesterId,
           type: 'request_approved_with_changes',
           title: `Phiếu yêu cầu #${(targetItem.transaction_id || targetItem.id)?.slice(0, 8)} đã được duyệt với điều chỉnh`,
-          body: `Thủ kho đã duyệt phiếu với điều chỉnh thực tế: "${notes || 'Thay đổi GCN hoặc thông số bàn giao'}". Mã chứng từ xuất/nhập: ${generatedVoucher}`,
+          body: `Quản lý kho đã duyệt phiếu với điều chỉnh thực tế: "${notes || 'Thay đổi GCN hoặc thông số bàn giao'}". Mã chứng từ xuất/nhập: ${generatedVoucher}`,
           transaction_item_id: targetItem.id,
         });
       } else {
@@ -511,7 +511,7 @@ export async function decideTransactionItem(
         user_id: requesterId,
         type: 'request_rejected',
         title: `Phiếu yêu cầu #${(targetItem.transaction_id || targetItem.id)?.slice(0, 8)} đã bị từ chối`,
-        body: `Thủ kho / Ban quản trị đã từ chối yêu cầu. Lý do: "${notes || 'Không thỏa mãn điều kiện kho'}"`,
+        body: `Quản lý kho / Ban quản trị đã từ chối yêu cầu. Lý do: "${notes || 'Không thỏa mãn điều kiện kho'}"`,
         transaction_item_id: targetItem.id,
       });
     }
@@ -523,7 +523,29 @@ export async function decideTransactionItem(
   const warehouseDisplayName = responsibleWarehouse?.name || 'Chưa xác định';
 
   if (decision === 'approved') {
-    if (itemType === 'checkout') {
+    if (itemType === 'checkout' && details.reason === 'khác') {
+      await logActivity({
+        assetId: effectiveAssetId,
+        actionType: 'Xuất khác',
+        documentNo: generatedVoucher,
+        description: `Xuất kho (khác) cho ${details.department || 'Ban/Bộ phận'}. Mục đích: ${details.otherReasonDetail || 'Không ghi rõ'}${hasChanges ? ' (Có điều chỉnh: ' + notes + ')' : ''}`,
+        usedBy: details.department || 'Bộ phận sử dụng',
+        warehouseId: responsibleWarehouse?.id || null,
+        notes: notes || undefined,
+        performedBy: performerId,
+      });
+    } else if (itemType === 'checkin' && details.reason === 'khác') {
+      await logActivity({
+        assetId: effectiveAssetId,
+        actionType: 'Nhập khác',
+        documentNo: generatedVoucher,
+        description: `Nhập kho (khác) về ${warehouseDisplayName}. Mục đích: ${details.otherReasonDetail || 'Không ghi rõ'}${hasChanges ? ' (Có điều chỉnh: ' + notes + ')' : ''}`,
+        usedBy: 'BTC VMT',
+        warehouseId: responsibleWarehouse?.id || null,
+        notes: notes || undefined,
+        performedBy: performerId,
+      });
+    } else if (itemType === 'checkout') {
       const desc = isInterWarehouseTransfer
         ? `Xuất kho luân chuyển GCN ${currentAsset?.certificate_no || ''} từ ${responsibleWarehouse?.name || 'Kho xuất'} sang kho đích (Đang luân chuyển)${hasChanges ? ' (Có điều chỉnh: ' + notes + ')' : ''}`
         : `Xuất sổ cho ${details.department || 'Ban/Bộ phận'}. Lý do: ${details.reason || 'Mượn xử lý công việc'}${hasChanges ? ' (Có điều chỉnh: ' + notes + ')' : ''}`;
@@ -806,7 +828,7 @@ export async function bulkDecideTransactionItems(params: {
         user_id: requesterId,
         type: 'request_approved_with_changes',
         title: `Phiếu yêu cầu #${(transactionId || '').slice(0, 8)} đã được duyệt với điều chỉnh số lượng`,
-        body: `Thực duyệt: ${actualCount} sổ (Yêu cầu ban đầu: ${originalRequestedCount} sổ). Ghi chú: "${globalNotes || 'Thủ kho đã điều chỉnh số lượng bàn giao thực tế'}". Vui lòng kiểm tra chi tiết trong phiếu.`,
+        body: `Thực duyệt: ${actualCount} sổ (Yêu cầu ban đầu: ${originalRequestedCount} sổ). Ghi chú: "${globalNotes || 'Quản lý kho đã điều chỉnh số lượng bàn giao thực tế'}". Vui lòng kiểm tra chi tiết trong phiếu.`,
         transaction_item_id: approvedItems[0]?.itemId || undefined,
       });
     } catch (notifErr) {

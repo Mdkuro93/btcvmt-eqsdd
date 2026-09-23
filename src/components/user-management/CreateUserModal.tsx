@@ -3,6 +3,7 @@ import { Role, Warehouse, InvestorEntity } from '../../types';
 import { UserPlus, Sparkles, Building, X, RefreshCw } from 'lucide-react';
 import { calculateExpiryDate } from './constants';
 import toast from 'react-hot-toast';
+import { InvestorEntityPicker, OrganizationEntityInput } from './InvestorEntityPicker';
 
 interface CreateUserModalProps {
   warehouses: Warehouse[];
@@ -24,8 +25,8 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<Role>('user');
-  const [newPhone, setNewPhone] = useState('');
   const [newOrganization, setNewOrganization] = useState('');
+  const [newPurpose, setNewPurpose] = useState('');
   const [newExpiryPreset, setNewExpiryPreset] = useState<'7d' | '30d' | '90d' | 'permanent' | 'custom'>('30d');
   const [newCustomExpiry, setNewCustomExpiry] = useState('');
   const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
@@ -43,6 +44,19 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
       return;
     }
 
+    if (!newPassword.trim()) {
+      toast.error('Vui lòng nhập mật khẩu khởi tạo cho tài khoản mới (tối thiểu 6 ký tự).');
+      return;
+    }
+    if (newPassword.trim().length < 6) {
+      toast.error('Mật khẩu khởi tạo phải có tối thiểu 6 ký tự.');
+      return;
+    }
+    if (newPassword.trim() === '123456' || newPassword.trim() === 'password123') {
+      toast.error('Không được sử dụng mật khẩu mặc định hoặc quá đơn giản.');
+      return;
+    }
+
     let expiresAt: string | null = null;
     if (newRole === 'user' || newRole === 'viewer') {
       if (newExpiryPreset !== 'permanent') {
@@ -50,16 +64,23 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
       }
     }
 
+    // Chủ đầu tư chỉ đại diện đúng 1 pháp nhân mà chưa nhập Cơ quan -> tự lấy tên pháp nhân đó
+    let organization = newOrganization.trim();
+    if (!organization && newRole === 'investor' && selectedOwnerEntityIds.length === 1) {
+      const only = investorEntities.find(e => e.id === selectedOwnerEntityIds[0]);
+      if (only) organization = only.name;
+    }
+
     await onCreate({
       email: newEmail.trim(),
       full_name: newFullName.trim(),
       username: newUsername.trim() || undefined,
-      password: newPassword.trim() || '123456',
+      password: newPassword.trim(),
       role: newRole,
       status: (newRole === 'user' && expiresAt) ? 'approved' : 'active',
       access_expires_at: expiresAt,
-      phone: newPhone.trim() || undefined,
-      organization: newOrganization.trim() || undefined,
+      organization: organization || undefined,
+      purpose: newPurpose.trim() || undefined,
       managed_warehouse_ids: newRole === 'warehouse_manager' ? selectedWarehouseIds : null,
       assigned_warehouse_ids: ['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(newRole) ? assignedWarehouseIds : null,
       owner_entity_ids: newRole === 'investor' ? selectedOwnerEntityIds : null,
@@ -91,7 +112,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
             <span>
-              <strong>Kích hoạt trực tiếp:</strong> Tài khoản tạo bởi Ban Quản Trị / Thủ kho có trạng thái kích hoạt ngay lập tức mà không cần qua quy trình duyệt đơn.
+              <strong>Kích hoạt trực tiếp:</strong> Tài khoản tạo bởi Ban Quản Trị / Quản lý kho có trạng thái kích hoạt ngay lập tức mà không cần qua quy trình duyệt đơn.
             </span>
           </div>
 
@@ -145,12 +166,29 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Mật khẩu khởi tạo
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">
+                  Mật khẩu khởi tạo <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+                    let gen = '';
+                    for (let i = 0; i < 10; i++) {
+                      gen += chars.charAt(Math.floor(Math.random() * chars.length));
+                    }
+                    setNewPassword(gen);
+                  }}
+                  className="text-[11px] text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                >
+                  Tạo ngẫu nhiên
+                </button>
+              </div>
               <input
                 type="text"
-                placeholder="Mặc định: 123456"
+                required
+                placeholder="Tối thiểu 6 ký tự (VD: Abc@2025)"
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
@@ -170,10 +208,10 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
               >
                 <option value="user">Tra cứu tạm thời (user)</option>
                 <option value="viewer">Khách tra cứu (viewer)</option>
-                <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
+                <option value="warehouse_manager">Quản lý kho (warehouse_manager)</option>
                 <option value="btc_manager">Ban Tài Chính (btc_manager)</option>
                 <option value="capital_dept">Phòng Nguồn Vốn (capital_dept)</option>
-                <option value="project_dept">Ban PTDA/BĐN (project_dept)</option>
+                <option value="project_dept">Ban PTDA & Ban Đối Ngoại (project_dept)</option>
                 <option value="re_dept">Khối SPG (re_dept)</option>
                 <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn) (supervisor)</option>
                 <option value="investor">Chủ đầu tư/Nhà đầu tư (investor)</option>
@@ -183,27 +221,45 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Số điện thoại liên hệ
+                Cơ quan / Đơn vị công tác
               </label>
-              <input
-                type="tel"
-                placeholder="0912345678"
-                value={newPhone}
-                onChange={e => setNewPhone(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-              />
+              {newRole === 'investor' ? (
+                <>
+                  <OrganizationEntityInput
+                    value={newOrganization}
+                    onChange={setNewOrganization}
+                    entities={investorEntities}
+                    selectedIds={selectedOwnerEntityIds}
+                    onPickEntity={ent => {
+                      setNewOrganization(ent.name);
+                      setSelectedOwnerEntityIds(prev => (prev.includes(ent.id) ? prev : [...prev, ent.id]));
+                    }}
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Chọn từ gợi ý để tự điền tên đơn vị và tự tick pháp nhân bên dưới.
+                  </p>
+                </>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Ví dụ: Ngân hàng Vietcombank..."
+                  value={newOrganization}
+                  onChange={e => setNewOrganization(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
+                />
+              )}
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Cơ quan / Đơn vị công tác
+              Mục đích sử dụng / Tra cứu hồ sơ
             </label>
             <input
               type="text"
-              placeholder="Ví dụ: Ngân hàng Vietcombank, Cty Thẩm định giá, v.v."
-              value={newOrganization}
-              onChange={e => setNewOrganization(e.target.value)}
+              placeholder="VD: Thẩm định hồ sơ, kiểm tra tình trạng GCN..."
+              value={newPurpose}
+              onChange={e => setNewPurpose(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
             />
           </div>
@@ -352,68 +408,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
             </div>
           )}
 
-          {/* Multi-select "Pháp nhân đại diện" for investor */}
+          {/* Multi-select "Pháp nhân đại diện" for investor (có tìm kiếm / chọn nhanh) */}
           {newRole === 'investor' && (
-            <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-rose-950 flex items-center gap-1.5">
-                  <Building className="w-3.5 h-3.5 text-rose-700" />
-                  Pháp nhân đại diện: <span className="font-normal text-rose-700">({selectedOwnerEntityIds.length} pháp nhân đã chọn)</span>
-                </label>
-                <div className="flex items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedOwnerEntityIds(investorEntities.map(e => e.id))}
-                    className="text-rose-700 hover:text-rose-900 font-medium hover:underline cursor-pointer"
-                  >
-                    Chọn tất cả
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedOwnerEntityIds([])}
-                    className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
-                  >
-                    Bỏ chọn
-                  </button>
-                </div>
-              </div>
-              <div className="text-[11px] text-rose-800">
-                Chỉ định các pháp nhân CĐT/NĐT mà tài khoản đại diện để có quyền xem và gửi yêu cầu mượn/trả GCN sở hữu.
-              </div>
-              {investorEntities.length === 0 ? (
-                <div className="p-3 bg-white rounded-lg border border-rose-200 text-xs text-rose-600 text-center">
-                  Chưa có dữ liệu danh mục pháp nhân CĐT/NĐT. Vui lòng vào mục Quản trị &gt; Pháp nhân CĐT/NĐT để thêm mới.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
-                  {investorEntities.map(ent => {
-                    const isChecked = selectedOwnerEntityIds.includes(ent.id);
-                    return (
-                      <label key={ent.id} className={`flex items-center gap-2 text-xs p-2.5 rounded-lg border cursor-pointer transition ${
-                        isChecked ? 'bg-rose-100/70 border-rose-300 text-rose-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setSelectedOwnerEntityIds(prev => [...prev, ent.id]);
-                            } else {
-                              setSelectedOwnerEntityIds(prev => prev.filter(id => id !== ent.id));
-                            }
-                          }}
-                          className="rounded text-rose-600"
-                        />
-                        <span className="flex-1 truncate">
-                          {ent.name} {ent.company_code ? `(${ent.company_code})` : ''}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <InvestorEntityPicker
+              entities={investorEntities}
+              selectedIds={selectedOwnerEntityIds}
+              onChange={setSelectedOwnerEntityIds}
+            />
           )}
 
           <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">

@@ -135,51 +135,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resolveToProfileAndEmail = async (accountInput: string): Promise<{ profile: Profile | null; email: string }> => {
     const cleanInput = accountInput.trim().toLowerCase();
 
-    // 1. If Supabase is configured, resolve strictly from remote Supabase profiles
+    // 1. If Supabase is configured, resolve qua hàm resolve_login_account (migration 0032).
+    //    Người CHƯA đăng nhập không còn đọc được bảng profiles: hàm chỉ trả về email + trạng thái của đúng 1 tài khoản.
     if (isSupabaseConfigured) {
-      try {
-        if (cleanInput.includes('@')) {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('*, regions(name), areas(name)')
-            .ilike('email', cleanInput)
-            .maybeSingle();
-          if (prof) return { profile: prof as Profile, email: cleanInput };
-          return { profile: null, email: cleanInput };
-        } else {
-          const { data: profByUsername } = await supabase
-            .from('profiles')
-            .select('*, regions(name), areas(name)')
-            .ilike('username', cleanInput)
-            .maybeSingle();
+      const fallbackEmail = cleanInput.includes('@') ? cleanInput : `${cleanInput}@btcvmt.vn`;
+      const { data, error } = await withTimeout(
+        supabase.rpc('resolve_login_account', { p_account: cleanInput }),
+        8000
+      );
 
-          if (profByUsername && profByUsername.email) {
-            return { profile: profByUsername as Profile, email: profByUsername.email };
-          }
+      if (error) {
+        // Không âm thầm đoán email: lỗi hàm tra cứu phải lộ ra (thường do chưa chạy migration 0032)
+        throw new Error('Không tra cứu được tài khoản đăng nhập: ' + error.message);
+      }
 
-          const defaultEmail = `${cleanInput}@btcvmt.vn`;
-          const { data: profByDefaultEmail } = await supabase
-            .from('profiles')
-            .select('*, regions(name), areas(name)')
-            .ilike('email', defaultEmail)
-            .maybeSingle();
-
-          if (profByDefaultEmail && profByDefaultEmail.email) {
-            return {
-              profile: profByDefaultEmail as Profile,
-              email: profByDefaultEmail.email,
-            };
-          }
-
-          return { profile: null, email: defaultEmail };
-        }
-      } catch (err) {
-        console.warn('Error resolving account in Supabase:', err);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row?.email) {
         return {
-          profile: null,
-          email: cleanInput.includes('@') ? cleanInput : `${cleanInput}@btcvmt.vn`,
+          profile: { email: row.email, status: row.status } as unknown as Profile,
+          email: row.email as string,
         };
       }
+
+      // Không có tài khoản khớp: vẫn thử đăng nhập để trả về thông báo chung "sai tài khoản hoặc mật khẩu"
+      return { profile: null, email: fallbackEmail };
     }
 
     // 2. Only if Supabase is NOT configured, check local mockStore (Dev mode only)
@@ -372,89 +351,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     const cleanAccount = accountOrEmail.trim().toLowerCase();
 
-    // 2. Supabase configured -> Thử Supabase Auth (dành cho tài khoản nội bộ / email)
-    if (isSupabaseConfigured) {
-      try {
-        const { email: resolvedEmail } = await resolveToProfileAndEmail(cleanAccount);
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      throw new Error('Dịch vụ xác thực Supabase chưa được cấu hình. Đăng nhập yêu cầu kết nối Supabase Auth.');
+    }
 
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: resolvedEmail,
-          password: password,
-        });
+    try {
+      const { email: resolvedEmail } = await resolveToProfileAndEmail(cleanAccount);
 
-        if (error || !data?.user) {
-          setLoading(false);
-          throw new Error('Tài khoản hoặc mật khẩu không chính xác.');
-        }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: resolvedEmail,
+        password: password,
+      });
 
-        const validProfile = await loadAndValidateProfile(data.user.id, resolvedEmail);
-        if (!validProfile) {
-          await supabase.auth.signOut().catch(() => {});
-          setLoading(false);
-          throw new Error('Tài khoản chưa được kích hoạt hoặc không tồn tại trong hệ thống.');
-        }
-
-        if (validProfile.status === 'disabled' || validProfile.status === 'inactive' || validProfile.status === 'rejected') {
-          await supabase.auth.signOut().catch(() => {});
-          setLoading(false);
-          throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
-        }
-
-        setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
-        setProfile(validProfile);
-
-        await logAccessEvent({
-          userId: validProfile.id,
-          action: 'login',
-          details: { method: 'password', account: accountOrEmail, email: resolvedEmail },
-        });
-
+      if (error || !data?.user) {
         setLoading(false);
-        return { success: true, profile: validProfile };
-      } catch (err: any) {
-        setLoading(false);
-        throw err instanceof Error ? err : new Error('Tài khoản hoặc mật khẩu không chính xác.');
+        throw new Error('Tài khoản hoặc mật khẩu không chính xác.');
       }
-    }
 
-    // 3. Supabase is NOT configured -> Local Dev/Mock Mode
-    const isDevMode = !import.meta.env.PROD;
-    if (!isDevMode) {
+      const validProfile = await loadAndValidateProfile(data.user.id, resolvedEmail);
+      if (!validProfile) {
+        await supabase.auth.signOut().catch(() => {});
+        setLoading(false);
+        throw new Error('Tài khoản chưa được kích hoạt hoặc không tồn tại trong hệ thống.');
+      }
+
+      if (validProfile.status === 'disabled' || validProfile.status === 'inactive' || validProfile.status === 'rejected') {
+        await supabase.auth.signOut().catch(() => {});
+        setLoading(false);
+        throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
+      }
+
+      setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
+      setProfile(validProfile);
+
+      await logAccessEvent({
+        userId: validProfile.id,
+        action: 'login',
+        details: { method: 'password', account: accountOrEmail, email: resolvedEmail },
+      });
+
       setLoading(false);
-      throw new Error('Hệ thống chưa cấu hình dịch vụ xác thực.');
-    }
-
-    const { profile: localProfile, email: resolvedEmail } = await resolveToProfileAndEmail(cleanAccount);
-
-    if (!localProfile) {
+      return { success: true, profile: validProfile };
+    } catch (err: any) {
       setLoading(false);
-      throw new Error('Tài khoản hoặc mật khẩu không chính xác.');
+      throw err instanceof Error ? err : new Error('Tài khoản hoặc mật khẩu không chính xác.');
     }
-
-    if (password !== '123456' && password !== 'password123') {
-      setLoading(false);
-      throw new Error('Tài khoản hoặc mật khẩu không chính xác.');
-    }
-
-    if (localProfile.status === 'disabled' || localProfile.status === 'inactive' || localProfile.status === 'rejected') {
-      setLoading(false);
-      throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
-    }
-
-    setUser({ id: localProfile.id, email: resolvedEmail, role: localProfile.role });
-    setProfile(localProfile);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('btcvmt_auth_user_id', localProfile.id);
-    }
-
-    await logAccessEvent({
-      userId: localProfile.id,
-      action: 'login',
-      details: { method: 'password', account: accountOrEmail, email: resolvedEmail },
-    });
-
-    setLoading(false);
-    return { success: true, profile: localProfile };
   };
 
   /**
@@ -464,43 +406,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanAccount = accountOrEmail.trim().toLowerCase();
     const { profile: targetProfile, email: resolvedEmail } = await resolveToProfileAndEmail(cleanAccount);
 
-    if (isSupabaseConfigured) {
-      if (targetProfile && targetProfile.status !== 'active') {
-        throw new Error('Tài khoản chưa được duyệt hoặc đã bị khóa.');
+    if (!isSupabaseConfigured) {
+      throw new Error('Dịch vụ xác thực Supabase chưa được cấu hình. Gửi mã OTP yêu cầu kết nối Supabase Auth.');
+    }
+
+    if (targetProfile && targetProfile.status !== 'active') {
+      throw new Error('Tài khoản chưa được duyệt hoặc đã bị khóa.');
+    }
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: resolvedEmail,
+        options: {
+          emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        },
+      });
+      if (error) {
+        throw new Error('Không thể gửi mã xác thực. Vui lòng kiểm tra lại email hoặc liên hệ quản trị viên.');
       }
-
-      try {
-        const { error } = await supabase.auth.signInWithOtp({
-          email: resolvedEmail,
-          options: {
-            emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
-          },
-        });
-        if (error) {
-          throw new Error('Không thể gửi mã xác thực. Vui lòng kiểm tra lại email hoặc liên hệ quản trị viên.');
-        }
-        return { success: true, message: `Mã xác thực OTP đã được gửi đến email ${resolvedEmail}.` };
-      } catch (err: any) {
-        throw err instanceof Error ? err : new Error('Không thể gửi mã xác thực. Vui lòng thử lại.');
-      }
+      return { success: true, message: `Mã xác thực OTP đã được gửi đến email ${resolvedEmail}.` };
+    } catch (err: any) {
+      throw err instanceof Error ? err : new Error('Không thể gửi mã xác thực. Vui lòng thử lại.');
     }
-
-    // Dev/Offline Mode Only
-    const isDevMode = import.meta.env.MODE !== 'production' || import.meta.env.VITE_ENABLE_DEMO_ACCOUNTS === 'true';
-    if (!isDevMode) {
-      throw new Error('Hệ thống chưa cấu hình dịch vụ xác thực.');
-    }
-
-    if (!targetProfile || targetProfile.status !== 'active') {
-      throw new Error('Tài khoản không tồn tại hoặc chưa được kích hoạt.');
-    }
-
-    return { success: true, message: `Yêu cầu OTP đã được ghi nhận cho ${resolvedEmail}.` };
   };
 
   /**
    * Xác thực mã OTP.
-   * TUYỆT ĐỐI không cho phép mã backdoor (123456/000000) hay tự sinh tài khoản viewer.
+   * TUYỆT ĐỐI không cho phép mã backdoor hay tự sinh tài khoản viewer.
    */
   const verifyOtp = async (accountOrEmail: string, token: string): Promise<{ success: boolean; profile: Profile }> => {
     setLoading(true);
@@ -508,80 +440,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanAccount = accountOrEmail.trim().toLowerCase();
     const { profile: targetProfile, email: resolvedEmail } = await resolveToProfileAndEmail(cleanAccount);
 
-    if (isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase.auth.verifyOtp({
-          email: resolvedEmail,
-          token: cleanToken,
-          type: 'email',
-        });
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      throw new Error('Dịch vụ xác thực Supabase chưa được cấu hình. Xác thực OTP yêu cầu kết nối Supabase Auth.');
+    }
 
-        if (error || !data?.user) {
-          setLoading(false);
-          throw new Error('Mã OTP không chính xác hoặc đã hết hạn.');
-        }
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: resolvedEmail,
+        token: cleanToken,
+        type: 'email',
+      });
 
-        const validProfile = await loadAndValidateProfile(data.user.id, resolvedEmail);
-        if (!validProfile) {
-          await supabase.auth.signOut().catch(() => {});
-          setLoading(false);
-          throw new Error('Tài khoản chưa được kích hoạt hoặc không tồn tại trong hệ thống.');
-        }
-
-        if (validProfile.status === 'disabled' || validProfile.status === 'inactive' || validProfile.status === 'rejected') {
-          await supabase.auth.signOut().catch(() => {});
-          setLoading(false);
-          throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
-        }
-
-        setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
-        setProfile(validProfile);
-
-        await logAccessEvent({
-          userId: validProfile.id,
-          action: 'login',
-          details: { method: 'otp', account: accountOrEmail, email: resolvedEmail },
-        });
-
+      if (error || !data?.user) {
         setLoading(false);
-        return { success: true, profile: validProfile };
-      } catch (err: any) {
-        setLoading(false);
-        throw err instanceof Error ? err : new Error('Mã OTP không chính xác hoặc đã hết hạn.');
+        throw new Error('Mã OTP không chính xác hoặc đã hết hạn.');
       }
-    }
 
-    // Dev/Offline Mode Only
-    const isDevMode = !import.meta.env.PROD;
-    if (!isDevMode) {
+      const validProfile = await loadAndValidateProfile(data.user.id, resolvedEmail);
+      if (!validProfile) {
+        await supabase.auth.signOut().catch(() => {});
+        setLoading(false);
+        throw new Error('Tài khoản chưa được kích hoạt hoặc không tồn tại trong hệ thống.');
+      }
+
+      if (validProfile.status === 'disabled' || validProfile.status === 'inactive' || validProfile.status === 'rejected') {
+        await supabase.auth.signOut().catch(() => {});
+        setLoading(false);
+        throw new Error('Tài khoản đã bị tạm khóa hoặc từ chối truy cập.');
+      }
+
+      setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
+      setProfile(validProfile);
+
+      await logAccessEvent({
+        userId: validProfile.id,
+        action: 'login',
+        details: { method: 'otp', account: accountOrEmail, email: resolvedEmail },
+      });
+
       setLoading(false);
-      throw new Error('Hệ thống chưa cấu hình dịch vụ xác thực.');
-    }
-
-    if (!targetProfile || targetProfile.status === 'disabled' || targetProfile.status === 'inactive' || targetProfile.status === 'rejected') {
+      return { success: true, profile: validProfile };
+    } catch (err: any) {
       setLoading(false);
-      throw new Error('Tài khoản không tồn tại hoặc đã bị khóa.');
+      throw err instanceof Error ? err : new Error('Mã OTP không chính xác hoặc đã hết hạn.');
     }
-
-    if (cleanToken !== '123456') {
-      setLoading(false);
-      throw new Error('Mã OTP không chính xác hoặc đã hết hạn.');
-    }
-
-    setUser({ id: targetProfile.id, email: resolvedEmail, role: targetProfile.role });
-    setProfile(targetProfile);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('btcvmt_auth_user_id', targetProfile.id);
-    }
-
-    await logAccessEvent({
-      userId: targetProfile.id,
-      action: 'login',
-      details: { method: 'otp', account: accountOrEmail, email: resolvedEmail },
-    });
-
-    setLoading(false);
-    return { success: true, profile: targetProfile };
   };
 
   /**

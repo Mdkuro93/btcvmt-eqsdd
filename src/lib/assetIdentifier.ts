@@ -230,7 +230,7 @@ export function generateNextAssetCode(
 /**
  * Duplicate verification check:
  * Rule 1: No two active records in the same project can share the same certificate_no (Số GCN)
- * Rule 2: No two active records in the same project can share the same (subdivision + lot_no)
+ * Rule 2: No two active records in the same project can share the same legal_lot_code (Mã Lô Pháp Lý)
  * Rule 3: No two active records in the same project can share the same (map_sheet_no + land_lot_no)
  */
 export function checkAssetDuplicate(
@@ -241,8 +241,7 @@ export function checkAssetDuplicate(
 ): { isDuplicate: boolean; reason?: string } {
   const targetCertNo = (assetData.certificate_no || '').trim().toLowerCase();
   const targetProjectId = assetData.project_id;
-  const targetSubdivision = (assetData.subdivision || '').trim().toLowerCase();
-  const targetLotNo = (assetData.lot_no || '').trim().toLowerCase();
+  const targetLegalLotCode = (assetData.legal_lot_code || '').trim().toLowerCase();
   const targetMapSheetNo = (assetData.map_sheet_no || '').trim().toLowerCase();
   const targetLandLotNo = (assetData.land_lot_no || '').trim().toLowerCase();
 
@@ -275,19 +274,18 @@ export function checkAssetDuplicate(
     }
   }
 
-  // Check 2: Duplicate Subdivision (Phân khu) + Lot No (Số Lô / Thửa) within the same project
-  if (targetProjectId && targetSubdivision && targetLotNo) {
+  // Check 2: Duplicate legal_lot_code (Mã Lô Pháp Lý) within the same project
+  if (targetProjectId && targetLegalLotCode) {
     const dupLot = candidates.find(a => {
       if (a.project_id !== targetProjectId) return false;
-      const sub = (a.subdivision || '').trim().toLowerCase();
-      const lot = (a.lot_no || '').trim().toLowerCase();
-      return sub === targetSubdivision && lot === targetLotNo;
+      const code = (a.legal_lot_code || '').trim().toLowerCase();
+      return code === targetLegalLotCode;
     });
 
     if (dupLot) {
       return {
         isDuplicate: true,
-        reason: `Trùng Phân khu - Số lô: Phân khu "${assetData.subdivision}" - Lô số "${assetData.lot_no}" đã được khai báo cho GCN ${dupLot.certificate_no} trong dự án này!`,
+        reason: `Trùng Mã Lô Pháp Lý: "${assetData.legal_lot_code}" đã được khai báo cho GCN ${dupLot.certificate_no} trong dự án này!`,
       };
     }
   }
@@ -313,18 +311,9 @@ export function checkAssetDuplicate(
 }
 
 /**
- * Format land plot code (Mã lô đất): Phân Khu & "-" & Số thửa/lô
- * Example: 'Khu A-Lô 12', 'Block B-LK 04', 'A-112'
+ * Format Mã Lô Pháp Lý để hiển thị (nay đã là 1 cột duy nhất `legal_lot_code`,
+ * hàm này chỉ còn tác dụng chuẩn hóa fallback '-' khi rỗng).
  */
-export function formatPlotCode(
-  subdivision?: string | null,
-  lotNo?: string | null,
-  landLotNo?: string | null
-): string {
-  const lot = (lotNo || landLotNo || '').trim();
-  const sub = (subdivision || '').trim();
-  if (sub && lot) {
-    return `${sub}-${lot}`;
-  }
-  return sub || lot || '-';
+export function formatPlotCode(legalLotCode?: string | null): string {
+  return (legalLotCode || '').trim() || '-';
 }

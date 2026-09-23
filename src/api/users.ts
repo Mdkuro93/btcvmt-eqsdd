@@ -1,9 +1,21 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Profile, Role } from '../types';
-import { ALL_PERMISSIONS, DEFAULT_PERMISSIONS_BY_ROLE } from '../lib/permissions';
+import { 
+  ALL_PERMISSIONS, 
+  DEFAULT_PERMISSIONS_BY_ROLE, 
+  getEffectivePermissions, 
+  isCustomizedPermissions, 
+  hasPermission 
+} from '../lib/permissions';
 
-export { ALL_PERMISSIONS, DEFAULT_PERMISSIONS_BY_ROLE };
+export { 
+  ALL_PERMISSIONS, 
+  DEFAULT_PERMISSIONS_BY_ROLE, 
+  getEffectivePermissions, 
+  isCustomizedPermissions, 
+  hasPermission 
+};
 
 export async function fetchProfiles(): Promise<Profile[]> {
   let baseProfiles: Profile[] = [];
@@ -137,16 +149,68 @@ export async function updateUserStatus(userId: string, status: 'active' | 'inact
  * Cập nhật status = 'approved' và gán giá trị cho access_expires_at.
  */
 export async function approveUserProfile(userId: string, accessExpiresAt: string, reviewerId?: string): Promise<Profile | undefined> {
-  const updatePayload = {
+  const updatePayload: any = {
     status: 'approved' as const,
     access_expires_at: accessExpiresAt,
   };
 
   if (!isSupabaseConfigured) {
     const profiles = mockStore.getProfiles();
+    const currentProfile = profiles.find(p => p.id === userId);
+    if (currentProfile) {
+      if (!currentProfile.organization || !currentProfile.purpose || !currentProfile.phone) {
+        const requests = mockStore.getAccessRequests();
+        const matchingReq = requests.find(r => r.email?.toLowerCase() === currentProfile.email?.toLowerCase());
+        if (matchingReq) {
+          if (!currentProfile.organization && matchingReq.organization) {
+            updatePayload.organization = matchingReq.organization;
+          }
+          if (!currentProfile.purpose && matchingReq.purpose) {
+            updatePayload.purpose = matchingReq.purpose;
+          }
+          if (!currentProfile.phone && matchingReq.phone) {
+            updatePayload.phone = matchingReq.phone;
+          }
+        }
+      }
+    }
     const updated = profiles.map(p => p.id === userId ? { ...p, ...updatePayload } : p);
     mockStore.saveProfiles(updated);
     return mockStore.getProfiles().find(p => p.id === userId);
+  }
+
+  // Supabase flow:
+  // Auto-sync organization, purpose, phone from access_requests if not already set on profile
+  try {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('email, organization, purpose, phone')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (prof?.email && (!prof.organization || !prof.purpose || !prof.phone)) {
+      const { data: req } = await supabase
+        .from('access_requests')
+        .select('organization, purpose, phone')
+        .ilike('email', prof.email)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (req) {
+        if (!prof.organization && req.organization) {
+          updatePayload.organization = req.organization;
+        }
+        if (!prof.purpose && req.purpose) {
+          updatePayload.purpose = req.purpose;
+        }
+        if (!prof.phone && req.phone) {
+          updatePayload.phone = req.phone;
+        }
+      }
+    }
+  } catch (syncErr) {
+    console.warn('Không thể tự động đồng bộ đơn vị/mục đích từ đơn đăng ký:', syncErr);
   }
 
   const { data, error } = await withTimeout(
@@ -159,13 +223,9 @@ export async function approveUserProfile(userId: string, accessExpiresAt: string
     DEFAULT_WRITE_TIMEOUT
   );
 
-  if (error) throw error;
-
-  try {
-    const profiles = mockStore.getProfiles();
-    const updated = profiles.map(p => p.id === userId ? { ...p, ...updatePayload } : p);
-    mockStore.saveProfiles(updated);
-  } catch {}
+  if (error) {
+    throw new Error('Lỗi phê duyệt tài khoản: ' + error.message);
+  }
 
   return data;
 }
@@ -260,6 +320,7 @@ export async function createUserDirect(profileData: {
   owner_entity_ids?: string[] | null;
   phone?: string | null;
   organization?: string | null;
+  purpose?: string | null;
 }): Promise<Profile> {
   if (!isSupabaseConfigured) {
     const permissions = DEFAULT_PERMISSIONS_BY_ROLE[profileData.role] || DEFAULT_PERMISSIONS_BY_ROLE['viewer'];
@@ -286,6 +347,7 @@ export async function createUserDirect(profileData: {
       access_expires_at: profileData.access_expires_at || null,
       phone: profileData.phone?.trim() || null,
       organization: profileData.organization?.trim() || null,
+      purpose: profileData.purpose?.trim() || null,
       created_at: new Date().toISOString(),
     };
 
@@ -294,58 +356,58 @@ export async function createUserDirect(profileData: {
     return newProfile;
   }
 
-  // 1. Dùng Edge Function để tạo user an toàn mà không làm mất session admin
+  // 1. Thử dùng Edge Function để tạo user an toàn
   const cleanEmail = profileData.email.trim().toLowerCase();
   const derivedUsername = profileData.username?.trim().toLowerCase() || cleanEmail.split('@')[0];
   const finalStatus = profileData.status || (profileData.role === 'user' ? 'approved' : 'active');
   const permissions = DEFAULT_PERMISSIONS_BY_ROLE[profileData.role] || DEFAULT_PERMISSIONS_BY_ROLE['viewer'];
 
-  let invokeRes: { data: any; error: any };
-  try {
-    invokeRes = await supabase.functions.invoke('admin-create-user', {
-      body: {
-        email: cleanEmail,
-        password: profileData.password, // Mật khẩu do admin nhập
-        full_name: profileData.full_name.trim(),
-        username: derivedUsername,
-        role: profileData.role,
-        permissions,
-        status: finalStatus,
-        phone: profileData.phone?.trim() || null,
-        organization: profileData.organization?.trim() || null,
-        region_id: profileData.region_id || null,
-        area_id: profileData.area_id || null,
-        managed_warehouse_ids: profileData.managed_warehouse_ids || null,
-        assigned_warehouse_ids: profileData.assigned_warehouse_ids || null,
-        owner_entity_ids: profileData.owner_entity_ids || null,
-        access_expires_at: profileData.access_expires_at || null,
-      }
-    });
-  } catch (invokeErr: any) {
-    throw new Error(
-      `Lỗi kết nối Edge Function (admin-create-user): ${invokeErr?.message || 'Không thể gửi yêu cầu'}. ` +
-      `Vui lòng kiểm tra Supabase Edge Function 'admin-create-user' đã được deploy lên dự án Supabase chưa (supabase functions deploy admin-create-user).`
-    );
+  if (!profileData.password || !profileData.password.trim()) {
+    throw new Error('Vui lòng nhập mật khẩu cho tài khoản mới.');
   }
 
-  const { data, error } = invokeRes;
+  if (profileData.password.trim().length < 6) {
+    throw new Error('Mật khẩu tài khoản phải có tối thiểu 6 ký tự.');
+  }
+
+  if (profileData.password.trim() === '123456' || profileData.password.trim() === 'password123') {
+    throw new Error('Không được sử dụng mật khẩu mặc định hoặc quá đơn giản.');
+  }
+
+  // Luồng tạo tài khoản bắt buộc 100% phải đi qua Edge Function 'admin-create-user'
+  const { data, error } = await supabase.functions.invoke('admin-create-user', {
+    body: {
+      email: cleanEmail,
+      password: profileData.password.trim(),
+      full_name: profileData.full_name.trim(),
+      username: derivedUsername,
+      role: profileData.role,
+      permissions,
+      status: finalStatus,
+      phone: profileData.phone?.trim() || null,
+      organization: profileData.organization?.trim() || null,
+      purpose: profileData.purpose?.trim() || null,
+      region_id: profileData.region_id || null,
+      area_id: profileData.area_id || null,
+      managed_warehouse_ids: profileData.managed_warehouse_ids || null,
+      assigned_warehouse_ids: profileData.assigned_warehouse_ids || null,
+      owner_entity_ids: profileData.owner_entity_ids || null,
+      access_expires_at: profileData.access_expires_at || null,
+    }
+  });
 
   if (error) {
-    const errorMsg = error.message || 'Lỗi không xác định';
-    if (errorMsg.includes('Failed to send a request') || errorMsg.includes('404') || errorMsg.includes('not found')) {
-      throw new Error(
-        `Edge Function 'admin-create-user' chưa được triển khai hoặc không phản hồi trên Supabase (${errorMsg}). ` +
-        `Vui lòng deploy hàm bằng lệnh: npx supabase functions deploy admin-create-user`
-      );
-    }
-    throw new Error(`Lỗi gọi Edge Function: ${errorMsg}`);
+    throw new Error(`Lỗi gọi Edge Function tạo tài khoản: ${error.message || 'Không thể kết nối đến dịch vụ tạo tài khoản'}`);
   }
 
-  if (!data?.success) {
-    throw new Error(data?.message || 'Không thể tạo tài khoản');
+  if (data && !data.success) {
+    throw new Error(data.message || 'Không thể tạo tài khoản');
   }
 
-  // Nếu user profile được tạo thành công
+  if (!data?.profile) {
+    throw new Error('Không nhận được dữ liệu hồ sơ người dùng sau khi tạo tài khoản.');
+  }
+
   return data.profile as Profile;
 }
 
@@ -444,6 +506,7 @@ export async function updateUserDirect(
     status?: 'active' | 'inactive' | 'disabled' | 'pending' | 'approved' | 'rejected';
     phone?: string | null;
     organization?: string | null;
+    purpose?: string | null;
     access_expires_at?: string | null;
     managed_warehouse_ids?: string[] | null;
     assigned_warehouse_ids?: string[] | null;
@@ -542,6 +605,37 @@ export async function createProfile(profileData: {
   return data;
 }
 
+/**
+ * Gọi một Edge Function quản trị (chạy với Service Role Key phía server).
+ * Lấy thông báo lỗi thật từ máy chủ thay vì thông báo chung chung của supabase-js.
+ */
+async function invokeAdminFunction(name: string, body: Record<string, unknown>): Promise<void> {
+  const { data, error } = await withTimeout(
+    supabase.functions.invoke(name, { body }),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = (error as any).context;
+      if (ctx && typeof ctx.json === 'function') {
+        const payload = await ctx.json();
+        if (payload?.message) message = payload.message;
+      }
+    } catch {}
+    throw new Error(message);
+  }
+
+  if (!data?.success) {
+    throw new Error(data?.message || 'Thao tác không thành công');
+  }
+}
+
+/**
+ * Xóa hẳn tài khoản (cả profiles lẫn auth.users) qua Edge Function admin-delete-user.
+ * (Giữ tên deleteProfile để không phải sửa nơi gọi.)
+ */
 export async function deleteProfile(userId: string) {
   if (!isSupabaseConfigured) {
     const current = mockStore.getProfiles();
@@ -549,14 +643,48 @@ export async function deleteProfile(userId: string) {
     return;
   }
 
-  const { error } = await withTimeout(
-    supabase.from('profiles').delete().eq('id', userId),
-    DEFAULT_WRITE_TIMEOUT
-  );
-  if (error) throw error;
+  await invokeAdminFunction('admin-delete-user', { userId });
 
   try {
     const current = mockStore.getProfiles();
     mockStore.saveProfiles(current.filter(p => p.id !== userId));
   } catch {}
+}
+
+/**
+ * Người dùng tự đổi mật khẩu của chính mình
+ */
+export async function changeCurrentUserPassword(newPassword: string): Promise<void> {
+  if (!newPassword || newPassword.trim().length < 6) {
+    throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự');
+  }
+
+  if (!isSupabaseConfigured) {
+    return;
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (error) {
+    throw new Error(`Đổi mật khẩu thất bại: ${error.message}`);
+  }
+}
+
+/**
+ * Quản trị viên / Ban tài chính đặt lại mật khẩu cho tài khoản người dùng
+ */
+export async function adminResetUserPassword(userId: string, newPassword: string): Promise<void> {
+  if (!newPassword || newPassword.trim().length < 6) {
+    throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự');
+  }
+
+  if (!isSupabaseConfigured) {
+    mockStore.updateAppUserPassword(userId, newPassword);
+    return;
+  }
+
+  // Chỉ đi qua Edge Function (Service Role Key phía server). Lỗi được báo thẳng, KHÔNG rơi sang đường khác.
+  await invokeAdminFunction('admin-reset-password', { userId, newPassword: newPassword.trim() });
 }

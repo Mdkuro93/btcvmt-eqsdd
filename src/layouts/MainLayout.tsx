@@ -20,7 +20,8 @@ import {
   ShieldCheck,
   Landmark,
   Users,
-  ClipboardCheck
+  ClipboardCheck,
+  KeyRound
 } from 'lucide-react';
 import { fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api/notifications';
 import { fetchAccessRequests } from '../api/accessRequests';
@@ -28,6 +29,7 @@ import { fetchProfiles } from '../api/users';
 import { Notification } from '../types';
 import { format } from 'date-fns';
 import { RoleSwitcher, RoleSimulationBanner } from '../components/RoleSwitcher';
+import { ChangePasswordModal } from '../components/ChangePasswordModal';
 
 export const MainLayout: React.FC = () => {
   const { profile, signOut, user } = useAuth();
@@ -38,6 +40,7 @@ export const MainLayout: React.FC = () => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [pendingAccessCount, setPendingAccessCount] = useState<number>(0);
   const [pendingUserCount, setPendingUserCount] = useState<number>(0);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const loadNotifications = async () => {
@@ -122,13 +125,13 @@ export const MainLayout: React.FC = () => {
       name: 'Tra cứu tình trạng', 
       href: '/lookup', 
       icon: FileSearch, 
-      roles: ['viewer', 'user'] 
+      roles: ['admin', 'super_admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'investor', 'supervisor', 'viewer', 'user'] 
     },
     { 
       name: 'Quản lý người dùng', 
       href: '/user-management', 
       icon: Users, 
-      roles: ['admin', 'super_admin', 'warehouse_manager', 'btc_manager'],
+      roles: ['admin', 'super_admin'],
       badge: pendingUserCount > 0 ? pendingUserCount : undefined
     },
     { 
@@ -172,7 +175,7 @@ export const MainLayout: React.FC = () => {
       name: 'Quản trị danh mục', 
       href: '/admin', 
       icon: Settings, 
-      roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
+      roles: ['admin', 'super_admin'] 
     },
     { 
       name: 'Import dữ liệu', 
@@ -348,7 +351,7 @@ export const MainLayout: React.FC = () => {
               <span className="text-xs text-gray-500 capitalize flex items-center gap-1">
                 {profile?.role === 'warehouse_manager' ? (
                   <span className="text-amber-700 font-semibold flex items-center gap-0.5">
-                    <Store className="w-3 h-3" /> Thủ kho ({profile.managed_warehouse_ids?.length || 0} kho)
+                    <Store className="w-3 h-3" /> Quản lý kho ({profile.managed_warehouse_ids?.length || 0} kho)
                   </span>
                 ) : (
                   profile?.role.replace('_', ' ')
@@ -362,14 +365,29 @@ export const MainLayout: React.FC = () => {
             </div>
 
             <button
+              onClick={() => setIsChangePasswordOpen(true)}
+              className="p-2 text-gray-400 hover:text-[#1E3A8A] transition-colors rounded-full hover:bg-blue-50 ml-1 cursor-pointer"
+              title="Đổi mật khẩu tài khoản"
+            >
+              <KeyRound className="h-5 w-5" />
+            </button>
+
+            <button
               onClick={signOut}
-              className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-full hover:bg-red-50 ml-1"
+              className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-full hover:bg-red-50 ml-0.5 cursor-pointer"
               title="Đăng xuất"
             >
               <LogOut className="h-5 w-5" />
             </button>
           </div>
         </header>
+
+        {/* Change Password Modal */}
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          onClose={() => setIsChangePasswordOpen(false)}
+          userEmail={user?.email || profile?.email}
+        />
 
         {/* Main scrollable area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F8F9FA]">

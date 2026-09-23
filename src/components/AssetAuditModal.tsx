@@ -18,7 +18,8 @@ import {
   Tag, 
   ShieldCheck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  AlertTriangle
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -32,21 +33,35 @@ const FIELD_LABELS: Record<string, { label: string; icon?: any }> = {
   business_project_name: { label: 'Tên Dự Án Kinh Doanh (Bán hàng)', icon: Building2 },
   business_plot_code: { label: 'Mã Lô Kinh Doanh (Mã bán hàng)', icon: Tag },
   project_id: { label: 'Dự Án Pháp Lý' },
-  subdivision: { label: 'Phân Khu', icon: Layers },
-  lot_no: { label: 'Số Lô / Thửa Pháp Lý' },
+  legal_lot_code: { label: 'Mã Lô Pháp Lý', icon: Layers },
+  // Các field cũ dưới đây đã bị gộp/xóa khỏi hệ thống (xem migration 0021), giữ lại
+  // nhãn hiển thị này chỉ để đọc đúng các log lịch sử ghi lại TRƯỚC thời điểm đó.
+  subdivision: { label: 'Phân Khu (cũ)', icon: Layers },
+  lot_no: { label: 'Số Lô / Thửa Pháp Lý (cũ)' },
+  owner_name: { label: 'Chủ Sở Hữu (tên tự do - cũ)' },
+  land_use_purpose: { label: 'Mục Đích Sử Dụng Đất (cũ)' },
+  land_use_term: { label: 'Thời Hạn Sử Dụng (cũ)' },
+  address_detail: { label: 'Địa Chỉ Chi Tiết (cũ, đã bỏ)' },
+  province: { label: 'Tỉnh / Thành Phố (cũ, đã bỏ)' },
+  district: { label: 'Quận / Huyện (cũ, đã bỏ)' },
+  ward: { label: 'Phường / Xã (cũ, đã bỏ)' },
+  mortgage_bank_2: { label: 'Ngân Hàng Thế Chấp 2 (cũ, đã gộp)' },
+  mortgage_unit_2: { label: 'Đơn Vị Vay 2 (cũ, đã gộp)' },
+  credit_grant_rate: { label: 'Tỷ Lệ Cấp Tín Dụng (cũ, đã bỏ)' },
   land_lot_no: { label: 'Số Thửa Bản Đồ' },
   map_sheet_no: { label: 'Số Tờ Bản Đồ' },
   area: { label: 'Diện Tích (m²)' },
-  owner_name: { label: 'Chủ Sở Hữu' },
+  current_owner_entity_id: { label: 'Chủ Sở Hữu (Pháp nhân)' },
   asset_type: { label: 'Loại Tài Sản' },
   usage_purpose: { label: 'Mục Đích Sử Dụng' },
-  land_use_purpose: { label: 'Mục Đích Sử Dụng Đất' },
-  land_use_term: { label: 'Thời Hạn Sử Dụng' },
+  usage_term_type: { label: 'Loại Thời Hạn Sử Dụng' },
+  usage_term_date: { label: 'Ngày Hết Hạn Sử Dụng' },
   sale_status: { label: 'Trạng Thái Kinh Doanh' },
   custody_status: { label: 'Trạng Thái Lưu Kho' },
   lifecycle_status: { label: 'Trạng Thái Pháp Lý' },
   mortgage_status: { label: 'Trạng Thái Thế Chấp' },
   mortgage_bank: { label: 'Ngân Hàng Thế Chấp' },
+  mortgage_unit: { label: 'Đơn Vị Vay' },
   warehouse_id: { label: 'Kho Lưu Trữ' },
   notes: { label: 'Ghi Chú' },
   certificate_no: { label: 'Số GCN QSDĐ' },
@@ -76,15 +91,18 @@ function formatValue(val: any): string {
 export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showRawJson, setShowRawJson] = useState<Record<string, boolean>>({});
 
   const loadData = async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const data = await fetchAuditLogs(asset.id);
       setLogs(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching audit logs:', err);
+      setErrorMessage(err?.message || 'Không thể tải lịch sử kiểm toán.');
     } finally {
       setLoading(false);
     }
@@ -176,7 +194,7 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
           <div>
             <span className="text-slate-600 block text-[11px]">Số Lô / Mã KD</span>
             <span className="font-mono font-bold text-indigo-700 block">
-              {asset.lot_no || 'N/A'} {asset.business_plot_code ? `➔ ${asset.business_plot_code}` : ''}
+              {asset.legal_lot_code || 'N/A'} {asset.business_plot_code ? `➔ ${asset.business_plot_code}` : ''}
             </span>
           </div>
           <div>
@@ -193,6 +211,22 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
             <div className="flex flex-col items-center justify-center py-16 text-slate-600 space-y-3">
               <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
               <p className="text-xs">Đang tải lịch sử thay đổi...</p>
+            </div>
+          ) : errorMessage ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-600 space-y-3 bg-red-50/60 rounded-2xl border border-red-200 p-6 text-center">
+              <div className="p-3 rounded-full bg-red-100 text-red-600">
+                <AlertTriangle className="w-8 h-8" />
+              </div>
+              <p className="text-sm font-bold text-red-900">Không thể tải lịch sử kiểm toán</p>
+              <p className="text-xs text-red-700 max-w-md leading-relaxed whitespace-pre-line">{errorMessage}</p>
+              <button
+                type="button"
+                onClick={loadData}
+                className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-xs"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Thử lại
+              </button>
             </div>
           ) : logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-600 space-y-3 bg-white rounded-2xl border border-dashed border-slate-300 p-8">

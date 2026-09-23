@@ -3,6 +3,7 @@ import { X, Loader2, Save, AlertTriangle, Building2, MapPin, ShieldCheck, FileTe
 import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { updateAsset, fetchAssets } from '../api/assets';
+import { fetchInvestorEntities } from '../api/investorEntities';
 import { logActivity } from '../api/activityLogs';
 import { COLLATERAL_TYPES, PROPERTY_TYPES, checkAssetDuplicate, resolveRegionCode } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
@@ -40,21 +41,21 @@ export const EditAssetModal: React.FC<Props> = ({
   const [certificateGroup, setCertificateGroup] = useState<'so_lon' | 'so_nho'>('so_nho');
   const [projectId, setProjectId] = useState('');
   const [businessProjectName, setBusinessProjectName] = useState('');
-  const [subdivision, setSubdivision] = useState('');
-  const [lotNo, setLotNo] = useState('');
+  const [legalLotCode, setLegalLotCode] = useState('');
   const [businessPlotCode, setBusinessPlotCode] = useState('');
   const [area, setArea] = useState('');
-  const [ownerName, setOwnerName] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
+
+  // Chủ sở hữu (liên kết Pháp nhân/NĐT)
+  const [investorEntities, setInvestorEntities] = useState<any[]>([]);
+  const [currentOwnerEntityId, setCurrentOwnerEntityId] = useState('');
+  const [searchEntityText, setSearchEntityText] = useState('');
+  const [showEntityDropdown, setShowEntityDropdown] = useState(false);
 
   // Extended Land & Legal Fields
   const [mapSheetNo, setMapSheetNo] = useState('');
   const [landLotNo, setLandLotNo] = useState('');
-  const [province, setProvince] = useState('');
-  const [district, setDistrict] = useState('');
-  const [ward, setWard] = useState('');
-  const [addressDetail, setAddressDetail] = useState('');
-  const [usagePurpose, setUsagePurpose] = useState('Đất ở tại đô thị (ODT)');
+    const [usagePurpose, setUsagePurpose] = useState('Đất ở tại đô thị (ODT)');
   const [assetType, setAssetType] = useState('Đất nền');
   const [registryNo, setRegistryNo] = useState('');
   const [registryDate, setRegistryDate] = useState('');
@@ -68,10 +69,7 @@ export const EditAssetModal: React.FC<Props> = ({
   const [isMortgaged, setIsMortgaged] = useState(false);
   const [mortgageBank, setMortgageBank] = useState('');
   const [mortgageUnit, setMortgageUnit] = useState('');
-  const [hasSecondBank, setHasSecondBank] = useState(false);
-  const [mortgageBank2, setMortgageBank2] = useState('');
-  const [mortgageUnit2, setMortgageUnit2] = useState('');
-  const [mortgageValuation, setMortgageValuation] = useState('');
+        const [mortgageValuation, setMortgageValuation] = useState('');
   const [collateralRatio, setCollateralRatio] = useState('');
   const [collateralValue, setCollateralValue] = useState('');
   const [mortgageReleaseDate, setMortgageReleaseDate] = useState('');
@@ -84,8 +82,14 @@ export const EditAssetModal: React.FC<Props> = ({
     if (isOpen) {
       // Load all assets to perform live duplicate checks
       fetchAssets({}, 1, 5000).then(res => setAllAssets(res.data)).catch(() => {});
+      fetchInvestorEntities().then(setInvestorEntities).catch(() => {});
     }
   }, [isOpen]);
+
+  const filteredEntities = investorEntities.filter(e => {
+    const s = searchEntityText.toLowerCase();
+    return (e.name?.toLowerCase().includes(s) || e.company_code?.toLowerCase().includes(s));
+  }).slice(0, 50);
 
   useEffect(() => {
     if (asset) {
@@ -95,25 +99,25 @@ export const EditAssetModal: React.FC<Props> = ({
       setCertificateGroup(asset.certificate_group || 'so_nho');
       setProjectId(asset.project_id || '');
       setBusinessProjectName(asset.business_project_name || '');
-      setSubdivision(asset.subdivision || '');
-      setLotNo(asset.lot_no || '');
+      setLegalLotCode(asset.legal_lot_code || '');
       setBusinessPlotCode(asset.business_plot_code || '');
       setArea(asset.area !== null && asset.area !== undefined ? String(asset.area) : '');
-      setOwnerName(asset.owner_name || '');
+      setCurrentOwnerEntityId(asset.current_owner_entity_id || '');
+      setSearchEntityText(
+        asset.current_owner_entity?.name
+          ? (asset.current_owner_entity.company_code ? `[${asset.current_owner_entity.company_code}] ${asset.current_owner_entity.name}` : asset.current_owner_entity.name)
+          : (asset.investor_entities?.name || '')
+      );
       setWarehouseId(asset.warehouse_id || '');
 
       setMapSheetNo(asset.map_sheet_no || '');
       setLandLotNo(asset.land_lot_no || '');
-      setProvince(asset.province || '');
-      setDistrict(asset.district || '');
-      setWard(asset.ward || '');
-      setAddressDetail(asset.address_detail || '');
-      setUsagePurpose(asset.usage_purpose || asset.land_use_purpose || 'Đất ở tại đô thị (ODT)');
+            setUsagePurpose(asset.usage_purpose || 'Đất ở tại đô thị (ODT)');
       setAssetType(asset.asset_type || 'Đất nền');
       setRegistryNo(asset.registry_no || '');
       setRegistryDate(asset.registry_date || '');
       setManagingUnit(asset.managing_unit || '');
-      setUsageTermType(asset.usage_term_type || (asset.usage_term?.toLowerCase().includes('lâu dài') ? 'long_term' : 'fixed_date'));
+      setUsageTermType(asset.usage_term_type || 'long_term');
       setUsageTermDate(asset.usage_term_date || '');
       setScanFileUrl(asset.scan_file_url || '');
 
@@ -121,10 +125,7 @@ export const EditAssetModal: React.FC<Props> = ({
       setIsMortgaged(isMort);
       setMortgageBank(asset.mortgage_bank || '');
       setMortgageUnit(asset.mortgage_unit || '');
-      setHasSecondBank(!!(asset.mortgage_bank_2 || asset.mortgage_unit_2));
-      setMortgageBank2(asset.mortgage_bank_2 || '');
-      setMortgageUnit2(asset.mortgage_unit_2 || '');
-      setMortgageValuation(asset.mortgage_valuation ? String(asset.mortgage_valuation) : '');
+                        setMortgageValuation(asset.mortgage_valuation ? String(asset.mortgage_valuation) : '');
       setCollateralRatio(asset.collateral_ratio ? String(asset.collateral_ratio) : '');
       setCollateralValue(asset.collateral_value ? String(asset.collateral_value) : '');
       setMortgageReleaseDate(asset.mortgage_expected_release_date || '');
@@ -142,8 +143,7 @@ export const EditAssetModal: React.FC<Props> = ({
       {
         certificate_no: certificateNo,
         project_id: projectId || null,
-        subdivision: subdivision || null,
-        lot_no: lotNo || null,
+        legal_lot_code: legalLotCode || null,
         map_sheet_no: mapSheetNo || null,
         land_lot_no: landLotNo || null,
       },
@@ -157,7 +157,7 @@ export const EditAssetModal: React.FC<Props> = ({
     } else {
       setDuplicateWarning(null);
     }
-  }, [certificateNo, projectId, subdivision, lotNo, mapSheetNo, landLotNo, allAssets, asset, isOpen]);
+  }, [certificateNo, projectId, legalLotCode, mapSheetNo, landLotNo, allAssets, asset, isOpen]);
 
   const handleValuationChange = (val: string) => {
     setMortgageValuation(val);
@@ -196,20 +196,15 @@ export const EditAssetModal: React.FC<Props> = ({
         certificate_group: certificateGroup,
         project_id: projectId || null,
         business_project_name: businessProjectName.trim() || null,
-        subdivision: subdivision.trim() || null,
-        lot_no: lotNo.trim() || null,
+        legal_lot_code: legalLotCode.trim() || null,
         business_plot_code: businessPlotCode.trim() || null,
         area: area ? Number(area) : null,
-        owner_name: ownerName.trim() || null,
+        current_owner_entity_id: currentOwnerEntityId || null,
         warehouse_id: warehouseId || null,
 
         map_sheet_no: mapSheetNo.trim() || null,
         land_lot_no: landLotNo.trim() || null,
-        province: province.trim() || null,
-        district: district.trim() || null,
-        ward: ward.trim() || null,
-        address_detail: addressDetail.trim() || null,
-        usage_purpose: usagePurpose || null,
+                usage_purpose: usagePurpose || null,
         asset_type: assetType || null,
         registry_no: registryNo.trim() || null,
         registry_date: registryDate || null,
@@ -221,9 +216,7 @@ export const EditAssetModal: React.FC<Props> = ({
         mortgage_status: isMortgaged ? 'mortgaged' : 'none',
         mortgage_bank: isMortgaged ? mortgageBank.trim() : null,
         mortgage_unit: isMortgaged ? mortgageUnit.trim() : null,
-        mortgage_bank_2: isMortgaged && hasSecondBank ? mortgageBank2.trim() : null,
-        mortgage_unit_2: isMortgaged && hasSecondBank ? mortgageUnit2.trim() : null,
-        mortgage_valuation: isMortgaged && mortgageValuation ? Number(mortgageValuation) : null,
+                        mortgage_valuation: isMortgaged && mortgageValuation ? Number(mortgageValuation) : null,
         collateral_ratio: isMortgaged && collateralRatio ? Number(collateralRatio) : null,
         collateral_value: isMortgaged && collateralValue ? Number(collateralValue) : null,
         mortgage_expected_release_date: isMortgaged ? (mortgageReleaseDate || null) : null,
@@ -398,17 +391,43 @@ export const EditAssetModal: React.FC<Props> = ({
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 relative">
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Chủ Sở Hữu Đứng Tên Trên GCN
+                  Chủ Sở Hữu (Pháp nhân)
                 </label>
                 <input
                   type="text"
-                  value={ownerName}
-                  onChange={e => setOwnerName(e.target.value)}
-                  placeholder="Công ty Cổ phần Đầu tư VMT..."
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
+                  value={searchEntityText}
+                  onChange={e => {
+                    setSearchEntityText(e.target.value);
+                    setShowEntityDropdown(true);
+                    if (e.target.value === '') setCurrentOwnerEntityId('');
+                  }}
+                  onFocus={() => setShowEntityDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowEntityDropdown(false), 200)}
+                  placeholder="Nhập tên hoặc mã pháp nhân..."
+                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
+                {showEntityDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredEntities.length > 0 ? filteredEntities.map(entity => (
+                      <button
+                        key={entity.id}
+                        type="button"
+                        onClick={() => {
+                          setCurrentOwnerEntityId(entity.id);
+                          setSearchEntityText(entity.company_code ? `[${entity.company_code}] ${entity.name}` : entity.name);
+                          setShowEntityDropdown(false);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-50 text-xs border-b last:border-0"
+                      >
+                        {entity.company_code ? `[${entity.company_code}] ` : ''}{entity.name}
+                      </button>
+                    )) : (
+                      <div className="px-4 py-2 text-xs text-gray-500">Không tìm thấy pháp nhân phù hợp</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -467,26 +486,13 @@ export const EditAssetModal: React.FC<Props> = ({
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Phân Khu <span className="text-gray-400 font-normal">(Cột riêng)</span>
+                  Mã Lô Pháp Lý
                 </label>
                 <input
                   type="text"
-                  value={subdivision}
-                  onChange={e => setSubdivision(e.target.value)}
-                  placeholder="Phân khu A, Block B, Tháp C..."
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Số Lô / Thửa (Mã Lô Pháp Lý)
-                </label>
-                <input
-                  type="text"
-                  value={lotNo}
-                  onChange={e => setLotNo(e.target.value)}
-                  placeholder="Lô A-12, LK-04..."
+                  value={legalLotCode}
+                  onChange={e => setLegalLotCode(e.target.value)}
+                  placeholder="Phân khu A-Lô 12, Block B-LK04..."
                   className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
                 />
               </div>
@@ -507,7 +513,7 @@ export const EditAssetModal: React.FC<Props> = ({
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Số Thửa Đất
+                  Số Thửa Bản Đồ
                 </label>
                 <input
                   type="text"
@@ -542,58 +548,6 @@ export const EditAssetModal: React.FC<Props> = ({
                   onChange={e => setArea(e.target.value)}
                   placeholder="450.5"
                   className="w-full px-3 py-2 border rounded-md text-xs font-semibold border-gray-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Tỉnh / Thành Phố
-                </label>
-                <input
-                  type="text"
-                  value={province}
-                  onChange={e => setProvince(e.target.value)}
-                  placeholder="TP. Hồ Chí Minh, Bình Dương..."
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Quận / Huyện
-                </label>
-                <input
-                  type="text"
-                  value={district}
-                  onChange={e => setDistrict(e.target.value)}
-                  placeholder="Quận 2, TP. Thủ Đức..."
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Phường / Xã
-                </label>
-                <input
-                  type="text"
-                  value={ward}
-                  onChange={e => setWard(e.target.value)}
-                  placeholder="Phường An Phú..."
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
-                />
-              </div>
-
-              <div className="md:col-span-3">
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Địa Chỉ Chi Tiết Thửa Đất
-                </label>
-                <input
-                  type="text"
-                  value={addressDetail}
-                  onChange={e => setAddressDetail(e.target.value)}
-                  placeholder="Số nhà, tên đường, khu phố..."
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
                 />
               </div>
 
@@ -698,26 +652,26 @@ export const EditAssetModal: React.FC<Props> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Ngân hàng nhận thế chấp (NH 1)
+                      Ngân hàng thế chấp <span className="text-gray-400 font-normal">(nhiều NH cách nhau bởi ";")</span>
                     </label>
                     <input
                       type="text"
                       value={mortgageBank}
                       onChange={e => setMortgageBank(e.target.value)}
-                      placeholder="BIDV, Vietcombank, MB..."
+                      placeholder="VD: Vietcombank - CN Tân Định; VTB - CN Sông Hàn"
                       className="w-full px-3 py-2 border rounded-md text-xs bg-white border-gray-300"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Đơn vị thực hiện thế chấp (Đơn vị 1)
+                      Đơn vị vay <span className="text-gray-400 font-normal">(nhiều đơn vị cách nhau bởi ";")</span>
                     </label>
                     <input
                       type="text"
                       value={mortgageUnit}
                       onChange={e => setMortgageUnit(e.target.value)}
-                      placeholder="Ban Nguồn Vốn - TĐ1..."
+                      placeholder="Ban Nguồn Vốn - TĐ1; Công ty CP ABC..."
                       className="w-full px-3 py-2 border rounded-md text-xs bg-white border-gray-300"
                     />
                   </div>
@@ -769,47 +723,8 @@ export const EditAssetModal: React.FC<Props> = ({
                     />
                   </div>
 
-                  <div className="flex items-center pt-5">
-                    <label className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hasSecondBank}
-                        onChange={e => setHasSecondBank(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300"
-                      />
-                      <span className="text-xs text-gray-700">Có đồng thế chấp / NH 2</span>
-                    </label>
-                  </div>
-                </div>
 
-                {hasSecondBank && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-amber-200">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Ngân hàng nhận thế chấp 2
-                      </label>
-                      <input
-                        type="text"
-                        value={mortgageBank2}
-                        onChange={e => setMortgageBank2(e.target.value)}
-                        placeholder="Tên NH 2..."
-                        className="w-full px-3 py-2 border rounded-md text-xs bg-white border-gray-300"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Đơn vị vay 2
-                      </label>
-                      <input
-                        type="text"
-                        value={mortgageUnit2}
-                        onChange={e => setMortgageUnit2(e.target.value)}
-                        placeholder="Đơn vị 2..."
-                        className="w-full px-3 py-2 border rounded-md text-xs bg-white border-gray-300"
-                      />
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             )}
           </div>
@@ -884,7 +799,7 @@ export const EditAssetModal: React.FC<Props> = ({
               </button>
             </div>
           </div>
-        </form>
+      </form>
       </div>
 
       {previewFileUrl && (

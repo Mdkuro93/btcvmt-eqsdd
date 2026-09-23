@@ -269,8 +269,7 @@ export const ImportExcelModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, 
                           <th className="py-2 px-3 whitespace-nowrap text-emerald-800 bg-emerald-50">Tên DA Kinh Doanh</th>
                           <th className="py-2 px-3 whitespace-nowrap text-orange-800 bg-orange-50">Mã Cty Sở Hữu</th>
                           <th className="py-2 px-3 whitespace-nowrap text-orange-800 bg-orange-50">Phân Loại</th>
-                          <th className="py-2 px-3 whitespace-nowrap">Phân Khu</th>
-                          <th className="py-2 px-3 whitespace-nowrap">Số Lô Pháp Lý</th>
+                          <th className="py-2 px-3 whitespace-nowrap">Mã Lô Pháp Lý</th>
                           <th className="py-2 px-3 whitespace-nowrap text-indigo-800 bg-indigo-50">Mã Lô Kinh Doanh</th>
                           <th className="py-2 px-3 whitespace-nowrap">Diện Tích (m²)</th>
                         </tr>
@@ -282,8 +281,7 @@ export const ImportExcelModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, 
                           const bizProj = row['Tên Dự Án Kinh Doanh'] || row['Tên dự án kinh doanh'] || row.business_project_name || '—';
                           const companyCode = row['Mã công ty sở hữu'] || row.company_code || '—';
                           const role = row['Phân loại'] || row.role || '—';
-                          const subdiv = row['Phân Khu'] || row['Phân khu'] || row.subdivision || '—';
-                          const lot = row['Số Lô / Thửa (Mã Lô Pháp Lý)'] || row['Số Lô'] || row['Số thửa/lô'] || row.lot_no || '—';
+                          const legalLotCode = row['Mã lô đất (Mã Lô Pháp Lý)'] || row['Mã Lô Pháp Lý'] || row.legal_lot_code || '—';
                           const bizPlot = row['Mã Lô Kinh Doanh'] || row['Mã lô kinh doanh'] || row.business_plot_code || '—';
                           const area = row['Diện Tích (m²)'] || row['Diện tích (m2)'] || row.area || '—';
 
@@ -295,8 +293,7 @@ export const ImportExcelModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, 
                               <td className="py-2 px-3 font-semibold text-emerald-700 bg-emerald-50/50">{bizProj}</td>
                               <td className="py-2 px-3 font-mono text-orange-700 bg-orange-50/50">{companyCode}</td>
                               <td className="py-2 px-3 font-semibold text-orange-700 bg-orange-50/50 uppercase">{role}</td>
-                              <td className="py-2 px-3 text-slate-700">{subdiv}</td>
-                              <td className="py-2 px-3 text-slate-700">{lot}</td>
+                              <td className="py-2 px-3 text-slate-700">{legalLotCode}</td>
                               <td className="py-2 px-3 font-mono font-bold text-indigo-700 bg-indigo-50/50">{bizPlot}</td>
                               <td className="py-2 px-3 text-slate-700">{area}</td>
                             </tr>

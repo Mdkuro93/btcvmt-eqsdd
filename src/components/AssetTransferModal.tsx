@@ -185,7 +185,7 @@ export const AssetTransferModal: React.FC<Props> = ({
                 <div>
                   <span className="text-gray-500 block text-[11px]">Dự án & Phân khu:</span>
                   <span className="font-semibold text-gray-900">
-                    {singleAsset.projects?.name || '-'} {singleAsset.subdivision ? `(${singleAsset.subdivision})` : ''}
+                    {singleAsset.projects?.name || '-'} {singleAsset.legal_lot_code ? `(${singleAsset.legal_lot_code})` : ''}
                   </span>
                 </div>
               </div>
@@ -244,7 +244,7 @@ export const AssetTransferModal: React.FC<Props> = ({
                   {assets.map((a, idx) => (
                     <div key={a.id} className="flex items-center justify-between text-[11px] py-1 px-1.5 border-b border-gray-100 last:border-0">
                       <span className="font-mono font-medium text-gray-700">{idx + 1}. {a.certificate_no}</span>
-                      <span className="text-gray-500">{a.subdivision || '-'} - {a.lot_no || '-'}</span>
+                      <span className="text-gray-500">{a.legal_lot_code || '-'}</span>
                     </div>
                   ))}
                 </div>

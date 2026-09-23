@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems  } from '../api/transactions';
 import { fetchOverdueAssets } from '../api/assets';
 import { fetchWarehouses, fetchAssets } from '../api/assets';
-import { fetchDeclarationRequests, approveDeclarationRequest, rejectDeclarationRequest } from '../api/assetDeclarationRequests';
+import { fetchDeclarationRequests, approveDeclarationRequest, rejectDeclarationRequest, bulkApproveDeclarationRequests } from '../api/assetDeclarationRequests';
 import { ReviewDeclarationRequestModal } from '../components/ReviewDeclarationRequestModal';
 import { generateNextAssetCode } from '../lib/assetIdentifier';
 import { DecideRequestModal } from '../components/DecideRequestModal';
 import { BulkDecideModal } from '../components/BulkDecideModal';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
-import { DEFAULT_PERMISSIONS_BY_ROLE } from '../api/users';
+import { DEFAULT_PERMISSIONS_BY_ROLE, getEffectivePermissions } from '../api/users';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw, CalendarX } from 'lucide-react';
 import { format } from 'date-fns';
@@ -80,6 +80,7 @@ export const Requests: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [decidingItemId, setDecidingItemId] = useState<string | null>(null);
+  const [selectedDeclarations, setSelectedDeclarations] = useState<Set<string>>(new Set());
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [modalItem, setModalItem] = useState<any>(null);
@@ -101,9 +102,7 @@ export const Requests: React.FC = () => {
     fetchWarehouses().then(setWarehouses).catch(() => {});
   }, []);
 
-  const effectivePerms = profile?.permissions && profile.permissions.length > 0
-    ? profile.permissions
-    : DEFAULT_PERMISSIONS_BY_ROLE[profile?.role || 'viewer'] || [];
+  const effectivePerms = getEffectivePermissions(profile);
   const isApprover = effectivePerms.includes('request.approve') || profile?.role === 'warehouse_manager' || profile?.role === 'btc_manager';
 
   const isWarehouseManager = profile?.role === 'warehouse_manager';
@@ -142,13 +141,75 @@ export const Requests: React.FC = () => {
     }
   }, [activeTab]);
 
+
+  const handleSelectDeclaration = (id: string) => {
+    const newSelected = new Set(selectedDeclarations);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedDeclarations(newSelected);
+  };
+
+  const handleSelectAllDeclarations = () => {
+    const pendingReqs = declarationRequests.filter(r => r.status === 'pending');
+    if (selectedDeclarations.size === pendingReqs.length && pendingReqs.length > 0) {
+      setSelectedDeclarations(new Set());
+    } else {
+      setSelectedDeclarations(new Set(pendingReqs.map(r => r.id)));
+    }
+  };
+
+  const handleBulkApproveDeclarations = async () => {
+    if (selectedDeclarations.size === 0) return;
+    
+    if (!window.confirm(`Bạn có chắc muốn duyệt ${selectedDeclarations.size} đề xuất đã chọn? Các GCN được duyệt sẽ gộp chung vào 1 phiếu nhập kho.`)) return;
+    
+    setLoadingDeclarations(true);
+    try {
+      const selectedIds = Array.from(selectedDeclarations);
+      const items: { request_id: string; asset_code_prefix: string | null }[] = [];
+
+      for (const id of selectedIds) {
+        const req = declarationRequests.find(r => r.id === id);
+        if (!req) continue;
+        let prefix: string | null = null;
+        if (req.request_type === 'cap_moi' || req.request_type === 'tach_so') {
+          const assetsRes = await fetchAssets({ projectId: req.project_id || undefined, collateralType: req.collateral_type });
+          const existingAssets = assetsRes.data || [];
+          const fullCode = generateNextAssetCode(undefined, req.projects?.areas?.province_code || req.projects?.areas?.name, req.collateral_type, existingAssets);
+          prefix = fullCode.substring(0, fullCode.lastIndexOf('_') + 1);
+        }
+        items.push({ request_id: id, asset_code_prefix: prefix });
+      }
+
+      const results = await bulkApproveDeclarationRequests(items);
+      const successCount = results.filter(r => !r.error_message).length;
+      const failed = results.filter(r => r.error_message);
+
+      if (failed.length > 0) {
+        toast.error(`Duyệt được ${successCount}/${items.length}. ${failed.length} yêu cầu lỗi: ${failed.map(f => f.error_message).join('; ')}`);
+      } else {
+        toast.success(`Đã duyệt ${successCount} đề xuất, gộp chung 1 phiếu nhập kho!`);
+      }
+      setSelectedDeclarations(new Set());
+      loadDeclarationRequests();
+    } catch (err: any) {
+      toast.error('Lỗi khi duyệt hàng loạt: ' + err.message);
+      loadDeclarationRequests();
+    } finally {
+      setLoadingDeclarations(false);
+    }
+  };
+
   const handleApproveDeclaration = async (req: any) => {
     try {
       let prefix = null;
       if (req.request_type === 'cap_moi' || req.request_type === 'tach_so') {
         const assetsRes = await fetchAssets({ projectId: req.project_id || undefined, collateralType: req.collateral_type });
         const existingAssets = assetsRes.data || [];
-        const fullCode = generateNextAssetCode(undefined, req.province, req.collateral_type, existingAssets);
+        const fullCode = generateNextAssetCode(undefined, req.projects?.areas?.province_code || req.projects?.areas?.name, req.collateral_type, existingAssets);
         prefix = fullCode.substring(0, fullCode.lastIndexOf('_') + 1);
       }
       await approveDeclarationRequest(req.id, prefix);
@@ -383,7 +444,7 @@ export const Requests: React.FC = () => {
           {isWarehouseManager && (
             <div className="flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md mt-1 inline-flex">
               <Store className="w-3.5 h-3.5 text-amber-700" />
-              <span>Phân quyền Thủ kho: Đang phụ trách <b>{managedWarehouseIds.length}</b> kho</span>
+              <span>Phân quyền Quản lý kho: Đang phụ trách <b>{managedWarehouseIds.length}</b> kho</span>
             </div>
           )}
         </div>
@@ -588,7 +649,7 @@ export const Requests: React.FC = () => {
                                   </td>
                                   <td className="py-2.5 pr-4">
                                     <div className="text-gray-800 font-medium">{effectiveAsset?.projects?.name || 'VMT'}</div>
-                                    <div className="text-gray-500 text-[11px]">{effectiveAsset?.subdivision || '-'} · Lô {effectiveAsset?.lot_no || effectiveAsset?.land_lot_no || '-'}</div>
+                                    <div className="text-gray-500 text-[11px]">{effectiveAsset?.legal_lot_code || '-'}</div>
                                   </td>
                                   <td className="py-2.5 pr-4">
                                     <span className="inline-flex items-center gap-1 text-gray-700 bg-gray-100 px-2 py-0.5 rounded text-[11px]">
@@ -658,14 +719,7 @@ export const Requests: React.FC = () => {
 
       </div>
       
-      {reviewRequest && (
-        <ReviewDeclarationRequestModal
-          isOpen={!!reviewRequest}
-          onClose={() => setReviewRequest(null)}
-          onSuccess={loadDeclarationRequests}
-          request={reviewRequest}
-        />
-      )}
+
       </>) : (
       <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
         {loadingDeclarations ? (
@@ -673,6 +727,18 @@ export const Requests: React.FC = () => {
         ) : declarationRequests.length === 0 ? (
           <div className="px-6 py-12 text-center text-gray-500">Chưa có đề xuất khai báo GCN nào.</div>
         ) : (
+          <>
+          {isApprover && selectedDeclarations.size > 0 && (
+            <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+              <span className="text-sm font-medium text-blue-900">Đã chọn {selectedDeclarations.size} đề xuất</span>
+              <button 
+                onClick={handleBulkApproveDeclarations}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm"
+              >
+                Duyệt hàng loạt
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead className="bg-gray-50">
@@ -687,6 +753,18 @@ export const Requests: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {declarationRequests.map(req => (
                   <tr key={req.id} className="hover:bg-gray-50">
+                    {isApprover && (
+                      <td className="py-3 pl-4 pr-2">
+                        {req.status === 'pending' && (
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-gray-300"
+                            checked={selectedDeclarations.has(req.id)}
+                            onChange={() => handleSelectDeclaration(req.id)}
+                          />
+                        )}
+                      </td>
+                    )}
                     <td className="py-3 px-4">
                       <div className="font-bold text-blue-900">
                         {req.request_type === 'cap_moi' ? 'Cấp mới' : req.request_type === 'tach_so' ? 'Tách sổ' : 'Cấp đổi'}
@@ -695,7 +773,7 @@ export const Requests: React.FC = () => {
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-bold">{req.certificate_no}</div>
-                      <div className="text-gray-500">{req.projects?.name || '-'} {req.subdivision ? '· ' + req.subdivision : ''}</div>
+                      <div className="text-gray-500">{req.projects?.name || '-'} {req.legal_lot_code ? '· ' + req.legal_lot_code : ''}</div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-medium text-gray-900">{req.requester?.full_name || '-'}</div>
@@ -723,6 +801,7 @@ export const Requests: React.FC = () => {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
       )}
@@ -748,6 +827,15 @@ export const Requests: React.FC = () => {
         warehouses={warehouses}
         onOpenPrint={(payload) => setPrintModalData({ item: payload.item, tx: payload.transaction })}
       />
+
+      {reviewRequest && (
+        <ReviewDeclarationRequestModal
+          isOpen={!!reviewRequest}
+          onClose={() => setReviewRequest(null)}
+          onSuccess={loadDeclarationRequests}
+          request={reviewRequest}
+        />
+      )}
 
       {/* Standard A4 Printable Voucher Modal */}
       {printModalData && (

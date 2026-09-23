@@ -9,6 +9,7 @@ export interface Area {
   id: string;
   region_id: string;
   name: string;
+  province_code?: string | null;
   regions?: { name: string };
 }
 
@@ -38,7 +39,7 @@ export interface Project {
   area_id: string;
   name: string;
   default_owner_entity_id?: string | null;
-  areas?: { name: string; region_id?: string; regions?: { name: string } };
+  areas?: { name: string; region_id?: string; regions?: { name: string }; province_code?: string | null };
 }
 
 export interface AppUser {
@@ -74,7 +75,7 @@ export interface Profile {
   region_id: string | null;      // NULL = không giới hạn vùng (all)
   area_id: string | null;         // NULL = toàn vùng
   project_ids: string[] | null;   // NULL = không giới hạn theo dự án cụ thể
-  managed_warehouse_ids?: string[] | null; // Danh sách ID kho Thủ kho phụ trách
+  managed_warehouse_ids?: string[] | null; // Danh sách ID kho Quản lý kho phụ trách
   assigned_warehouse_ids?: string[] | null; // Danh sách ID kho được phân công phụ trách/giám sát
   owner_entity_ids?: string[] | null; // Danh sách ID thực thể CĐT/NĐT được gắn với tài khoản
   permissions: string[] | null;   // NULL = dùng mặc định theo role; có giá trị = ghi đè chi tiết
@@ -128,11 +129,9 @@ export interface Asset {
   certificate_no: string;
   project_id: string | null;
   certificate_group?: 'so_lon' | 'so_nho' | null;
-  subdivision: string | null;
-  lot_no?: string | null;
+  legal_lot_code?: string | null;      // Mã Lô Pháp Lý (gộp Phân khu + Số Lô/Thửa cũ)
   area: number | null;
-  owner_name: string | null;
-  current_owner_entity_id?: string | null; // Thực thể sở hữu (CĐT / NĐT)
+  current_owner_entity_id?: string | null; // Thực thể sở hữu (CĐT / NĐT) — nguồn duy nhất cho "Chủ Sở Hữu"
   current_owner_role?: 'cdt' | 'ndt' | null; // Vai trò chủ sở hữu hiện tại
   current_owner_entity?: InvestorEntity | null;
   investor_entities?: { name: string; company_code?: string | null } | null;
@@ -141,19 +140,12 @@ export interface Asset {
   business_project_name?: string | null; // Tên dự án kinh doanh (VD: Cồn Dầu, Spana, Cora...)
   business_plot_code?: string | null;    // Mã lô kinh doanh (VD: LK02-15, BT-VIP-08...)
   
-  // Thông tin thửa đất & Địa lý
+  // Thông tin thửa đất
   map_sheet_no?: string | null;       // Số tờ bản đồ
-  land_lot_no?: string | null;        // Số thửa đất
-  province?: string | null;           // Tỉnh / Thành phố
-  district?: string | null;           // Quận / Huyện
-  ward?: string | null;               // Xã / Phường
-  address_detail?: string | null;     // Địa chỉ chi tiết
+  land_lot_no?: string | null;        // Số thửa đất (Số Thửa Bản Đồ)
 
   // Loại đất & Hạn dùng
   usage_purpose?: string | null;      // Mục đích sử dụng (Đất ở, TMDV...)
-  land_use_purpose?: string | null;
-  usage_term?: string | null;
-  land_use_term?: string | null;
   usage_term_type?: 'fixed_date' | 'long_term' | null;
   usage_term_date?: string | null;
   
@@ -164,14 +156,11 @@ export interface Asset {
   managing_unit?: string | null;      // Đơn vị quản lý sổ      // Thời hạn sử dụng (Lâu dài, 50 năm...)
 
   // Hồ sơ thế chấp
-  mortgage_bank?: string | null;                 // Ngân hàng nhận thế chấp
-  mortgage_unit?: string | null;                 // Đơn vị thực hiện thế chấp
-  mortgage_bank_2?: string | null;               // Ngân hàng cầm cố, thế chấp 2
-  mortgage_unit_2?: string | null;               // Đơn vị vay 2
+  mortgage_bank?: string | null;                 // Ngân hàng thế chấp (nhiều NH cách nhau bởi ";")
+  mortgage_unit?: string | null;                 // Đơn vị vay (nhiều đơn vị cách nhau bởi ";")
   mortgage_valuation?: number | null;            // Giá trị định giá
   collateral_ratio?: number | null;              // Tỷ lệ đảm bảo (%)
-  credit_grant_rate?: number | null;             // Tỷ lệ cấp tín dụng (%)
-  collateral_value?: number | null;              // Giá trị đảm bảo (VNĐ)
+  collateral_value?: number | null;              // Giá trị đảm bảo / Giá trị TSĐB (VNĐ)
   mortgage_expected_release_date?: string | null;// Ngày dự kiến giải chấp
 
   // Ghi chú
@@ -229,7 +218,7 @@ export interface AuditLog {
 }
 
 export type TransactionType = 'checkout' | 'checkin';
-export type TransactionReason = 'mượn' | 'thế chấp' | 'chuyển nhượng' | 'xuất bán' | 'tách sổ' | 'thu hồi' | 'đổi sổ' | 'trả' | 'giải chấp' | 'nhập sau bán' | 'cấp mới';
+export type TransactionReason = 'mượn' | 'thế chấp' | 'chuyển nhượng' | 'xuất bán' | 'sang tên cho khách' | 'tách sổ' | 'thu hồi' | 'đổi sổ' | 'trả' | 'giải chấp' | 'nhập sau bán' | 'cấp mới' | 'khác';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 
 export interface AccessRequest {
@@ -303,25 +292,20 @@ export interface DenormalizedReportAsset {
   asset_type_name: string;                // Loại tài sản tĩnh: VD "Bất động sản đất nền", "Biệt thự"
   land_use_type_name: string;             // Loại đất tĩnh: VD "Đất ở tại đô thị", "Đất TMDV"
   usage_purpose?: string;                 // Mục đích sử dụng tĩnh
-  usage_term?: string;                    // Thời hạn sử dụng tĩnh: VD "Lâu dài", "Đến năm 2070"
+  usage_term_label?: string;              // Thời hạn sử dụng tĩnh: VD "Lâu dài", "Đến năm 2070"
   
-  owner_name: string;                     // Chủ sở hữu tĩnh: VD "Công ty Cổ phần Đầu tư VMT"
+  owner_name?: string | null;                     // Chủ sở hữu tĩnh (snapshot tên pháp nhân tại thời điểm khóa sổ)
   certificate_group_label?: string;       // Nhóm sổ: "Sổ lớn" | "Sổ nhỏ" | "Sổ con (Tách)" | "Sổ chính"
-  subdivision?: string;                   // Phân khu: "B2-12"
-  lot_no?: string;                        // Số lô/thửa: "35"
-  land_lot_no?: string;                   // Thửa đất số: "105"
-  map_sheet_no?: string;                  // Tờ bản đồ số: "12"
-  plot_code: string;                      // Mã lô đất: "B2-12-35"
-  business_plot_code?: string;            // Mã kinh doanh: "LK02-15"
+  plot_code: string;                      // Mã Lô Pháp Lý: "B2-12-35"
+  land_lot_no?: string;                   // Số Thửa Bản Đồ: "105"
+  map_sheet_no?: string;                  // Số Tờ Bản Đồ: "12"
+  business_plot_code?: string;            // Mã Lô Kinh Doanh: "LK02-15"
   area: number;                           // Diện tích (m²)
-  address_detail: string;                 // Địa chỉ chi tiết
   
   // Thông tin thế chấp tĩnh
   mortgage_status_label: string;          // "Đã thế chấp" | "Chưa thế chấp"
-  mortgage_bank_name?: string;            // "BIDV - Chi nhánh TP.HCM"
-  mortgage_unit_name?: string;            // "Ban Nguồn Vốn"
-  mortgage_bank_2_name?: string;
-  mortgage_unit_2_name?: string;
+  mortgage_bank_name?: string;            // Ngân hàng thế chấp (nhiều NH cách nhau bởi ";"): "BIDV - CN TP.HCM; VTB - CN Sông Hàn"
+  mortgage_unit_name?: string;            // Đơn vị vay (nhiều đơn vị cách nhau bởi ";")
   mortgage_valuation?: number;            // Giá trị định giá (VNĐ)
   collateral_ratio?: number;              // Tỷ lệ đảm bảo (%)
   collateral_value?: number;              // Giá trị đảm bảo (VNĐ)
@@ -436,5 +420,3 @@ export interface AssetOwnershipTransfer {
   to_entity?: InvestorEntity;
   performer?: Profile | { id?: string; full_name?: string | null; email?: string | null } | null;
 }
-
-

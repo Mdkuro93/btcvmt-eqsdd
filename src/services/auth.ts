@@ -247,7 +247,7 @@ export function checkUserLookupAccess(session: AppUserSession | null | { status?
     };
   }
 
-  // Tài khoản đặc quyền (Quản trị viên, Thủ kho, Ban TC...)
+  // Tài khoản đặc quyền (Quản trị viên, Quản lý kho, Ban TC...)
   const privilegedRoles = ['admin', 'super_admin', 'btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept'];
   if (session.role && privilegedRoles.includes(session.role)) {
     if (session.status === 'active' || session.status === 'approved') {

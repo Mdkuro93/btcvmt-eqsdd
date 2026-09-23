@@ -158,7 +158,7 @@ export const RegisterAccess: React.FC = () => {
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-left text-xs text-slate-700 space-y-3 max-w-lg mx-auto">
                 <div className="flex items-start gap-2.5">
                   <div className="w-5 h-5 rounded-full bg-blue-100 text-[#1E3A8A] flex items-center justify-center font-bold flex-shrink-0 text-xs">1</div>
-                  <span>Ban Quản Trị hoặc Thủ kho phụ trách sẽ tiến hành rà soát thông tin và thẩm định mục đích tra cứu.</span>
+                  <span>Ban Quản Trị hoặc Quản Lý Kho phụ trách sẽ tiến hành rà soát thông tin và thẩm định mục đích tra cứu.</span>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <div className="w-5 h-5 rounded-full bg-blue-100 text-[#1E3A8A] flex items-center justify-center font-bold flex-shrink-0 text-xs">2</div>
@@ -234,7 +234,7 @@ export const RegisterAccess: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Số điện thoại liên hệ
+                    Số điện thoại liên hệ <span className="text-slate-400 font-normal text-[11px] normal-case">(Không bắt buộc)</span>
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
@@ -242,7 +242,7 @@ export const RegisterAccess: React.FC = () => {
                       type="tel"
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
-                      placeholder="0912 345 678"
+                      placeholder="Không bắt buộc"
                       className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
                     />
                   </div>

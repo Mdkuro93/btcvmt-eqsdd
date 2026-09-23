@@ -241,8 +241,8 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         const certMatch = asset.certificate_no?.toLowerCase().includes(term);
-        const plotMatch = formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no).toLowerCase().includes(term);
-        const ownerMatch = asset.owner_name?.toLowerCase().includes(term);
+        const plotMatch = formatPlotCode(asset.legal_lot_code).toLowerCase().includes(term);
+        const ownerMatch = (asset.current_owner_entity?.name || asset.investor_entities?.name)?.toLowerCase().includes(term);
         const entityMatch = currentEntity?.name?.toLowerCase().includes(term) || currentEntity?.company_code?.toLowerCase().includes(term);
         const bankMatch = asset.mortgage_bank?.toLowerCase().includes(term);
         const borrowerMatch = asset.mortgage_unit?.toLowerCase().includes(term);
@@ -376,10 +376,8 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
       wsData.push([
         'STT',
         'Số GCN (Số sổ)',
-        'Mã lô đất',
+        'Mã lô đất (Mã Lô Pháp Lý)',
         'Dự án',
-        'Phân khu',
-        'Thửa/Căn/Lô',
         'Diện tích (m²)',
         'Ngân hàng thế chấp',
         'Đơn vị vay',
@@ -400,7 +398,7 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
       // Data rows
       filteredAndSortedItems.forEach((item, idx) => {
         const { asset, mortgageDays, mortgageStartDateStr, currentEntity, latestTransfer, lastTransferDateStr } = item;
-        const plotCode = formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no);
+        const plotCode = formatPlotCode(asset.legal_lot_code);
         const fromEntityName = latestTransfer?.from_entity?.name || (latestTransfer?.from_entity_id ? `Pháp nhân #${latestTransfer.from_entity_id.slice(-6)}` : '-');
 
         wsData.push([
@@ -408,8 +406,6 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
           asset.certificate_no,
           plotCode,
           asset.projects?.name || '-',
-          asset.subdivision || '-',
-          asset.lot_no || asset.land_lot_no || '-',
           asset.area || 0,
           asset.mortgage_bank || 'Chưa cập nhật',
           asset.mortgage_unit || 'Chưa cập nhật',
@@ -417,7 +413,7 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
           asset.collateral_ratio ? `${asset.collateral_ratio}%` : '-',
           mortgageStartDateStr,
           mortgageDays,
-          currentEntity?.name || asset.owner_name || 'Chưa gán pháp nhân',
+          currentEntity?.name || asset.current_owner_entity?.name || 'Chưa gán pháp nhân',
           currentEntity?.company_code || '-',
           asset.current_owner_role === 'cdt' ? 'Chủ đầu tư (CĐT)' : asset.current_owner_role === 'ndt' ? 'Nhà đầu tư (NĐT)' : 'Chưa gán',
           lastTransferDateStr,
@@ -434,8 +430,6 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
         { wch: 18 },
         { wch: 16 },
         { wch: 25 },
-        { wch: 18 },
-        { wch: 14 },
         { wch: 14 },
         { wch: 30 },
         { wch: 22 },
@@ -783,7 +777,7 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
                 filteredAndSortedItems.map((item, idx) => {
                   const { asset, mortgageDays, mortgageStartDateStr, currentEntity, latestTransfer, lastTransferDateStr } = item;
                   const isSelected = selectedAssetIds.includes(asset.id);
-                  const plotCode = formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no);
+                  const plotCode = formatPlotCode(asset.legal_lot_code);
 
                   // Severity badge for mortgage duration
                   let durationColor = 'bg-gray-100 text-gray-800 border-gray-300';
@@ -829,7 +823,7 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
                       <td className="p-3 border-r border-gray-200">
                         <div className="font-semibold text-gray-900 leading-snug">{asset.projects?.name || '-'}</div>
                         <div className="text-[11px] text-gray-500 mt-0.5">
-                          {asset.subdivision || '-'} • Thửa: {asset.lot_no || asset.land_lot_no || '-'}
+                          Thửa: {asset.land_lot_no || '-'}
                         </div>
                       </td>
 
@@ -899,7 +893,7 @@ export const MortgagedAssetsReview: React.FC<Props> = ({
                           </div>
                         ) : (
                           <div>
-                            <div className="text-gray-700 font-medium">{asset.owner_name || 'Chưa gán pháp nhân'}</div>
+                            <div className="text-gray-700 font-medium">{currentEntity?.name || asset.current_owner_entity?.name || 'Chưa gán pháp nhân'}</div>
                             <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
                               Chưa liên kết CĐT/NĐT
                             </span>

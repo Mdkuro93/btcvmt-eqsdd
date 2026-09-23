@@ -15,7 +15,7 @@ export function denormalizeAssetsForSnapshot(
 ): DenormalizedReportAsset[] {
   return assets.map((asset) => {
     const isMortgaged = asset.mortgage_status === 'mortgaged';
-    const plotCode = formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no);
+    const plotCode = formatPlotCode(asset.legal_lot_code);
 
     // Tên kho tĩnh
     const warehouseName = asset.warehouses?.name || warehouseNameFallback || '-';
@@ -26,10 +26,11 @@ export function denormalizeAssetsForSnapshot(
       (asset.custody_status === 'checked_out' ? 'Bộ phận đang mượn' : warehouseName);
 
     // Tên loại đất & mục đích sử dụng tĩnh
-    const landUseTypeName = asset.usage_purpose || asset.land_use_purpose || 'Đất ở tại đô thị';
-    const usagePurpose = asset.usage_purpose || asset.land_use_purpose || 'Đất ở tại đô thị';
-    const usageTerm = asset.usage_term || asset.land_use_term || 
-      (asset.usage_term_type === 'long_term' ? 'Lâu dài' : 'Theo thời hạn GCN');
+    const landUseTypeName = asset.usage_purpose || 'Đất ở tại đô thị';
+    const usagePurpose = asset.usage_purpose || 'Đất ở tại đô thị';
+    const usageTermLabel = asset.usage_term_type === 'long_term'
+      ? 'Lâu dài'
+      : (asset.usage_term_date || 'Theo thời hạn GCN');
 
     // Tên loại tài sản tĩnh
     const assetTypeName = asset.asset_type || (asset.collateral_type ? `Bất động sản (${asset.collateral_type})` : 'Bất động sản đất nền');
@@ -38,18 +39,12 @@ export function denormalizeAssetsForSnapshot(
     const projectName = asset.projects?.name || 'Dự án VMT';
     const businessProjectName = asset.business_project_name || '';
 
-    // Địa chỉ chi tiết tĩnh
-    const addressDetail = asset.address_detail || 
-      ([asset.ward, asset.district, asset.province].filter(Boolean).join(', ') || 'Đà Nẵng');
-
     // Tình trạng pháp lý & Nhóm sổ
-    let certGroupLabel = 'Sổ chính';
+    let certGroupLabel = asset.certificate_group === 'so_lon' ? 'Sổ lớn' : 'Sổ nhỏ';
     if (asset.parent_asset_id) {
       certGroupLabel = 'Sổ con (Tách thửa)';
     } else if (asset.lifecycle_status === 'invalidated') {
       certGroupLabel = 'Sổ gốc (Đã tách)';
-    } else if (asset.certificate_group === 'so_lon') {
-      certGroupLabel = 'Sổ lớn';
     }
 
     // Tình trạng lưu kho
@@ -77,7 +72,7 @@ export function denormalizeAssetsForSnapshot(
       project_name: projectName,
       business_project_name: businessProjectName,
       area_name: asset.projects?.areas?.name || 'Toàn vùng',
-      region_name: asset.projects?.areas?.regions?.name || asset.province || 'Vùng Miền Trung',
+      region_name: asset.projects?.areas?.regions?.name || 'Vùng Miền Trung',
       warehouse_name: warehouseName,
       department_name: departmentName,
       current_holder_dept: currentHolderDept,
@@ -85,25 +80,20 @@ export function denormalizeAssetsForSnapshot(
       asset_type_name: assetTypeName,
       land_use_type_name: landUseTypeName,
       usage_purpose: usagePurpose,
-      usage_term: usageTerm,
+      usage_term_label: usageTermLabel,
 
-      owner_name: asset.owner_name || '-',
+      owner_name: asset.current_owner_entity?.name || asset.investor_entities?.name || '-',
       certificate_group_label: certGroupLabel,
-      subdivision: asset.subdivision || '',
-      lot_no: asset.lot_no || '',
+      plot_code: plotCode,
       land_lot_no: asset.land_lot_no || '',
       map_sheet_no: asset.map_sheet_no || '',
-      plot_code: plotCode,
       business_plot_code: asset.business_plot_code || '',
       area: asset.area || 0,
-      address_detail: addressDetail,
 
       // THẾ CHẤP TĨNH
       mortgage_status_label: isMortgaged ? 'Đã thế chấp' : 'Chưa thế chấp',
       mortgage_bank_name: isMortgaged ? (asset.mortgage_bank || 'Chưa cập nhật') : 'Không',
       mortgage_unit_name: isMortgaged ? (asset.mortgage_unit || 'Chưa cập nhật') : 'Không',
-      mortgage_bank_2_name: asset.mortgage_bank_2 || '',
-      mortgage_unit_2_name: asset.mortgage_unit_2 || '',
       mortgage_valuation: asset.mortgage_valuation || 0,
       collateral_ratio: asset.collateral_ratio || 0,
       collateral_value: asset.collateral_value || 0,

@@ -14,11 +14,11 @@ export function formatRoleLabel(role: string): string {
     case 'btc_manager':
       return 'Ban Tài Chính Tập Đoàn (btc_manager)';
     case 'warehouse_manager':
-      return 'Thủ kho lưu trữ (warehouse_manager)';
+      return 'Quản lý kho (warehouse_manager)';
     case 'capital_dept':
       return 'Phòng Nguồn Vốn';
     case 'project_dept':
-      return 'Ban PTDA/BĐN';
+      return 'Ban PTDA & Ban Đối Ngoại';
     case 're_dept':
       return 'Khối SPG';
     case 'supervisor':

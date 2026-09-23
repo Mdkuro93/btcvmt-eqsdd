@@ -1,36 +1,41 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchDashboardAssetStats, fetchWarehouses, fetchOverdueAssets } from '../api/assets';
-import { CalendarX } from 'lucide-react';
+import { 
+  fetchDashboardAssetStats, 
+  fetchWarehouses, 
+  fetchOverdueAssets, 
+  fetchProjects,
+  fetchDashboardDetailedAssets 
+} from '../api/assets';
 import { fetchTransactions } from '../api/transactions';
-import { generateDemoData } from '../api/demo';
 import { DashboardSummaryCard, DashboardSummaryData } from '../components/DashboardSummaryCard';
-import { Asset, Warehouse as WarehouseType } from '../types';
+import { Asset, Warehouse as WarehouseType, Project } from '../types';
 import { getResponsibleWarehouseId } from '../lib/warehouseRouting';
 import { 
-  Files, 
-  Warehouse, 
-  ArrowUpRight, 
-  Landmark, 
-  ShoppingBag, 
   Search, 
-  CheckSquare, 
-  BookText, 
-  Loader2,
   Sparkles,
   Layers,
-  FileCheck
+  AlertCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { BtcManagerDashboard } from '../components/dashboard/BtcManagerDashboard';
+import { WarehouseManagerDashboard } from '../components/dashboard/WarehouseManagerDashboard';
+import { DepartmentDashboard } from '../components/dashboard/DepartmentDashboard';
+import { ViewerDashboard } from '../components/dashboard/ViewerDashboard';
 
 export const Dashboard: React.FC = () => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [generatingDemo, setGeneratingDemo] = useState(false);
-  const [overdueAssets, setOverdueAssets] = useState<Asset[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Detailed datasets for role-based analytics
+  const [allAssets, setAllAssets] = useState<Asset[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseType[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [overdueAssets, setOverdueAssets] = useState<Asset[]>([]);
 
   const [summaryData, setSummaryData] = useState<DashboardSummaryData>({
     totalAssets: 0,
@@ -55,11 +60,42 @@ export const Dashboard: React.FC = () => {
   const loadStats = useCallback(async () => {
     setLoading(true);
     try {
-      const [assetStats, txs, warehouses] = await Promise.all([
+      const [
+        assetStats, 
+        txs, 
+        whList, 
+        projList, 
+        detailedAssets, 
+        overdueList
+      ] = await Promise.all([
         fetchDashboardAssetStats(),
-        fetchTransactions(),
-        fetchWarehouses(),
+        fetchTransactions().catch(err => {
+          console.error('Lỗi tải giao dịch:', err);
+          return [];
+        }),
+        fetchWarehouses().catch(err => {
+          console.error('Lỗi tải kho:', err);
+          return [];
+        }),
+        fetchProjects().catch(err => {
+          console.error('Lỗi tải dự án:', err);
+          return [];
+        }),
+        fetchDashboardDetailedAssets().catch(err => {
+          console.error('Lỗi tải chi tiết tài sản:', err);
+          return [];
+        }),
+        fetchOverdueAssets().catch(err => {
+          console.error('Lỗi tải tài sản quá hạn:', err);
+          return [];
+        }),
       ]);
+
+      setTransactions(txs || []);
+      setWarehouses(whList || []);
+      setProjects(projList || []);
+      setAllAssets(detailedAssets || []);
+      setOverdueAssets(overdueList || []);
 
       let pendingTotal = 0;
       let overdueCount = 0;
@@ -72,7 +108,7 @@ export const Dashboard: React.FC = () => {
       };
 
       const warehousePendingMap: Record<string, { warehouseId: string; warehouseName: string; count: number; isCentral?: boolean }> = {};
-      (warehouses || []).forEach(w => {
+      (whList || []).forEach(w => {
         warehousePendingMap[w.id] = {
           warehouseId: w.id,
           warehouseName: w.name,
@@ -123,8 +159,9 @@ export const Dashboard: React.FC = () => {
       });
 
       setLastUpdated(new Date());
-    } catch (err) {
-      console.warn('Load stats error:', err);
+    } catch (err: any) {
+      console.error('Lỗi khi cập nhật thống kê Dashboard:', err);
+      toast.error('Không thể tải toàn bộ dữ liệu thống kê: ' + (err.message || 'Lỗi không xác định'));
     } finally {
       setLoading(false);
     }
@@ -165,43 +202,30 @@ export const Dashboard: React.FC = () => {
     };
   }, [loadStats]);
 
-  const handleGenerateDemo = async () => {
-    setGeneratingDemo(true);
-    try {
-      await generateDemoData();
-      toast.success('Đã khởi tạo thành công 5 GCN mẫu & dự án mới!');
-      await loadStats();
-    } catch (err: any) {
-      toast.error('Lỗi khi tạo dữ liệu mẫu: ' + (err.message || 'Chưa kết nối Supabase'));
-    } finally {
-      setGeneratingDemo(false);
-    }
-  };
+  // Classify current active user role into 4 canonical functional groups:
+  // 1. Quản trị & Giám sát: admin, super_admin, btc_manager, supervisor
+  // 2. Quản lý kho: warehouse_manager
+  // 3. Phòng ban chuyên môn: capital_dept, project_dept, re_dept, investor
+  // 4. Tra cứu tổng quan: user, viewer, hoặc mặc định
+  const currentRole = profile?.role || 'viewer';
+  const isAdminOrSupervisorGroup =
+    currentRole === 'btc_manager' ||
+    currentRole === 'admin' ||
+    currentRole === 'super_admin' ||
+    currentRole === 'supervisor';
+  const isSupervisorReadOnly = currentRole === 'supervisor';
+
+  const isWarehouseManagerGroup = currentRole === 'warehouse_manager';
+
+  const isDepartmentGroup =
+    currentRole === 'capital_dept' ||
+    currentRole === 'project_dept' ||
+    currentRole === 're_dept' ||
+    currentRole === 'investor';
 
   return (
     <div className="space-y-6">
       <Toaster position="top-right" />
-      
-      {/* Viewer Welcome Card */}
-      {profile?.role === 'viewer' && (
-        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/30 text-blue-200 border border-blue-400/30">
-              <Sparkles className="w-3.5 h-3.5" /> Quyền Tra Cứu Khách (Viewer)
-            </div>
-            <h2 className="text-lg font-bold text-white">Bạn đang có quyền tra cứu thông tin GCN theo kho</h2>
-            <p className="text-xs text-blue-200 max-w-xl">
-              Hệ thống cho phép bạn kiểm tra mã số sổ, tình trạng pháp lý, phân khu và tình trạng thế chấp của các Giấy chứng nhận trong các kho đã được phê duyệt.
-            </p>
-          </div>
-          <Link
-            to="/lookup"
-            className="whitespace-nowrap px-5 py-2.5 bg-white hover:bg-blue-50 text-[#1E3A8A] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
-          >
-            <Search className="w-4 h-4" /> Bắt đầu tra cứu ngay
-          </Link>
-        </div>
-      )}
 
       {/* Real-time Summary Card Component */}
       <DashboardSummaryCard
@@ -212,66 +236,41 @@ export const Dashboard: React.FC = () => {
         isRealtimeActive={isSupabaseConfigured}
       />
 
-      {/* Quick Access Navigation */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs">
-        <h2 className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wider text-slate-500">Lối truy cập nhanh</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <Link
-            to="/assets"
-            className="p-4 border border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/40 transition-all flex items-center gap-3 group"
-          >
-            <div className="p-2.5 bg-blue-100 text-[#1E3A8A] rounded-lg">
-              <Files className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-slate-900 group-hover:text-[#1E3A8A]">Danh mục GCN</div>
-              <div className="text-xs text-slate-500">Tra cứu, lọc & mượn sổ</div>
-            </div>
-          </Link>
-
-          <Link
-            to="/requests"
-            className="p-4 border border-slate-200 rounded-xl hover:border-amber-500 hover:bg-amber-50/40 transition-all flex items-center gap-3 group"
-          >
-            <div className="p-2.5 bg-amber-100 text-amber-800 rounded-lg">
-              <CheckSquare className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-slate-900 group-hover:text-amber-800">Yêu cầu & Phê duyệt</div>
-              <div className="text-xs text-slate-500">Xử lý {summaryData.pendingRequests} phiếu gửi lên</div>
-            </div>
-          </Link>
-
-          <Link
-            to="/lookup"
-            className="p-4 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50/40 transition-all flex items-center gap-3 group"
-          >
-            <div className="p-2.5 bg-indigo-100 text-indigo-800 rounded-lg">
-              <Search className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-800">Tra cứu nhanh</div>
-              <div className="text-xs text-slate-500">Kiểm tra thông tin sổ</div>
-            </div>
-          </Link>
-
-          {profile?.role === 'btc_manager' && (
-            <Link
-              to="/activity-logs"
-              className="p-4 border border-slate-200 rounded-xl hover:border-purple-500 hover:bg-purple-50/40 transition-all flex items-center gap-3 group"
-            >
-              <div className="p-2.5 bg-purple-100 text-purple-800 rounded-lg">
-                <BookText className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-slate-900 group-hover:text-purple-800">Nhật ký biến động</div>
-                <div className="text-xs text-slate-500">Lịch sử & Audit Trail</div>
-              </div>
-            </Link>
-          )}
-        </div>
+      {/* Dynamic Role-Based Tailored Dashboard (Lối truy cập nhanh đã được loại bỏ) */}
+      <div className="mt-8">
+        {isAdminOrSupervisorGroup ? (
+          <BtcManagerDashboard
+            assets={allAssets}
+            projects={projects}
+            overdueAssets={overdueAssets}
+            pendingTransactions={transactions}
+            isReadOnly={isSupervisorReadOnly}
+          />
+        ) : isWarehouseManagerGroup ? (
+          <WarehouseManagerDashboard
+            managedWarehouseIds={profile?.managed_warehouse_ids}
+            warehouses={warehouses}
+            assets={allAssets}
+            pendingTransactions={transactions}
+            onRefresh={loadStats}
+            userId={profile?.id}
+          />
+        ) : isDepartmentGroup ? (
+          <DepartmentDashboard
+            role={currentRole}
+            projectIds={profile?.assigned_warehouse_ids || (profile as any)?.project_ids}
+            assets={allAssets}
+            projects={projects}
+          />
+        ) : (
+          <ViewerDashboard
+            assets={allAssets}
+            projects={projects}
+            warehouses={warehouses}
+            role={currentRole}
+          />
+        )}
       </div>
     </div>
   );
 };
-

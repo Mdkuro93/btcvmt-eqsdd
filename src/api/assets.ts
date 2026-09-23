@@ -36,11 +36,12 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
 
   // Optimized select - Only fetch needed relational attributes
   let query = supabase.from('assets').select(`
-    id, asset_code, collateral_type, certificate_no, subdivision, lot_no, area,
-    owner_name, map_sheet_no, land_lot_no, province, district, ward, address_detail,
+    id, asset_code, collateral_type, certificate_no, legal_lot_code, area,
+    current_owner_entity_id, current_owner_entity:investor_entities(id, name, company_code),
+    map_sheet_no, land_lot_no,
     business_project_name, business_plot_code,
     usage_purpose, custody_status, lifecycle_status, sale_status,
-    mortgage_status, mortgage_bank, mortgage_unit, mortgage_bank_2, mortgage_unit_2,
+    mortgage_status, mortgage_bank, mortgage_unit,
     mortgage_valuation, collateral_ratio, collateral_value, mortgage_expected_release_date,
     expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,
     current_holder_dept, notes, asset_type, registry_no, registry_date, managing_unit,
@@ -54,7 +55,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
   if (filters) {
     if (filters.search) {
       const s = filters.search.trim();
-      query = query.or(`certificate_no.ilike.%${s}%,asset_code.ilike.%${s}%,subdivision.ilike.%${s}%,lot_no.ilike.%${s}%,owner_name.ilike.%${s}%,business_project_name.ilike.%${s}%,business_plot_code.ilike.%${s}%`);
+      query = query.or(`certificate_no.ilike.%${s}%,asset_code.ilike.%${s}%,legal_lot_code.ilike.%${s}%,business_project_name.ilike.%${s}%,business_plot_code.ilike.%${s}%`);
     }
     if (filters.collateralType) query = query.eq('collateral_type', filters.collateralType);
     if (filters.projectId) query = query.eq('project_id', filters.projectId);
@@ -72,7 +73,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     if (mortgage) query = query.eq('mortgage_status', mortgage);
     
     if (filters.warehouseId) query = query.eq('warehouse_id', filters.warehouseId);
-    if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision.trim()}%`);
+    if (filters.legal_lot_code) query = query.ilike('legal_lot_code', `%${filters.legal_lot_code.trim()}%`);
   }
 
   // Apply Server-side Sort & Range Pagination
@@ -84,14 +85,8 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
       throw new Error('Không thể tải danh sách tài sản từ Supabase: ' + error.message);
     }
 
-    const mapped = (data || []).map((item: any) => ({
-      ...item,
-      land_use_purpose: item.land_use_purpose || item.usage_purpose,
-      land_use_term: item.land_use_term || item.usage_term,
-    }));
-
     return { 
-      data: mapped as unknown as Asset[], 
+      data: (data || []) as unknown as Asset[], 
       totalCount: count ?? (data?.length || 0),
       source: 'supabase'
     };
@@ -110,7 +105,7 @@ export async function fetchAssetIdentifierCandidates(projectId?: string): Promis
 
   let query = supabase.from('assets').select(`
     id, asset_code, collateral_type, certificate_no, project_id,
-    subdivision, lot_no, map_sheet_no, land_lot_no, lifecycle_status,
+    legal_lot_code, map_sheet_no, land_lot_no, lifecycle_status,
     business_project_name, business_plot_code,
     warehouse_id, created_at, projects(name)
   `).order('created_at', { ascending: false }).limit(2000);
@@ -121,6 +116,38 @@ export async function fetchAssetIdentifierCandidates(projectId?: string): Promis
 
   const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
   if (error) throw error;
+  return (data || []) as unknown as Asset[];
+}
+
+/**
+ * Fetch detailed assets for multi-dimensional Dashboard role analytics
+ */
+export async function fetchDashboardDetailedAssets(): Promise<Asset[]> {
+  if (!isSupabaseConfigured) {
+    return mockStore.getAssets();
+  }
+
+  const { data, error } = await withTimeout(
+    supabase
+      .from('assets')
+      .select(`
+        id, asset_code, collateral_type, certificate_no, legal_lot_code, area,
+        project_id, warehouse_id, custody_status, lifecycle_status, sale_status,
+        mortgage_status, mortgage_bank, mortgage_unit, mortgage_valuation, collateral_value,
+        current_holder_dept, expected_return_date, borrow_purpose,
+        business_project_name, business_plot_code,
+        projects:projects(id, name),
+        warehouses:warehouses(id, name, code, is_central)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(3000),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) {
+    throw new Error('Không thể tải dữ liệu chi tiết tài sản cho Dashboard: ' + error.message);
+  }
+
   return (data || []) as unknown as Asset[];
 }
 
@@ -203,8 +230,8 @@ export async function lookupAssets(
     if (queryList.length > 0) {
       filtered = filtered.filter(a => {
         const certNo = (a.certificate_no || '').toLowerCase();
-        const subdiv = (a.subdivision || '').toLowerCase();
-        return queryList.some(q => certNo.includes(q) || subdiv.includes(q));
+        const lot = (a.legal_lot_code || '').toLowerCase();
+        return queryList.some(q => certNo.includes(q) || lot.includes(q));
       });
     }
 
@@ -213,7 +240,7 @@ export async function lookupAssets(
     const data = filtered.slice(startIndex, startIndex + pageSize).map(a => ({
       certificate_no: a.certificate_no,
       project_name: a.projects?.name,
-      subdivision: a.subdivision,
+      legal_lot_code: a.legal_lot_code,
       custody_status: a.custody_status,
       lifecycle_status: a.lifecycle_status,
       sale_status: a.sale_status,
@@ -263,7 +290,10 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
   const selectedWh = warehouses.find(w => w.id === assetData.warehouse_id);
   const regionCode = resolveRegionCode(assetData.project_id, projects, selectedWh?.region_code);
   const collateralType = assetData.collateral_type || 'BDS';
-  const autoCode = assetData.asset_code || generateNextAssetCode(regionCode, assetData.province, collateralType, current);
+  // Ghi chú: (assetData as any).provinceCodeHint chỉ dùng để sinh Mã Tài Sản (asset_code),
+  // KHÔNG lưu vào bảng assets (đã bỏ cột province theo Data Dictionary mới).
+  const provinceCodeHint = (assetData as any).provinceCodeHint || (assetData as any).province;
+  const autoCode = assetData.asset_code || generateNextAssetCode(regionCode, provinceCodeHint, collateralType, current);
 
   const fullAsset: Asset = {
     id: 'asset-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -272,19 +302,14 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     certificate_no: assetData.certificate_no || 'GCN-VMT-' + Math.floor(Math.random() * 1000),
     project_id: assetData.project_id || null,
     certificate_group: assetData.certificate_group || null,
-    subdivision: assetData.subdivision || null,
-    lot_no: assetData.lot_no || null,
+    legal_lot_code: assetData.legal_lot_code || null,
     business_project_name: assetData.business_project_name?.trim() || null,
     business_plot_code: assetData.business_plot_code?.trim() || null,
     area: assetData.area || 0,
-    owner_name: assetData.owner_name || '-',
+    current_owner_entity_id: assetData.current_owner_entity_id || null,
     
     map_sheet_no: assetData.map_sheet_no || null,
     land_lot_no: assetData.land_lot_no || null,
-    province: assetData.province || null,
-    district: assetData.district || null,
-    ward: assetData.ward || null,
-    address_detail: assetData.address_detail || null,
     
     usage_purpose: assetData.usage_purpose || null,
     usage_term_type: assetData.usage_term_type || null,
@@ -297,8 +322,6 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     
     mortgage_bank: assetData.mortgage_bank || null,
     mortgage_unit: assetData.mortgage_unit || null,
-    mortgage_bank_2: assetData.mortgage_bank_2 || null,
-    mortgage_unit_2: assetData.mortgage_unit_2 || null,
     mortgage_valuation: assetData.mortgage_valuation || null,
     collateral_ratio: assetData.collateral_ratio || null,
     collateral_value: assetData.collateral_value || null,
@@ -567,15 +590,32 @@ export async function importExcelAndUpdateAssets(
 
       const businessProjName = row.business_project_name || row['Tên Dự Án Kinh Doanh'] || row['Tên dự án kinh doanh'];
       const businessPlot = row.business_plot_code || row['Mã Lô Kinh Doanh'] || row['Mã lô kinh doanh'];
-      const subdivision = row.subdivision || row['Phân Khu'] || row['Phân khu'];
-      const lotNo = row.lot_no || row['Số Lô / Thửa (Mã Lô Pháp Lý)'] || row['Số Lô'] || row['Mã lô'];
+      // Mã Lô Pháp Lý: nay là 1 cột duy nhất; vẫn chấp nhận file cũ còn tách Phân Khu/Số Lô -> nối lại bằng "-"
+      const maLoPhapLyRaw = row.legal_lot_code || row['Mã lô đất (Mã Lô Pháp Lý)'] || row['Mã Lô Đất (Mã Lô Pháp Lý)'] || row['Mã Lô Pháp Lý'];
+      const legacySubdivision = row['Phân Khu'] || row['Phân khu'];
+      const legacyLotNo = row['Số Lô / Thửa (Mã Lô Pháp Lý)'] || row['Số Lô'] || row['Mã lô'];
+      let legalLotCode: string | undefined = maLoPhapLyRaw !== undefined ? String(maLoPhapLyRaw).trim() : undefined;
+      if (!legalLotCode && (legacySubdivision || legacyLotNo)) {
+        legalLotCode = [legacySubdivision, legacyLotNo].filter(Boolean).map(v => String(v).trim()).join('-');
+      }
+
       const landLotNo = row.land_lot_no || row['Số Thửa Bản Đồ'] || row['Số Thửa'] || row['Số thửa'];
       const mapSheetNo = row.map_sheet_no || row['Số Tờ Bản Đồ'] || row['Số Tờ'] || row['Số tờ'];
       const rawArea = row.area !== undefined ? row.area : (row['Diện Tích (m²)'] !== undefined ? row['Diện Tích (m²)'] : row['Diện tích (m2)']);
       const area = rawArea !== undefined && rawArea !== '' ? Number(rawArea) : undefined;
-      const ownerName = row.owner_name || row['Chủ Sở Hữu'] || row['Chủ sở hữu'];
       const assetType = row.asset_type || row['Loại Tài Sản'] || row['Loại tài sản'];
       const usagePurpose = row.usage_purpose || row['Mục Đích Sử Dụng'] || row['Mục đích sử dụng'];
+
+      // Ngân hàng thế chấp / Đơn vị vay: cột đơn, nhiều giá trị nối sẵn bằng ";" trong file Excel
+      const mortgageBankRaw = row['Ngân Hàng Thế Chấp'] || row['Ngân hàng thế chấp'];
+      const mortgageBank: string | undefined = mortgageBankRaw !== undefined && mortgageBankRaw !== '' ? String(mortgageBankRaw).trim() : undefined;
+
+      const mortgageUnitRaw = row['Đơn vị vay'] || row['Đơn Vị Vay'];
+      const mortgageUnit: string | undefined = mortgageUnitRaw !== undefined && mortgageUnitRaw !== '' ? String(mortgageUnitRaw).trim() : undefined;
+
+      const registryNo = row['Số vào sổ cấp'] || row['Số vào sổ'];
+      const managingUnit = row['Đơn vị quản lý sổ'] || row['Đơn vị quản lý'];
+      const notes = row['Ghi chú'] || row['Ghi Chú'];
 
       const companyCode = (row.company_code || row['Mã công ty sở hữu'] || '').toString().trim().toUpperCase();
       const rawRole = (row.role || row['Phân loại'] || '').toString().trim().toLowerCase();
@@ -629,14 +669,20 @@ export async function importExcelAndUpdateAssets(
         };
         if (businessProjName !== undefined && businessProjName !== '') updates.business_project_name = String(businessProjName).trim();
         if (businessPlot !== undefined && businessPlot !== '') updates.business_plot_code = String(businessPlot).trim();
-        if (subdivision !== undefined && subdivision !== '') updates.subdivision = String(subdivision).trim();
-        if (lotNo !== undefined && lotNo !== '') updates.lot_no = String(lotNo).trim();
+        if (legalLotCode !== undefined && legalLotCode !== '') updates.legal_lot_code = legalLotCode;
         if (landLotNo !== undefined && landLotNo !== '') updates.land_lot_no = String(landLotNo).trim();
         if (mapSheetNo !== undefined && mapSheetNo !== '') updates.map_sheet_no = String(mapSheetNo).trim();
         if (area !== undefined && !isNaN(area)) updates.area = area;
-        if (ownerName !== undefined && ownerName !== '') updates.owner_name = String(ownerName).trim();
         if (assetType !== undefined && assetType !== '') updates.asset_type = String(assetType).trim();
         if (usagePurpose !== undefined && usagePurpose !== '') updates.usage_purpose = String(usagePurpose).trim();
+        if (mortgageBank !== undefined) updates.mortgage_bank = mortgageBank || null;
+        if (mortgageUnit !== undefined) updates.mortgage_unit = mortgageUnit || null;
+        if (registryNo !== undefined && registryNo !== '') updates.registry_no = String(registryNo).trim();
+        if (managingUnit !== undefined && managingUnit !== '') updates.managing_unit = String(managingUnit).trim();
+        if (notes !== undefined && notes !== '') updates.notes = String(notes).trim();
+        if (mortgageBank || mortgageUnit) {
+          updates.mortgage_status = 'mortgaged';
+        }
         if (matchedProj) updates.project_id = matchedProj.id;
         if (matchedWh) updates.warehouse_id = matchedWh.id;
 
@@ -704,20 +750,23 @@ export async function importExcelAndUpdateAssets(
           warehouse_id: matchedWh?.id || null,
           business_project_name: businessProjName ? String(businessProjName).trim() : null,
           business_plot_code: businessPlot ? String(businessPlot).trim() : null,
-          subdivision: subdivision ? String(subdivision).trim() : null,
-          lot_no: lotNo ? String(lotNo).trim() : null,
+          legal_lot_code: legalLotCode ? String(legalLotCode).trim() : null,
           land_lot_no: landLotNo ? String(landLotNo).trim() : null,
           map_sheet_no: mapSheetNo ? String(mapSheetNo).trim() : null,
           area: area && !isNaN(area) ? area : null,
-          owner_name: ownerName ? String(ownerName).trim() : '-',
           asset_type: assetType ? String(assetType).trim() : 'Đất nền',
           usage_purpose: usagePurpose ? String(usagePurpose).trim() : null,
+          mortgage_bank: mortgageBank || null,
+          mortgage_unit: mortgageUnit || null,
+          registry_no: registryNo ? String(registryNo).trim() : null,
+          managing_unit: managingUnit ? String(managingUnit).trim() : null,
+          notes: notes ? String(notes).trim() : null,
           current_owner_entity_id: targetEntityId,
           current_owner_role: targetRole,
           custody_status: 'in_stock',
           lifecycle_status: 'active',
           sale_status: 'not_ready',
-          mortgage_status: 'none',
+          mortgage_status: (mortgageBank || mortgageUnit) ? 'mortgaged' : 'none',
           updated_at: new Date().toISOString(),
           updated_by: user?.id || null,
         };
@@ -809,7 +858,7 @@ export async function importAssets(assetsData: any[]) {
     const selectedWh = warehouses.find((w: any) => w.id === a.warehouse_id);
     const regionCode = resolveRegionCode(a.project_id, projects, selectedWh?.region_code);
     const colType = a.collateral_type || 'BDS';
-    const code = a.asset_code || generateNextAssetCode(regionCode, a.province, colType, accumulatedAssets);
+    const code = a.asset_code || generateNextAssetCode(regionCode, a.provinceCodeHint || a.province, colType, accumulatedAssets);
 
     const assetItem: Asset = {
       id: 'asset-' + Date.now() + '-' + idx,
@@ -817,24 +866,22 @@ export async function importAssets(assetsData: any[]) {
       collateral_type: colType,
       certificate_no: a.certificate_no || `GCN-IMPORT-${idx + 1}`,
       project_id: a.project_id || null,
-      subdivision: a.subdivision || null,
-      lot_no: a.lot_no || null,
+      legal_lot_code: a.legal_lot_code || null,
       business_project_name: a.business_project_name || null,
       business_plot_code: a.business_plot_code || null,
       area: Number(a.area) || 0,
-      owner_name: a.owner_name || '-',
       asset_type: a.asset_type || 'Đất nền',
+      certificate_group: a.certificate_group || null,
       land_lot_no: a.land_lot_no || null,
       map_sheet_no: a.map_sheet_no || null,
-      province: a.province || null,
-      district: a.district || null,
-      ward: a.ward || null,
-      address_detail: a.address_detail || null,
+      registry_no: a.registry_no || null,
       usage_purpose: a.usage_purpose || null,
+      mortgage_bank: a.mortgage_bank || null,
+      mortgage_unit: a.mortgage_unit || null,
+      mortgage_status: a.mortgage_bank ? 'mortgaged' : 'none',
       custody_status: a.custody_status || 'in_stock',
       lifecycle_status: a.lifecycle_status || 'active',
       sale_status: a.sale_status || 'not_ready',
-      mortgage_status: a.mortgage_status || 'none',
       warehouse_id: a.warehouse_id || null,
       current_holder_dept: a.current_holder_dept || null,
       current_owner_entity_id: a.current_owner_entity_id || null,
@@ -898,13 +945,14 @@ export async function fetchProjects(): Promise<Project[]> {
   }
 }
 
-export async function createProject(project: { name: string; area_id: string }): Promise<Project> {
+export async function createProject(project: { name: string; area_id: string; default_owner_entity_id?: string | null }): Promise<Project> {
   if (!isSupabaseConfigured) {
     const current = mockStore.getProjects();
     const newProj: Project = {
       id: 'proj-' + Date.now(),
       name: project.name,
       area_id: project.area_id,
+      default_owner_entity_id: project.default_owner_entity_id || null,
     };
     mockStore.saveProjects([...current, newProj]);
     return mockStore.getProjects().find(p => p.id === newProj.id)!;
@@ -936,7 +984,7 @@ export async function createProject(project: { name: string; area_id: string }):
   }
 }
 
-export async function updateProject(id: string, updates: { name?: string; area_id?: string }) {
+export async function updateProject(id: string, updates: { name?: string; area_id?: string; default_owner_entity_id?: string | null }) {
   if (!isSupabaseConfigured) {
     const current = mockStore.getProjects();
     mockStore.saveProjects(current.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -1115,16 +1163,16 @@ export async function fetchAreas(): Promise<Area[]> {
   }
 }
 
-export async function createArea(name: string, region_id: string): Promise<Area> {
+export async function createArea(name: string, region_id: string, province_code?: string | null): Promise<Area> {
   if (!isSupabaseConfigured) {
     const current = mockStore.getAreas();
-    const newA: Area = { id: 'area-' + Date.now(), name, region_id };
+    const newA: Area = { id: 'area-' + Date.now(), name, region_id, province_code };
     mockStore.saveAreas([...current, newA]);
     return mockStore.getAreas().find(a => a.id === newA.id)!;
   }
   try {
     const { data, error } = await withTimeout(
-      supabase.from('areas').insert([{ name, region_id }]).select().single(),
+      supabase.from('areas').insert([{ name, region_id, province_code }]).select().single(),
       DEFAULT_WRITE_TIMEOUT
     );
     if (error) {
@@ -1144,15 +1192,15 @@ export async function createArea(name: string, region_id: string): Promise<Area>
   }
 }
 
-export async function updateArea(id: string, name: string, region_id: string) {
+export async function updateArea(id: string, name: string, region_id: string, province_code?: string | null) {
   if (!isSupabaseConfigured) {
     const current = mockStore.getAreas();
-    mockStore.saveAreas(current.map(a => a.id === id ? { ...a, name, region_id } : a));
+    mockStore.saveAreas(current.map(a => a.id === id ? { ...a, name, region_id, province_code } : a));
     return;
   }
   try {
     const { data, error } = await withTimeout(
-      supabase.from('areas').update({ name, region_id }).eq('id', id).select().single(),
+      supabase.from('areas').update({ name, region_id, province_code }).eq('id', id).select().single(),
       DEFAULT_WRITE_TIMEOUT
     );
     if (error) {
@@ -1293,6 +1341,9 @@ export async function deleteWarehouse(id: string) {
     );
     if (error) {
       console.error('Lỗi khi xóa kho trên Supabase:', error);
+      if (error.code === '23503' || /foreign key|violates/i.test(error.message || '')) {
+        throw new Error('Không thể xóa kho lưu trữ này vì vẫn còn Giấy chứng nhận hoặc chứng từ giao dịch liên kết. Vui lòng điều chuyển hết GCN sang kho khác trước khi xóa.');
+      }
       throw new Error(`Không thể xóa kho lưu trữ: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
 
@@ -1322,6 +1373,25 @@ export const deleteAsset = async (id: string): Promise<void> => {
 
     if (error) {
       console.error('Supabase deleteAsset returned error:', error);
+      if (error.code === '23503' || /foreign key|violates/i.test(error.message || '')) {
+        const details = ((error.details || '') + ' ' + (error.message || '')).toLowerCase();
+        if (details.includes('transaction_items')) {
+          throw new Error(
+            'Không thể xóa Giấy chứng nhận này do đã phát sinh lịch sử giao dịch kho (phiếu nhập, xuất, thế chấp hoặc bàn giao). ' +
+            'Để bảo toàn tính toàn vẹn chứng từ kế toán và nhật ký kiểm toán, vui lòng chuyển trạng thái GCN sang "Vô hiệu / Thu hồi" thay vì xóa hẳn.'
+          );
+        }
+        if (details.includes('collaterals')) {
+          throw new Error(
+            'Không thể xóa Giấy chứng nhận này do đang có hồ sơ thế chấp ngân hàng liên kết. ' +
+            'Vui lòng giải chấp hoặc chuyển trạng thái GCN sang "Vô hiệu / Thu hồi" thay vì xóa hẳn.'
+          );
+        }
+        throw new Error(
+          'Không thể xóa Giấy chứng nhận này do đã phát sinh dữ liệu nghiệp vụ liên kết (giao dịch kho, thế chấp, kiểm kê hoặc lịch sử sở hữu). ' +
+          'Để bảo toàn tính toàn vẹn dữ liệu, vui lòng chuyển trạng thái GCN sang "Vô hiệu / Thu hồi" thay vì xóa hẳn.'
+        );
+      }
       throw new Error(`Không thể xóa GCN khỏi cơ sở dữ liệu: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
 
@@ -1351,6 +1421,12 @@ export const deleteMultipleAssets = async (ids: string[]): Promise<void> => {
 
     if (error) {
       console.error('Supabase deleteMultipleAssets returned error:', error);
+      if (error.code === '23503' || /foreign key|violates/i.test(error.message || '')) {
+        throw new Error(
+          'Không thể xóa một hoặc nhiều Giấy chứng nhận đã chọn do đã phát sinh lịch sử giao dịch kho (phiếu nhập, xuất, thế chấp...) hoặc dữ liệu nghiệp vụ liên kết. ' +
+          'Để bảo toàn chứng từ kế toán, vui lòng chuyển trạng thái các GCN này sang "Vô hiệu / Thu hồi" thay vì xóa hẳn.'
+        );
+      }
       throw new Error(`Không thể xóa các GCN đã chọn từ cơ sở dữ liệu: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
 

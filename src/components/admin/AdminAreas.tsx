@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Area, Region, Project } from '../../types';
 import { fetchAreas, createArea, updateArea, deleteArea, fetchRegions, fetchProjects } from '../../api/assets';
+import { PROVINCE_CODES } from '../../lib/assetIdentifier';
 import { mockStore } from '../../lib/mockStore';
 import { MapPin, Plus, Edit2, Trash2, Search, Filter, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -16,9 +17,10 @@ export const AdminAreas: React.FC = () => {
   // Form states
   const [newAreaName, setNewAreaName] = useState('');
   const [newAreaRegionId, setNewAreaRegionId] = useState('');
+  const [newAreaProvinceCode, setNewAreaProvinceCode] = useState('');
   const [areaSearch, setAreaSearch] = useState('');
   const [areaRegionFilter, setAreaRegionFilter] = useState('');
-  const [editingArea, setEditingArea] = useState<{ id: string; name: string; region_id: string } | null>(null);
+  const [editingArea, setEditingArea] = useState<{ id: string; name: string; region_id: string; province_code: string } | null>(null);
 
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; warning?: string } | null>(null);
@@ -57,11 +59,16 @@ export const AdminAreas: React.FC = () => {
       toast.error('Vui lòng chọn Vùng trực thuộc');
       return;
     }
+    if (!newAreaProvinceCode) {
+      toast.error('Vui lòng chọn Mã tỉnh/thành (dùng để sinh Mã Tài Sản chính xác)');
+      return;
+    }
     try {
-      await createArea(newAreaName.trim(), newAreaRegionId);
+      await createArea(newAreaName.trim(), newAreaRegionId, newAreaProvinceCode);
       toast.success(`Đã thêm địa bàn "${newAreaName.trim()}" thành công`);
       setNewAreaName('');
       setNewAreaRegionId('');
+      setNewAreaProvinceCode('');
       loadData();
     } catch (err: any) {
       toast.error('Lỗi: ' + (err.message || 'Không thể thêm địa bàn'));
@@ -74,8 +81,12 @@ export const AdminAreas: React.FC = () => {
       toast.error('Vui lòng điền đầy đủ tên địa bàn và chọn vùng');
       return;
     }
+    if (!editingArea.province_code) {
+      toast.error('Vui lòng chọn Mã tỉnh/thành (dùng để sinh Mã Tài Sản chính xác)');
+      return;
+    }
     try {
-      await updateArea(editingArea.id, editingArea.name.trim(), editingArea.region_id);
+      await updateArea(editingArea.id, editingArea.name.trim(), editingArea.region_id, editingArea.province_code);
       toast.success('Cập nhật địa bàn thành công');
       setEditingArea(null);
       loadData();
@@ -130,7 +141,7 @@ export const AdminAreas: React.FC = () => {
           <Plus className="w-4 h-4" /> Thêm Địa bàn hành chính mới
         </h3>
         <form onSubmit={handleAddArea} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-          <div className="sm:col-span-6">
+          <div className="sm:col-span-5">
             <label className="block text-xs font-semibold text-gray-700 mb-1">Tên Địa bàn / Tỉnh thành *</label>
             <input
               type="text"
@@ -140,7 +151,7 @@ export const AdminAreas: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div className="sm:col-span-4">
+          <div className="sm:col-span-3">
             <label className="block text-xs font-semibold text-gray-700 mb-1">Vùng trực thuộc *</label>
             <select
               value={newAreaRegionId}
@@ -150,6 +161,19 @@ export const AdminAreas: React.FC = () => {
               <option value="">-- Chọn Vùng --</option>
               {regions.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Mã tỉnh/thành *</label>
+            <select
+              value={newAreaProvinceCode}
+              onChange={(e) => setNewAreaProvinceCode(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">-- Mã --</option>
+              {PROVINCE_CODES.map((p) => (
+                <option key={p.code} value={p.code}>{p.code}</option>
               ))}
             </select>
           </div>
@@ -223,10 +247,17 @@ export const AdminAreas: React.FC = () => {
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-200">
                         {regionName}
                       </span>
+                      {a.province_code ? (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          Mã: {a.province_code}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-600 border border-red-200">
+                          ⚠ Chưa gán mã tỉnh
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
-                      <span>Mã: <code className="font-mono text-gray-700">{a.id}</code></span>
-                      <span>·</span>
+                    <div className="text-xs text-gray-500 mt-0.5">
                       <span className="text-blue-700 font-medium">
                         {linkedProjects.length} dự án trực thuộc
                       </span>
@@ -237,7 +268,7 @@ export const AdminAreas: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setEditingArea({ id: a.id, name: a.name, region_id: a.region_id })}
+                    onClick={() => setEditingArea({ id: a.id, name: a.name, region_id: a.region_id, province_code: a.province_code || '' })}
                     className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
                     title="Sửa địa bàn"
                   >
@@ -296,6 +327,20 @@ export const AdminAreas: React.FC = () => {
                   <option value="">-- Chọn Vùng --</option>
                   {regions.map((r) => (
                     <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mã tỉnh/thành * <span className="text-gray-400 font-normal">(dùng để sinh Mã Tài Sản, không dò tên)</span></label>
+                <select
+                  value={editingArea.province_code}
+                  onChange={(e) => setEditingArea({ ...editingArea, province_code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                  required
+                >
+                  <option value="">-- Chọn Mã tỉnh/thành --</option>
+                  {PROVINCE_CODES.map((p) => (
+                    <option key={p.code} value={p.code}>{p.name} ({p.code})</option>
                   ))}
                 </select>
               </div>

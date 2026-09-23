@@ -174,6 +174,58 @@ cho đúng bảng/cột/hàm bị báo lỗi. KHÔNG được:
 
 ---
 
+## 14. Edge Function (Supabase): CORS, xác thực, phân quyền
+
+1. **CORS**: `Access-Control-Allow-Headers` của MỌI Edge Function PHẢI có đủ:
+   `authorization, x-client-info, apikey, content-type, x-application-name`.
+   Client (`src/lib/supabase.ts`) gắn `x-application-name` vào MỌI request, kể cả gọi Edge Function;
+   thiếu header này trình duyệt chặn ở bước preflight và app chỉ báo "Failed to send a request to the
+   Edge Function". Nếu thêm header toàn cục mới vào `src/lib/supabase.ts` thì PHẢI cập nhật CORS của tất cả
+   Edge Function trong cùng lần sửa.
+2. **Xác thực người gọi**: dùng `adminClient.auth.getUser(token)` với `token` tách từ header `Authorization`.
+   CẤM dùng `getUser()` không tham số trong Edge Function (bản supabase-js cũ không đọc được header
+   Authorization và luôn báo "session missing").
+3. **Mỗi thao tác nhạy cảm là một Edge Function riêng** (tạo tài khoản, đặt lại mật khẩu, xóa tài khoản).
+   CẤM gom nhiều `action` vào một function.
+4. **Phân quyền theo cấp bậc**: `super_admin (100) > admin (80) > btc_manager (60) > warehouse_manager (40) > còn lại (0)`.
+   Người gọi chỉ được tác động lên tài khoản có cấp bậc THẤP HƠN mình (riêng `super_admin` được tác động mọi
+   tài khoản khác). Không cho tự đặt lại mật khẩu / tự xóa chính mình qua các function quản trị. Không cho
+   gán vai trò ngang hoặc cao hơn vai trò của người tạo.
+5. **Mật khẩu**: CẤM viết RPC/SQL sửa trực tiếp `auth.users`; CẤM lưu mật khẩu (kể cả dạng thường) ở bất kỳ
+   bảng nào (kể cả `app_users`); CẤM mật khẩu mặc định/vạn năng. Đặt lại mật khẩu CHỈ qua
+   `auth.admin.updateUserById` trong Edge Function.
+6. **Mã nguồn phải nằm trong repo**: `supabase/functions/<tên>/index.ts` phải luôn khớp bản đã deploy.
+   Khi sửa Edge Function phải cập nhật file trong repo trước, rồi mới deploy. Công tắc "Verify JWT" của
+   các function này để TẮT (function tự xác thực theo mục 2).
+
+---
+
+## 15. CẤM tự động "chữa lỗi" bằng cách nuốt lỗi, tự thử lại, hoặc ghi đè dữ liệu
+
+(Bổ sung cho quy tắc #1 và #13.)
+1. Tạo tài khoản mà email đã tồn tại trong `auth.users` → PHẢI báo lỗi rõ ràng. CẤM tự tìm hồ sơ cũ để ghi đè
+   vai trò/thông tin hoặc tự đặt lại mật khẩu.
+2. PostgREST báo thiếu cột / lỗi schema cache → PHẢI throw lỗi kèm gợi ý cần migration nào. CẤM tự bỏ cột khỏi
+   payload rồi thử lại (làm mất dữ liệu âm thầm).
+3. Khi gọi Edge Function thất bại → báo lỗi thật cho người dùng. CẤM tự chuyển sang đường thay thế ở phía
+   trình duyệt (ví dụ `auth.signUp()` từ client) nếu chưa được yêu cầu rõ.
+
+---
+
+## 16. Không tạo policy RLS "mở toang" và không để DB thật lệch repo
+
+1. CẤM policy `USING (true)` / `WITH CHECK (true)` cho lệnh ghi (INSERT/UPDATE/DELETE/ALL). Policy SELECT
+   `USING (true)` chỉ được dùng cho bảng danh mục không nhạy cảm.
+2. Mọi thay đổi chạy tay trên Supabase (SQL Editor / Dashboard) PHẢI có file migration tương ứng trong
+   `supabase/migrations/` ngay trong cùng lần làm, để repo luôn phản ánh đúng DB thật.
+3. Trước khi ghi đè một hàm SQL đang chạy (`CREATE OR REPLACE`), PHẢI chạy `pg_get_functiondef` để xem bản
+   thật trong DB và ghi bản cũ vào phần ROLLBACK của migration.
+
+---
+## 17. Kế hoạch go-live, sổ bàn giao và script dọn dữ liệu
+Kế hoạch go-live, sổ bàn giao và script dọn dữ liệu nằm ở docs/HANDOVER.md và scripts/golive/. Không đặt script dọn dữ liệu vào supabase/migrations/.
+---
+
 ## Lịch sử các lỗi đã từng xảy ra do quên các quy tắc trên (tham khảo)
 
 1. `createUserDirect()` dùng `auth.signUp()` từ client → làm admin bị đăng xuất
@@ -201,3 +253,18 @@ cho đúng bảng/cột/hàm bị báo lỗi. KHÔNG được:
 11. AI Studio từng tự ý thêm mật khẩu vạn năng `123456`/`password123` chấp nhận
     cho MỌI tài khoản vào `AuthContext.tsx` khi chỉ được yêu cầu sửa file cấu
     hình URL Supabase — vi phạm nghiêm trọng quy tắc #13.
+12. Edge Function `admin-reset-password` / `admin-delete-user` / `admin-create-user` bị trình duyệt chặn ở bước
+    preflight vì CORS thiếu `x-application-name` (client gắn header này trên mọi request) — mọi lời gọi báo
+    "Failed to send a request to the Edge Function", riêng tạo tài khoản âm thầm rơi sang `auth.signUp()` phía
+    client. (quy tắc #14.1)
+13. Edge Function dùng `userClient.auth.getUser()` không tham số nên luôn trả 401 "Phiên đăng nhập không hợp lệ"
+    dù người gọi đã đăng nhập. Đã sửa bằng `getUser(token)`. (quy tắc #14.2)
+14. Nhánh `action: 'reset_password'` nhét trong `admin-create-user` cho phép `warehouse_manager` đặt lại mật khẩu
+    của bất kỳ ai kể cả `super_admin`; RPC `admin_reset_user_password` ghi thẳng `auth.users` và ghi mật khẩu
+    dạng thường vào `app_users` — đã gỡ (migration 0027). (quy tắc #14.3–14.5)
+15. Hai policy `transactions_authenticated_policy` / `transaction_items_authenticated_policy`
+    (`FOR ALL ... USING (true)`) tạo tay trên DB, không có trong repo, vô hiệu hóa toàn bộ phân quyền phiếu —
+    đã gỡ (migration 0028). (quy tắc #16)
+16. AI Studio tự thêm nhánh "email đã tồn tại → ghi đè hồ sơ + đặt lại mật khẩu" và cơ chế "gặp lỗi cột `phone`
+    thì tự bỏ `phone` rồi thử lại" để che lỗi thiếu cột `profiles.phone/purpose` (nguyên nhân thật: DB lệch
+    repo, đã sửa bằng migration 0029). (quy tắc #15)

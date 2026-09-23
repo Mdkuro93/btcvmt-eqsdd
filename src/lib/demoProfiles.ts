@@ -32,7 +32,7 @@ export const DEMO_PROFILES: Profile[] = import.meta.env.PROD
         id: '00000000-0000-0000-0000-000000000002',
         username: 'warehouse',
         email: 'warehouse@btcvmt.vn',
-        full_name: 'Lê Hoàng Nam (Thủ Kho Trung Tâm)',
+        full_name: 'Lê Hoàng Nam (Quản Lý Kho Trung Tâm)',
         role: 'warehouse_manager',
         region_id: 'reg-01',
         area_id: 'area-01',

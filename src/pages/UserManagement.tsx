@@ -10,7 +10,8 @@ import {
   rejectUserProfile, 
   createUserDirect, 
   updateUserStatus,
-  updateUserDirect 
+  updateUserDirect,
+  deleteProfile
 } from '../api/users';
 import { fetchWarehouses } from '../api/assets';
 import { fetchInvestorEntities } from '../api/investorEntities';
@@ -21,6 +22,8 @@ import { ApproveUserModal } from '../components/user-management/ApproveUserModal
 import { ExtendAccessModal } from '../components/user-management/ExtendAccessModal';
 import { CreateUserModal } from '../components/user-management/CreateUserModal';
 import { EditUserModal } from '../components/user-management/EditUserModal';
+import { AdminResetPasswordModal } from '../components/user-management/AdminResetPasswordModal';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export const UserManagement: React.FC = () => {
   const { profile: currentUser } = useAuth();
@@ -44,6 +47,33 @@ export const UserManagement: React.FC = () => {
 
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<Profile | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Cấp bậc (khớp với Edge Function admin-delete-user; server vẫn kiểm tra lại)
+  const ROLE_RANK: Record<string, number> = { super_admin: 100, admin: 80, btc_manager: 60, warehouse_manager: 40 };
+  const rankOf = (role?: string | null) => ROLE_RANK[role ?? ''] ?? 0;
+  const canDeleteUser = (u: Profile): boolean => {
+    if (!currentUser || !['super_admin', 'admin'].includes(currentUser.role)) return false;
+    if (u.id === currentUser.id) return false;
+    return currentUser.role === 'super_admin' || rankOf(currentUser.role) > rankOf(u.role);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteProfile(deleteTarget.id);
+      toast.success(`Đã xóa tài khoản "${deleteTarget.full_name || deleteTarget.email}"`);
+      setDeleteTarget(null);
+      await loadData();
+    } catch (err: any) {
+      toast.error('Lỗi khi xóa: ' + (err?.message || 'Thao tác không thành công'));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -286,7 +316,7 @@ export const UserManagement: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Quản lý người dùng &amp; Phê duyệt tra cứu</h1>
               <p className="text-sm text-gray-500 mt-0.5">
-                Phê duyệt tài khoản tự đăng ký tra cứu tạm thời và quản lý ủy quyền dành cho Ban Quản Trị &amp; Thủ Kho
+                Phê duyệt tài khoản tự đăng ký tra cứu tạm thời và quản lý ủy quyền dành cho Ban Quản Trị &amp; Quản Lý Kho
               </p>
             </div>
           </div>
@@ -419,10 +449,10 @@ export const UserManagement: React.FC = () => {
               <option value="all">Tất cả vai trò</option>
               <option value="user">Tra cứu tạm thời (user)</option>
               <option value="viewer">Khách tra cứu (viewer)</option>
-              <option value="warehouse_manager">Thủ kho</option>
+              <option value="warehouse_manager">Quản lý kho</option>
               <option value="btc_manager">Ban Tài Chính</option>
               <option value="capital_dept">Phòng Nguồn Vốn</option>
-              <option value="project_dept">Ban PTDA/BĐN</option>
+              <option value="project_dept">Ban PTDA & Ban Đối Ngoại</option>
               <option value="re_dept">Khối SPG</option>
               <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn)</option>
               <option value="investor">Chủ đầu tư/Nhà đầu tư (CĐT/NĐT)</option>
@@ -444,6 +474,9 @@ export const UserManagement: React.FC = () => {
           onExtendClick={setExtendingUser}
           onToggleStatus={handleToggleStatus}
           onEditClick={setEditingUser}
+          onResetPasswordClick={setResetPasswordUser}
+          onDeleteClick={setDeleteTarget}
+          canDeleteUser={canDeleteUser}
         />
       </div>
 
@@ -489,6 +522,27 @@ export const UserManagement: React.FC = () => {
           loading={isSavingEdit}
         />
       )}
+
+      {/* Modal 5: Admin Reset Password */}
+      {resetPasswordUser && (
+        <AdminResetPasswordModal
+          user={resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
+          onSuccess={loadData}
+        />
+      )}
+
+      {/* Modal 6: Confirm Delete User */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa tài khoản"
+        message={`Bạn có chắc chắn muốn xóa hẳn tài khoản "${deleteTarget?.full_name || deleteTarget?.email}" (${deleteTarget?.email})? Thao tác này không thể hoàn tác. Nếu tài khoản đã phát sinh dữ liệu nghiệp vụ, hệ thống sẽ từ chối và bạn nên dùng "Khóa" thay thế.`}
+        confirmText="Xác nhận xóa"
+        confirmVariant="danger"
+        loading={isDeleting}
+      />
     </div>
   );
 };

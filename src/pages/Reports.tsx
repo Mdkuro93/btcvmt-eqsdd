@@ -208,154 +208,135 @@ export const Reports: React.FC = () => {
 
       const headerTitle = `BÁO CÁO THEO DÕI CHI TIẾT TỒN KHO BẤT ĐỘNG SẢN ${selectedRegion.toUpperCase()}`;
       
-      // Create Worksheet Matrix
       const wsData: any[][] = [];
 
-      // Row 1: Logo / Company Name
       wsData.push(['SUN GROUP / BTC VMT', '', '', '', headerTitle]);
-      // Row 2: Report Period
       wsData.push(['Kỳ báo cáo:', reportPeriod]);
-      wsData.push([]); // Blank row
+      wsData.push([]); 
 
-      // Row 4: Top Level Section Header (Combined Colors / Groups)
+      // Row 4: Top Level Section Header 
       const row4 = [
-        'STT',
-        'THÔNG TIN CHUNG', '', '', '', '', '', '', // 7 empty for span
-        'THÔNG TIN PHÁP LÝ CỦA GCN QSDĐ', '', '', '', '', '', '', '', '', '', // 10 empty for span
-        'THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG', '', '', '', '', '', '', '', // 8 empty for span
-        'GHI CHÚ'
+        'THÔNG TIN CHUNG', '', '', '', '', '', '', '', '', 
+        'THÔNG TIN PHÁP LÝ', '', '', '', '', '', '', '', 
+        'THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG', '', '', '', '', '', 
+        'TRẠNG THÁI TSĐB', '', '', '', ''
       ];
       wsData.push(row4);
 
       // Row 5: Detailed Columns
       const row5 = [
-        'STT',
-        // THÔNG TIN CHUNG
-        'Dự án',
-        'Loại tài sản',
-        'Nhóm sổ',
-        'Phân khu',
-        'Số thửa đất/căn/lô',
-        'Mã lô đất',
-        'Diện tích (m²)',
-        // THÔNG TIN PHÁP LÝ GCN
-        'Chủ sở hữu',
-        'Thửa đất số',
-        'Tờ bản đồ số',
-        'Địa chỉ',
-        'Số CN QSDĐ',
+        'ID Hệ Thống',
+        'Mã Tài Sản / TSĐB',
+        'Dự Án (Pháp lý)',
+        'Tên Dự Án Kinh Doanh',
+        'Loại Tài Sản',
+        'Nhóm Sổ',
+        'Mã lô đất (Mã Lô Pháp Lý)',
+        'Mã Lô Kinh Doanh',
+        'Diện Tích (m²)',
+        'Chủ Sở Hữu',
+        'Số Thửa Bản Đồ',
+        'Số Tờ Bản Đồ',
+        'Số GCN QSDĐ',
         'Số vào sổ cấp',
         'Ngày vào sổ',
+        'Mục Đích Sử Dụng',
+        'Thời Hạn Sử Dụng',
+        'Trạng Thái Thế Chấp',
+        'Ngân Hàng Thế Chấp',
+        'Đơn vị vay',
+        'Giá trị định giá',
+        'Tỷ lệ đảm bảo',
+        'Giá trị TSĐB',
+        'Trạng Thái Pháp Lý',
+        'Trạng Thái Kinh Doanh',
+        'Trạng Thái Lưu Kho',
         'Đơn vị quản lý sổ',
-        'Mục đích sử dụng',
-        'Thời hạn sử dụng',
-        // THẾ CHẤP
-        'Tình trạng thế chấp',
-        'Ngân hàng cầm cố, thế chấp 1',
-        'Đơn vị vay 1',
-        'Ngân hàng cầm cố, thế chấp 2',
-        'Đơn vị vay 2',
-        'Giá trị định giá (VNĐ)',
-        'Tỷ lệ đảm bảo (%)',
-        'Giá trị đảm bảo (VNĐ)',
-        // GHI CHÚ
         'Ghi chú'
       ];
       wsData.push(row5);
 
       // Rows 6+: Data
-      detailedAssets.forEach((asset, idx) => {
+      detailedAssets.forEach((asset) => {
         const isMortgaged = asset.mortgage_status === 'mortgaged';
-        const valuation = asset.mortgage_valuation || 0;
-        const guaranteeRatio = asset.collateral_ratio || 0;
-        const guaranteeVal = asset.collateral_value || 0;
+
+        let legalStatus = 'Đang hiệu lực';
+        if (asset.lifecycle_status === 'invalidated') legalStatus = 'Sổ gốc đã hủy (sau tách)';
+        
+        let saleStatus = 'Chưa sẵn sàng';
+        if (asset.sale_status === 'ready_for_sale') saleStatus = 'Sẵn sàng bán';
+        if (asset.sale_status === 'sold') saleStatus = 'Đã bán';
+
+        let custodyStatus = 'Lưu kho an toàn';
+        if (asset.custody_status === 'checked_out') custodyStatus = `Đang xuất mượn cho ${asset.current_holder_dept || 'Chưa cập nhật'}`;
         
         let notesArr = [];
         if (asset.notes) notesArr.push(asset.notes);
-        if (asset.custody_status === 'checked_out') notesArr.push(`Đang xuất mượn cho ${asset.current_holder_dept || 'Chưa cập nhật'}`);
-        if (asset.lifecycle_status === 'invalidated') notesArr.push('Sổ đã hủy do tách thửa');
-        const notesStr = notesArr.length > 0 ? notesArr.join(' - ') : 'Lưu kho an toàn';
-
-        const plotCode = formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no);
-
-        const projectDisplayName = asset.business_project_name 
-          ? `${asset.projects?.name || ''} (KD: ${asset.business_project_name})`
-          : (asset.projects?.name || '-');
-
-        const plotCodeDisplay = asset.business_plot_code 
-          ? `${plotCode} [KD: ${asset.business_plot_code}]` 
-          : plotCode;
+        const notesStr = notesArr.length > 0 ? notesArr.join(' - ') : '';
 
         const row = [
-          idx + 1,
-          // Thông tin chung
-          projectDisplayName,
+          asset.id,
+          asset.asset_code || '-',
+          asset.projects?.name || '-',
+          asset.business_project_name || '-',
           asset.asset_type || '-',
-          asset.parent_asset_id ? 'Sổ con (Tách thửa)' : (asset.lifecycle_status === 'invalidated' ? 'Sổ gốc (Đã tách)' : 'Sổ chính'),
-          asset.subdivision || '-',
-          asset.lot_no || asset.land_lot_no || '-',
-          plotCodeDisplay,
+          asset.parent_asset_id ? 'Sổ con' : 'Sổ chính',
+          asset.legal_lot_code || '-',
+          asset.business_plot_code || '-',
           asset.area || 0,
-          // Thông tin pháp lý GCN
-          asset.owner_name || '-',
+          asset.current_owner_entity?.name || asset.investor_entities?.name || '-',
           asset.land_lot_no || '-',
           asset.map_sheet_no || '-',
-          asset.address_detail || (asset.province ? `${asset.district || ''}, ${asset.province}` : '-'),
-          asset.certificate_no,
+          asset.certificate_no || '-',
           asset.registry_no || '-',
           asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : 'Chưa cập nhật',
-          asset.managing_unit || '-',
           asset.usage_purpose || '-',
-          asset.usage_term_type === 'long_term'
-            ? 'Lâu dài'
-            : (asset.usage_term_date ? new Date(asset.usage_term_date).toLocaleDateString('vi-VN') : '-'),
-          // Thế chấp
-          isMortgaged ? 'Đã thế chấp' : 'Chưa thế chấp',
-          isMortgaged ? (asset.mortgage_bank || 'Chưa cập nhật') : '-',
-          isMortgaged ? (asset.mortgage_unit || 'Chưa cập nhật') : '-',
-          isMortgaged ? (asset.mortgage_bank_2 || '-') : '-',
-          isMortgaged ? (asset.mortgage_unit_2 || '-') : '-',
-          valuation ? valuation : 0,
-          guaranteeRatio ? `${guaranteeRatio}%` : '-',
-          guaranteeVal ? guaranteeVal : 0,
-          // Ghi chú
-          asset.custody_status === 'checked_out'
-            ? `Đang xuất mượn cho ${asset.current_holder_dept || 'Chưa cập nhật'}`
-            : (asset.lifecycle_status === 'invalidated' ? 'Sổ đã hủy do tách thửa' : 'Lưu kho an toàn')
+          asset.usage_term_type === 'long_term' ? 'Lâu dài' : (asset.usage_term_date ? new Date(asset.usage_term_date).toLocaleDateString('vi-VN') : '-'),
+          isMortgaged ? 'Đã thế chấp' : 'Không thế chấp',
+          asset.mortgage_bank || '-',
+          asset.mortgage_unit || '-',
+          asset.mortgage_valuation || 0,
+          asset.collateral_ratio ? `${asset.collateral_ratio}%` : '-',
+          asset.collateral_value || 0,
+          legalStatus,
+          saleStatus,
+          custodyStatus,
+          asset.managing_unit || '-',
+          notesStr
         ];
         wsData.push(row);
       });
 
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-      // Column widths formatting
       ws['!cols'] = [
-        { wch: 5 },  // STT
-        { wch: 28 }, // Dự án
-        { wch: 22 }, // Loại tài sản
-        { wch: 18 }, // Nhóm sổ
-        { wch: 15 }, // Phân khu
-        { wch: 18 }, // Số thửa/căn/lô
-        { wch: 20 }, // Map khu-lô
-        { wch: 14 }, // Diện tích
-        { wch: 28 }, // Chủ sở hữu
-        { wch: 12 }, // Thửa đất số
-        { wch: 12 }, // Tờ bản đồ số
-        { wch: 35 }, // Địa chỉ
-        { wch: 18 }, // Số GCN
-        { wch: 16 }, // Số vào sổ
-        { wch: 14 }, // Ngày vào sổ
-        { wch: 24 }, // Đơn vị quản lý sổ
-        { wch: 24 }, // Mục đích
-        { wch: 16 }, // Thời hạn
-        { wch: 18 }, // Tình trạng thế chấp
-        { wch: 28 }, // Ngân hàng 1
-        { wch: 20 }, // Đơn vị vay 1
-        { wch: 20 }, // Ngân hàng 2
-        { wch: 20 }, // Đơn vị vay 2
+        { wch: 15 }, // ID Hệ Thống
+        { wch: 20 }, // Mã TS
+        { wch: 30 }, // Dự Án (Pháp lý)
+        { wch: 30 }, // Tên Dự Án Kinh Doanh
+        { wch: 15 }, // Loại tài sản
+        { wch: 12 }, // Nhóm sổ
+        { wch: 25 }, // Mã Lô Pháp Lý
+        { wch: 20 }, // Mã Lô KD
+        { wch: 15 }, // Diện Tích
+        { wch: 30 }, // Chủ Sở Hữu
+        { wch: 15 }, // Số Thửa
+        { wch: 15 }, // Số Tờ
+        { wch: 20 }, // Số GCN
+        { wch: 20 }, // Số vào sổ
+        { wch: 15 }, // Ngày vào sổ
+        { wch: 25 }, // Mục Đích
+        { wch: 15 }, // Thời Hạn
+        { wch: 20 }, // TT Thế Chấp
+        { wch: 30 }, // NH Thế Chấp
+        { wch: 30 }, // Đơn vị vay
         { wch: 20 }, // Giá trị định giá
-        { wch: 16 }, // Tỷ lệ
-        { wch: 20 }, // Giá trị đảm bảo
+        { wch: 15 }, // Tỷ lệ
+        { wch: 20 }, // Giá trị ĐB
+        { wch: 20 }, // TT Pháp Lý
+        { wch: 20 }, // TT Kinh Doanh
+        { wch: 25 }, // TT Lưu Kho
+        { wch: 25 }, // Đơn vị quản lý sổ
         { wch: 30 }, // Ghi chú
       ];
 
@@ -482,7 +463,7 @@ export const Reports: React.FC = () => {
             <div className="flex items-center gap-2">
               <WarehouseIcon className="w-4 h-4 text-amber-700 shrink-0" />
               <span>
-                <strong>Phạm vi dữ liệu Thủ kho:</strong> Báo cáo tự động giới hạn hiển thị các GCN thuộc các kho do bạn phụ trách{' '}
+                <strong>Phạm vi dữ liệu Quản lý kho:</strong> Báo cáo tự động giới hạn hiển thị các GCN thuộc các kho do bạn phụ trách{' '}
                 {availableWarehouses.length > 0 ? (
                   <span className="font-bold text-amber-950">({availableWarehouses.map(w => w.name).join(', ')})</span>
                 ) : (
@@ -491,7 +472,7 @@ export const Reports: React.FC = () => {
               </span>
             </div>
             <span className="text-[11px] font-semibold bg-amber-200/60 text-amber-800 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-              Quyền Thủ Kho
+              Quyền Quản Lý Kho
             </span>
           </div>
         )}
@@ -692,71 +673,48 @@ export const Reports: React.FC = () => {
         <div className="overflow-x-auto max-h-[72vh] overflow-y-auto">
           <table className="min-w-full text-left border-collapse">
             
-            {/* LEVEL 1: CATEGORY SECTIONS HEADER */}
+            {/* 2-TIER TABLE HEADER MATCHING MATRIX REPORT */}
             <thead className="sticky top-0 z-30 shadow-2xs">
-              <tr className="text-center font-black uppercase text-[11px] tracking-wide text-gray-900">
-                {/* Sticky STT */}
-                <th rowSpan={2} className="px-3 py-3 bg-amber-400 border border-gray-400 w-12 sticky left-0 z-40 text-center">
-                  STT
-                </th>
-
-                {/* Sticky DỰ ÁN */}
-                <th rowSpan={2} className="px-3 py-3 bg-amber-300 border border-gray-400 min-w-[180px] sticky left-12 z-40 text-center shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
-                  DỰ ÁN
-                </th>
-
-                {/* SECTION 1: THÔNG TIN CHUNG (YELLOW/GOLD) - 6 columns */}
-                <th colSpan={6} className="px-4 py-2 bg-amber-300 border border-gray-400 text-amber-950">
-                  THÔNG TIN CHUNG
-                </th>
-
-                {/* SECTION 2: THÔNG TIN PHÁP LÝ GCN QSDĐ (LIGHT GREEN) */}
-                <th colSpan={10} className="px-4 py-2 bg-emerald-300 border border-gray-400 text-emerald-950">
-                  THÔNG TIN PHÁP LÝ CỦA GCN QSDĐ
-                </th>
-
-                {/* SECTION 3: THÔNG TIN THẾ CHẤP NGÂN HÀNG (PINK/RED) */}
-                <th colSpan={8} className="px-4 py-2 bg-red-300 border border-gray-400 text-red-950">
-                  THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG
-                </th>
-
-                {/* SECTION 4: GHI CHÚ */}
-                <th rowSpan={2} className="px-4 py-3 bg-amber-300 border border-gray-400 text-amber-950 min-w-[200px]">
-                  GHI CHÚ & KHO
-                </th>
+              {/* TIER 1: 4 MAJOR GROUPS */}
+              <tr className="text-center font-bold text-[11px] uppercase tracking-wider">
+                <th rowSpan={2} className="px-3 py-2 border border-gray-300 min-w-[50px] sticky left-0 z-40 bg-slate-200 text-gray-800">STT</th>
+                <th rowSpan={2} className="px-3 py-2 border border-gray-300 min-w-[130px] sticky left-12 z-40 bg-slate-200 text-gray-800">Mã Tài Sản / TSĐB</th>
+                <th colSpan={7} className="px-3 py-1.5 border border-amber-300 bg-amber-100 text-amber-900 font-bold">THÔNG TIN CHUNG</th>
+                <th colSpan={8} className="px-3 py-1.5 border border-emerald-300 bg-emerald-100 text-emerald-900 font-bold">THÔNG TIN PHÁP LÝ</th>
+                <th colSpan={6} className="px-3 py-1.5 border border-rose-300 bg-rose-100 text-rose-900 font-bold">THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG</th>
+                <th colSpan={5} className="px-3 py-1.5 border border-slate-300 bg-slate-100 text-slate-800 font-bold">TRẠNG THÁI TSĐB</th>
               </tr>
-
-              {/* LEVEL 2: SUB-COLUMNS HEADER */}
-              <tr className="text-center font-bold text-[10px] uppercase tracking-wider text-gray-800 border-b border-gray-400">
-                {/* THÔNG TIN CHUNG COLUMNS (minus Dự án which is sticky rowSpan=2) */}
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[130px]">Loại tài sản</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Nhóm sổ</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Phân Khu</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Số thửa/lô</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[130px] font-bold text-blue-900">Mã lô đất</th>
-                <th className="px-3 py-2 bg-amber-200 border border-gray-300 min-w-[100px]">Diện tích (m²)</th>
-
-                {/* THÔNG TIN PHÁP LÝ GCN COLUMNS */}
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[190px]">Chủ sở hữu</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[90px]">Thửa đất số</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[90px]">Tờ bản đồ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[220px]">Địa chỉ chi tiết</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[130px]">Số CN QSDĐ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[110px]">Số vào sổ cấp</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[100px]">Ngày vào sổ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[150px]">Đơn vị quản lý sổ</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[150px]">Mục đích sử dụng</th>
-                <th className="px-3 py-2 bg-emerald-200 border border-gray-300 min-w-[110px]">Thời hạn sử dụng</th>
-
-                {/* THẾ CHẤP COLUMNS */}
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[120px]">Tình trạng thế chấp</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[160px]">Ngân hàng thế chấp 1</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[130px]">Đơn vị vay 1</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[140px]">Ngân hàng thế chấp 2</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[120px]">Đơn vị vay 2</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[130px]">Giá trị định giá</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[100px]">Tỷ lệ đảm bảo</th>
-                <th className="px-3 py-2 bg-red-200 border border-gray-300 min-w-[130px]">Giá trị đảm bảo</th>
+              {/* TIER 2: 26 DETAILED COLUMN HEADERS */}
+              <tr className="text-center font-bold text-[10px] uppercase tracking-wider text-gray-800 border-b border-gray-400 bg-slate-50">
+                <th className="px-3 py-2 border border-gray-300 min-w-[150px] bg-amber-50">Dự Án (Pháp lý)</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[150px] bg-amber-50">Tên Dự Án Kinh Doanh</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[110px] bg-amber-50">Loại Tài Sản</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[90px] bg-amber-50">Nhóm Sổ</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[150px] bg-amber-100 text-blue-950">Mã lô đất (Mã Lô Pháp Lý)</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[130px] bg-amber-100 text-indigo-950">Mã Lô Kinh Doanh</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[90px] bg-amber-50">Diện Tích (m²)</th>
+                
+                <th className="px-3 py-2 border border-gray-300 min-w-[160px] bg-emerald-50">Chủ Sở Hữu</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[110px] bg-emerald-50">Số Thửa Bản Đồ</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[110px] bg-emerald-50">Số Tờ Bản Đồ</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[140px] bg-emerald-100 font-bold text-[#1E3A8A]">Số GCN QSDĐ</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[120px] bg-emerald-50">Số vào sổ cấp</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[110px] bg-emerald-50">Ngày vào sổ</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[150px] bg-emerald-50">Mục Đích Sử Dụng</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[130px] bg-emerald-50">Thời Hạn Sử Dụng</th>
+                
+                <th className="px-3 py-2 border border-gray-300 min-w-[120px] bg-rose-50">Trạng Thái Thế Chấp</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[180px] bg-rose-100 text-rose-950 font-bold">Ngân Hàng Thế Chấp</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[160px] bg-rose-100 text-rose-950 font-bold">Đơn vị vay</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[110px] bg-rose-50">Giá trị định giá</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[110px] bg-rose-50">Tỷ lệ đảm bảo</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[110px] bg-rose-50">Giá trị TSĐB</th>
+                
+                <th className="px-3 py-2 border border-gray-300 min-w-[130px]">Trạng Thái Pháp Lý</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[140px]">Trạng Thái Kinh Doanh</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[130px]">Trạng Thái Lưu Kho</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[140px]">Đơn vị quản lý sổ</th>
+                <th className="px-3 py-2 border border-gray-300 min-w-[150px]">Ghi chú</th>
               </tr>
             </thead>
 
@@ -764,7 +722,7 @@ export const Reports: React.FC = () => {
             <tbody className="divide-y divide-gray-200 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={27} className="p-8">
+                  <td colSpan={28} className="p-8">
                     <LoadingFallback
                       message="Đang tổng hợp dữ liệu báo cáo..."
                       onRetry={() => loadData()}
@@ -773,7 +731,7 @@ export const Reports: React.FC = () => {
                 </tr>
               ) : errorMessage ? (
                 <tr>
-                  <td colSpan={27} className="px-4 py-16 text-center">
+                  <td colSpan={28} className="px-4 py-16 text-center">
                     <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
                     <p className="mt-2 text-sm text-red-700 font-semibold">{errorMessage}</p>
                     <button
@@ -788,7 +746,7 @@ export const Reports: React.FC = () => {
                 </tr>
               ) : tableAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={27} className="px-4 py-16 text-center">
+                  <td colSpan={28} className="px-4 py-16 text-center">
                     <AlertCircle className="h-8 w-8 text-gray-400 mx-auto" />
                     <p className="mt-2 text-xs text-gray-500 font-medium">Không tìm thấy dữ liệu bất động sản phù hợp với tiêu chí chọn.</p>
                   </td>
@@ -803,112 +761,67 @@ export const Reports: React.FC = () => {
 
                   return (
                     <tr key={asset.id} className="hover:bg-amber-50/40 transition-colors">
-                      {/* STT (Sticky Left) */}
                       <td className={`${cellPadding} text-center font-bold text-gray-700 border-r border-gray-200 bg-gray-50 sticky left-0 z-10`}>
                         {(page - 1) * pageSize + index + 1}
                       </td>
-
-                      {/* DỰ ÁN (Sticky Left) */}
-                      <td className={`${cellPadding} font-semibold text-gray-900 border-r border-gray-200 bg-white sticky left-12 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] min-w-[180px]`}>
-                        <div className="leading-snug">{asset.projects?.name || '-'}</div>
-                        {asset.business_project_name && (
-                          <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">KD: {asset.business_project_name}</div>
-                        )}
+                      <td className={`${cellPadding} font-mono text-gray-800 border-r border-gray-200 bg-white sticky left-12 z-10`}>
+                        {asset.asset_code || '-'}
                       </td>
-
-                      {/* THÔNG TIN CHUNG */}
+                      <td className={`${cellPadding} font-semibold text-gray-900 border-r border-gray-200`}>
+                        {asset.projects?.name || '-'}
+                      </td>
+                      <td className={`${cellPadding} font-semibold text-emerald-700 border-r border-gray-200`}>
+                        {asset.business_project_name || '-'}
+                      </td>
                       <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.asset_type || '-'}</td>
                       <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>
-                        {asset.parent_asset_id ? (
-                          <span className="text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded font-medium">Sổ con (Tách)</span>
-                        ) : asset.lifecycle_status === 'invalidated' ? (
-                          <span className="text-red-700 bg-red-50 px-1.5 py-0.5 rounded font-medium">Sổ gốc (Đã tách)</span>
-                        ) : (
-                          <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Sổ chính</span>
-                        )}
+                        {asset.parent_asset_id ? 'Sổ con (Tách)' : (asset.lifecycle_status === 'invalidated' ? 'Sổ gốc (Đã tách)' : (asset.certificate_group === 'so_nho' ? 'Sổ nhỏ' : 'Sổ lớn'))}
                       </td>
-                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.subdivision || '-'}</td>
-                      <td className={`${cellPadding} font-mono text-gray-800 border-r border-gray-200`}>{asset.lot_no || asset.land_lot_no || '-'}</td>
-                      <td className={`${cellPadding} border-r border-gray-200`}>
-                        <span className="font-semibold text-blue-900 bg-blue-50 px-2 py-0.5 rounded text-[11px] border border-blue-200">
-                          {formatPlotCode(asset.subdivision, asset.lot_no, asset.land_lot_no)}
-                        </span>
-                        {asset.business_plot_code && (
-                          <div className="text-[10px] font-bold text-indigo-700 mt-0.5">KD: {asset.business_plot_code}</div>
-                        )}
+                      <td className={`${cellPadding} border-r border-gray-200 font-semibold text-blue-900 bg-blue-50/50`}>
+                        {asset.legal_lot_code || '-'}
+                      </td>
+                      <td className={`${cellPadding} font-bold text-indigo-700 border-r border-gray-200 bg-indigo-50/50`}>
+                        {asset.business_plot_code || '-'}
                       </td>
                       <td className={`${cellPadding} font-bold text-gray-900 border-r border-gray-200 text-right`}>
                         {asset.area ? `${asset.area.toLocaleString('vi-VN')}` : '-'}
                       </td>
 
-                      {/* THÔNG TIN PHÁP LÝ GCN */}
-                      <td className={`${cellPadding} font-semibold text-gray-900 border-r border-gray-200 min-w-[190px]`}>
-                        {asset.owner_name || '-'}
-                      </td>
+                      <td className={`${cellPadding} font-semibold text-gray-900 border-r border-gray-200`}>{asset.current_owner_entity?.name || asset.investor_entities?.name || '-'}</td>
                       <td className={`${cellPadding} text-center font-semibold text-gray-800 border-r border-gray-200`}>{asset.land_lot_no || '-'}</td>
                       <td className={`${cellPadding} text-center text-gray-700 border-r border-gray-200`}>{asset.map_sheet_no || '-'}</td>
-                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[220px] leading-snug`}>
-                        {asset.address_detail || (asset.province ? `${asset.district || ''}, ${asset.province}` : '-')}
-                      </td>
                       <td className={`${cellPadding} font-bold text-[#1E3A8A] border-r border-gray-200`}>{asset.certificate_no}</td>
                       <td className={`${cellPadding} text-gray-600 font-mono border-r border-gray-200`}>{asset.registry_no || '-'}</td>
                       <td className={`${cellPadding} text-gray-600 border-r border-gray-200`}>
                         {asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}
                       </td>
-                      <td className={`${cellPadding} font-medium text-gray-800 border-r border-gray-200 min-w-[150px]`}>
-                        {asset.managing_unit || '-'}
-                      </td>
-                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[150px]`}>{asset.usage_purpose || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.usage_purpose || '-'}</td>
                       <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>
-                        {asset.usage_term_type === 'long_term'
-                          ? 'Lâu dài'
-                          : (asset.usage_term_date ? new Date(asset.usage_term_date).toLocaleDateString('vi-VN') : '-')}
+                        {asset.usage_term_type === 'long_term' ? 'Lâu dài' : (asset.usage_term_date ? new Date(asset.usage_term_date).toLocaleDateString('vi-VN') : '-')}
                       </td>
 
-                      {/* THÔNG TIN THẾ CHẤP NGÂN HÀNG */}
                       <td className={`${cellPadding} border-r border-gray-200 text-center font-bold`}>
                         {isMortgaged ? (
                           <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded-full inline-block">Đã thế chấp</span>
                         ) : (
-                          <span className="text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full inline-block">Chưa thế chấp</span>
+                          <span className="text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full inline-block">Không</span>
                         )}
                       </td>
-                      <td className={`${cellPadding} font-semibold text-red-900 border-r border-gray-200 min-w-[160px]`}>
-                        {isMortgaged ? (asset.mortgage_bank || 'Chưa cập nhật') : '-'}
+                      <td className={`${cellPadding} font-semibold text-red-900 border-r border-gray-200`}>
+                        {isMortgaged ? (asset.mortgage_bank || '-') : '-'}
                       </td>
-                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[130px]`}>
-                        {isMortgaged ? (asset.mortgage_unit || 'Chưa cập nhật') : '-'}
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>
+                        {isMortgaged ? (asset.mortgage_unit || '-') : '-'}
                       </td>
-                      <td className={`${cellPadding} font-semibold text-red-900 border-r border-gray-200 min-w-[160px]`}>
-                        {isMortgaged ? (asset.mortgage_bank_2 || '-') : '-'}
-                      </td>
-                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200 min-w-[130px]`}>
-                        {isMortgaged ? (asset.mortgage_unit_2 || '-') : '-'}
-                      </td>
-                      <td className={`${cellPadding} font-bold text-gray-900 border-r border-gray-200 text-right min-w-[130px]`}>
-                        {valuation ? `${valuation.toLocaleString('vi-VN')} đ` : '-'}
-                      </td>
-                      <td className={`${cellPadding} text-center font-semibold text-gray-700 border-r border-gray-200`}>
-                        {guaranteeRatio ? `${guaranteeRatio}%` : '-'}
-                      </td>
-                      <td className={`${cellPadding} font-bold text-emerald-700 border-r border-gray-200 text-right min-w-[130px]`}>
-                        {guaranteeVal ? `${guaranteeVal.toLocaleString('vi-VN')} đ` : '-'}
-                      </td>
+                      <td className={`${cellPadding} text-right text-gray-700 border-r border-gray-200`}>{valuation > 0 ? valuation.toLocaleString('vi-VN') : '-'}</td>
+                      <td className={`${cellPadding} text-center text-gray-700 border-r border-gray-200`}>{guaranteeRatio > 0 ? `${guaranteeRatio}%` : '-'}</td>
+                      <td className={`${cellPadding} text-right text-gray-700 border-r border-gray-200`}>{guaranteeVal > 0 ? guaranteeVal.toLocaleString('vi-VN') : '-'}</td>
 
-                      {/* GHI CHÚ */}
-                      <td className={`${cellPadding} text-gray-600 text-[11px] min-w-[200px]`}>
-                        {asset.custody_status === 'checked_out' ? (
-                          <span className="text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            Đang mượn tại {asset.current_holder_dept || 'Chưa cập nhật'}
-                          </span>
-                        ) : asset.lifecycle_status === 'invalidated' ? (
-                          <span className="text-gray-400 italic">Sổ gốc đã hủy (sau tách)</span>
-                        ) : (
-                          <span className="text-emerald-700 font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                            Lưu kho an toàn: {asset.warehouses?.name || '-'}
-                          </span>
-                        )}
-                      </td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.lifecycle_status === 'invalidated' ? 'Vô hiệu lực' : 'Đang hiệu lực'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.sale_status === 'ready_for_sale' ? 'Sẵn sàng bán' : 'Chưa sẵn sàng'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.custody_status === 'in_stock' ? 'Lưu kho an toàn' : (asset.custody_status === 'checked_out' ? 'Đã xuất kho' : 'Báo mất')}</td>
+                      <td className={`${cellPadding} font-medium text-gray-800 border-r border-gray-200`}>{asset.managing_unit || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700 border-r border-gray-200`}>{asset.notes || '-'}</td>
                     </tr>
                   );
                 })

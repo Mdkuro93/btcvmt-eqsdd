@@ -72,13 +72,27 @@ export const Import: React.FC = () => {
         
         // Map and validate
         const mappedData = rawData.map((row: any, index: number) => {
-          const certificate_no = row['Số GCN']?.toString().trim();
-          const projectName = row['Tên dự án']?.toString().trim();
-          const subdivision = row['Phân khu']?.toString().trim() || null;
-          const area = row['Diện tích'] ? parseFloat(row['Diện tích']) : null;
-          const owner_name = row['Chủ sở hữu']?.toString().trim() || null;
+          const certificate_no = (row['Số GCN QSDĐ'] || row['Số GCN'])?.toString().trim();
+          const projectName = (row['Dự Án (Pháp lý)'] || row['Tên dự án'])?.toString().trim();
+          
+          const legal_lot_code = (row['Mã lô đất (Mã Lô Pháp Lý)'] || row['Mã Lô Pháp Lý'])?.toString().trim() || null;
+          
+          const area = (row['Diện Tích (m²)'] || row['Diện tích']) ? parseFloat(row['Diện Tích (m²)'] || row['Diện tích']) : null;
           const companyCode = row['Mã công ty sở hữu']?.toString().trim();
           const roleRaw = row['Phân loại']?.toString().trim().toLowerCase();
+          
+          const business_project_name = row['Tên Dự Án Kinh Doanh']?.toString().trim() || null;
+          const business_plot_code = row['Mã Lô Kinh Doanh']?.toString().trim() || null;
+          const asset_type = row['Loại Tài Sản']?.toString().trim() || null;
+          const certificate_group = row['Nhóm Sổ']?.toString().trim() === 'Sổ con' ? 'so_nho' : 'so_lon';
+          const land_lot_no = row['Số Thửa Bản Đồ']?.toString().trim() || null;
+          const map_sheet_no = row['Số Tờ Bản Đồ']?.toString().trim() || null;
+          const registry_no = row['Số vào sổ cấp']?.toString().trim() || null;
+          const usage_purpose = row['Mục Đích Sử Dụng']?.toString().trim() || null;
+          
+          // Ngân hàng thế chấp / Đơn vị vay: cột đơn, nhiều giá trị nối sẵn bằng ";" trong file Excel
+          const mortgage_bank = row['Ngân Hàng Thế Chấp']?.toString().trim() || null;
+          const mortgage_unit = row['Đơn vị vay']?.toString().trim() || null;
 
           // Find project ID
           let project_id = null;
@@ -116,14 +130,25 @@ export const Import: React.FC = () => {
             }
           }
 
+          const isMortgaged = (row['Trạng Thái Thế Chấp']?.toString().toLowerCase().includes('thế chấp') && !row['Trạng Thái Thế Chấp']?.toString().toLowerCase().includes('không')) || Boolean(mortgage_bank);
+
           return {
             _originalRow: index + 2, // Excel rows are 1-indexed, and header is 1
             certificate_no,
             project_id,
             projectName, // Keep for display
-            subdivision,
+            legal_lot_code,
+            business_plot_code,
+            business_project_name,
+            asset_type: asset_type || 'Đất nền',
+            certificate_group,
+            land_lot_no,
+            map_sheet_no,
+            registry_no,
+            usage_purpose,
+            mortgage_bank,
+            mortgage_unit,
             area,
-            owner_name,
             current_owner_entity_id,
             current_owner_role,
             companyCode, // Keep for display
@@ -131,7 +156,7 @@ export const Import: React.FC = () => {
             custody_status: 'in_stock',
             lifecycle_status: 'active',
             sale_status: 'not_ready',
-            mortgage_status: 'none',
+            mortgage_status: isMortgaged ? 'mortgaged' : 'none',
             hasError,
             errorMessage,
             isDuplicate: false,
@@ -215,11 +240,40 @@ export const Import: React.FC = () => {
   const invalidCount = parsedData.filter(d => d.hasError).length;
   const duplicateCount = parsedData.filter(d => !d.hasError && d.isDuplicate).length;
 
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Số GCN QSDĐ', 'Dự Án (Pháp lý)', 'Tên Dự Án Kinh Doanh', 'Loại Tài Sản', 'Nhóm Sổ',
+      'Mã lô đất (Mã Lô Pháp Lý)', 'Mã Lô Kinh Doanh', 'Diện Tích (m²)',
+      'Mã công ty sở hữu', 'Phân loại',
+      'Số Thửa Bản Đồ', 'Số Tờ Bản Đồ', 'Số vào sổ cấp', 'Mục Đích Sử Dụng',
+      'Trạng Thái Thế Chấp', 'Ngân Hàng Thế Chấp', 'Đơn vị vay',
+    ];
+    const sample = [
+      'GCN-VMT-2026-00001', 'KDT Cồn Dầu', 'Cồn Dầu Residences', 'Đất nền', 'Sổ nhỏ',
+      'Phân khu A-Lô 12', 'LK02-15', 450.5,
+      'VMT', 'CĐT',
+      '112', '04', 'CT-2026-001', 'Đất ở tại đô thị (ODT)',
+      'Chưa thế chấp', '', '',
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+    ws['!cols'] = headers.map(() => ({ wch: 22 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mau_Import_GCN');
+    XLSX.writeFile(wb, 'Mau_Import_GCN_VMT.xlsx');
+  };
+
   return (
     <div className="space-y-6">
       <Toaster position="top-right" />
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Import dữ liệu GCN (Excel)</h1>
+        <button
+          type="button"
+          onClick={handleDownloadTemplate}
+          className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-[#1E3A8A] bg-white hover:bg-gray-50"
+        >
+          <FileText className="w-4 h-4 mr-2" /> Tải file Excel mẫu
+        </button>
       </div>
       
       {!file && (
@@ -250,13 +304,13 @@ export const Import: React.FC = () => {
             </label>
           </div>
           <div className="mt-8 text-xs text-gray-500 text-left bg-gray-50 p-4 rounded-md inline-block">
-            <p className="font-semibold mb-2">Định dạng file yêu cầu (có hàng tiêu đề):</p>
+            <p className="font-semibold mb-2">Định dạng file yêu cầu (có hàng tiêu đề) — bấm "Tải file Excel mẫu" ở trên để có sẵn đúng cột:</p>
             <ul className="list-disc list-inside">
-              <li><strong>Số GCN</strong> (Bắt buộc)</li>
-              <li><strong>Tên dự án</strong> (Nếu có, phải khớp đúng tên dự án trên hệ thống)</li>
-              <li><strong>Phân khu</strong></li>
-              <li><strong>Diện tích</strong> (Số)</li>
-              <li><strong>Chủ sở hữu</strong></li>
+              <li><strong>Số GCN QSDĐ</strong> (Bắt buộc)</li>
+              <li><strong>Dự Án (Pháp lý)</strong> (Nếu có, phải khớp đúng tên dự án trên hệ thống)</li>
+              <li><strong>Mã lô đất (Mã Lô Pháp Lý)</strong></li>
+              <li><strong>Diện Tích (m²)</strong> (Số)</li>
+              <li><strong>Mã công ty sở hữu</strong> (mã pháp nhân đã khai báo trong hệ thống) + <strong>Phân loại</strong> (CĐT/NĐT)</li>
             </ul>
           </div>
         </div>
@@ -298,9 +352,9 @@ export const Import: React.FC = () => {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số GCN</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dự án</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phân khu</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã Lô Pháp Lý</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Diện tích</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chủ sở hữu</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pháp nhân (mã CT)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -326,9 +380,9 @@ export const Import: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{row.certificate_no || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.projectName || '-'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.subdivision || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.legal_lot_code || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.area || '-'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.owner_name || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.companyCode || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

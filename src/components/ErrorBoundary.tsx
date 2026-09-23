@@ -22,6 +22,22 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Lỗi giao diện bị bắt bởi ErrorBoundary:', error, errorInfo);
+
+    const errorMsg = error?.message || '';
+    const isMismatchOrChunkError =
+      errorMsg.includes('Invalid hook call') ||
+      errorMsg.includes("reading 'useState'") ||
+      errorMsg.includes('Failed to fetch dynamically imported module') ||
+      errorMsg.includes('dynamically imported module') ||
+      error?.name === 'ChunkLoadError';
+
+    if (isMismatchOrChunkError && typeof window !== 'undefined') {
+      const reloadKey = `err_mismatch_${window.location.pathname}`;
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, 'true');
+        window.location.reload();
+      }
+    }
   }
 
   private handleReload = () => {
@@ -35,6 +51,8 @@ export class ErrorBoundary extends Component<Props, State> {
       const isChunkError =
         errorMsg.includes('Failed to fetch dynamically imported module') ||
         errorMsg.includes('dynamically imported module') ||
+        errorMsg.includes('Invalid hook call') ||
+        errorMsg.includes("reading 'useState'") ||
         this.state.error?.name === 'ChunkLoadError';
 
       return (

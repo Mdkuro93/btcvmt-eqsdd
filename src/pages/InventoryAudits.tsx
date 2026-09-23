@@ -324,8 +324,8 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
         const a = item.asset;
         const cert = (a?.certificate_no || '').toLowerCase();
         const code = (a?.asset_code || '').toLowerCase();
-        const plot = (a?.subdivision || '' + ' ' + (a?.lot_no || '')).toLowerCase();
-        const owner = (a?.owner_name || '').toLowerCase();
+        const plot = (a?.legal_lot_code || '').toLowerCase();
+        const owner = (a?.current_owner_entity?.name || '').toLowerCase();
         const prj = (a?.business_project_name || a?.projects?.name || '').toLowerCase();
         const loc = (item.expected_location || '').toLowerCase();
 
@@ -367,7 +367,7 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
   // =========================================================================
   if (selectedAuditId && activeAudit) {
     const warehouseName = activeAudit.warehouses?.name || activeAudit.warehouse?.name || 'Kho kiểm kê';
-    const performerName = activeAudit.performer?.full_name || activeAudit.profiles?.full_name || 'Thủ kho';
+    const performerName = activeAudit.performer?.full_name || activeAudit.profiles?.full_name || 'Quản lý kho';
     const isCompleted = activeAudit.status === 'completed';
     const canEditThisAudit = canPerformAudit && isWarehouseAssigned(activeAudit.warehouse_id) && !isCompleted;
 
@@ -697,19 +697,19 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
                           </div>
                         </td>
 
-                        {/* Dự án / Phân khu / Lô */}
+                        {/* Dự án / Mã Lô Pháp Lý */}
                         <td className="py-3.5 px-4">
                           <div className="font-semibold text-gray-800">
                             {a?.business_project_name || a?.projects?.name || '-'}
                           </div>
                           <div className="text-[11px] text-gray-500 mt-0.5">
-                            {a?.subdivision ? `${a.subdivision} - Lô ${a.lot_no || a.land_lot_no || ''}` : '-'}
+                            {a?.legal_lot_code || '-'}
                           </div>
                         </td>
 
                         {/* Chủ sở hữu / Diện tích */}
                         <td className="py-3.5 px-4">
-                          <div className="text-gray-900 font-medium">{a?.owner_name || '-'}</div>
+                          <div className="text-gray-900 font-medium">{a?.current_owner_entity?.name || '-'}</div>
                           <div className="text-[11px] text-gray-500">
                             {a?.area ? `${a.area.toLocaleString()} m²` : '-'}
                           </div>
@@ -890,7 +890,7 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
                         <td className="py-2.5 px-3 text-amber-950 font-medium">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-bold text-amber-950">{a?.certificate_no || 'Chưa rõ'}</td>
                         <td className="py-2.5 px-3 text-amber-900">
-                          {a?.subdivision ? `${a.subdivision} - Lô ${a.lot_no || ''}` : '-'} ({a?.business_project_name || a?.projects?.name || '-'})
+                          {a?.legal_lot_code || '-'} ({a?.business_project_name || a?.projects?.name || '-'})
                         </td>
                         <td className="py-2.5 px-3">
                           {isMissing ? (
@@ -1080,7 +1080,7 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
                   <div className="space-y-1 text-[11px] text-gray-500 pt-1 border-t border-gray-100">
                     <div className="flex items-center justify-between">
                       <span>Người kiểm:</span>
-                      <strong className="text-gray-700">{perf?.full_name || 'Thủ kho'}</strong>
+                      <strong className="text-gray-700">{perf?.full_name || 'Quản lý kho'}</strong>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Thời gian bắt đầu:</span>

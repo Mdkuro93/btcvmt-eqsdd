@@ -136,9 +136,21 @@ export const Lookup: React.FC = () => {
             <div className="text-[11px] text-gray-500">
               Trạng thái:{' '}
               <span className={`font-semibold ${
-                profile?.status === 'approved' ? 'text-emerald-700' : profile?.status === 'pending' ? 'text-amber-700' : 'text-red-700'
+                profile?.status === 'active' || profile?.status === 'approved'
+                  ? 'text-emerald-700'
+                  : profile?.status === 'pending'
+                  ? 'text-amber-700'
+                  : profile?.status === 'rejected'
+                  ? 'text-red-700'
+                  : 'text-gray-500'
               }`}>
-                {profile?.status === 'approved' ? 'Đã duyệt (approved)' : profile?.status === 'pending' ? 'Chờ duyệt (pending)' : 'Bị từ chối (rejected)'}
+                {profile?.status === 'active' || profile?.status === 'approved'
+                  ? 'Đang hoạt động'
+                  : profile?.status === 'pending'
+                  ? 'Chờ duyệt'
+                  : profile?.status === 'rejected'
+                  ? 'Bị từ chối'
+                  : 'Tạm khóa'}
               </span>
             </div>
           </div>
@@ -298,7 +310,7 @@ export const Lookup: React.FC = () => {
                 <div key={i} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50">
                   <div>
                     <div className="font-semibold text-gray-900">{r.certificate_no}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{r.project_name} {r.subdivision ? `· ${r.subdivision}` : ''}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{r.project_name} {r.legal_lot_code ? `· ${r.legal_lot_code}` : ''}</div>
                   </div>
                   <div className="flex flex-wrap gap-2 justify-start sm:justify-end">
                     <StatusBadges
@@ -331,3 +343,4 @@ export const Lookup: React.FC = () => {
   );
 };
 
+export default Lookup;

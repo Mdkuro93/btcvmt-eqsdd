@@ -50,6 +50,19 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+      dedupe: ['react', 'react-dom'],
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-router-dom',
+        'lucide-react',
+        'date-fns',
+        'clsx',
+        'tailwind-merge',
+        'react-hot-toast',
+      ],
     },
     server: {
       host: '0.0.0.0',

@@ -130,6 +130,8 @@ export const ActivityLogs: React.FC = () => {
             <option value="Xuất bán">Xuất bán</option>
             <option value="Tách sổ">Tách sổ</option>
             <option value="Cấp đổi GCN">Cấp đổi GCN</option>
+            <option value="Nhập khác">Nhập khác</option>
+            <option value="Xuất khác">Xuất khác</option>
           </select>
         </div>
 
@@ -186,6 +188,7 @@ export const ActivityLogs: React.FC = () => {
                     <td className="px-3 py-2.5 text-gray-700 font-medium">{l.log_date ? format(new Date(l.log_date), 'dd/MM/yyyy') : ''}</td>
                     <td className="px-3 py-2.5 font-bold text-gray-900">
                       <span className={`px-2 py-0.5 rounded text-[11px] ${
+                        (l.action_type === 'Nhập khác' || l.action_type === 'Xuất khác') ? 'bg-amber-50 text-amber-800 border border-amber-300 font-bold' :
                         l.action_type.includes('Nhập') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
                         l.action_type.includes('Xuất') ? 'bg-blue-50 text-blue-800 border border-blue-200' :
                         l.action_type.includes('Thế chấp') ? 'bg-purple-50 text-purple-800 border border-purple-200' :
@@ -240,21 +243,20 @@ export const ActivityLogs: React.FC = () => {
               certificate_no: selectedVoucherLog.description?.includes('GCN') 
                 ? (selectedVoucherLog.description.match(/GCN-[A-Za-z0-9-]+/)?.[0] || selectedVoucherLog.description)
                 : 'GCN QSDĐ',
-              subdivision: '',
-              lot_no: '',
-              owner_name: 'Công ty Cổ phần Tập đoàn VMT',
+              legal_lot_code: '',
               area: 0,
             },
             details: {
               reason: selectedVoucherLog.description,
               department: selectedVoucherLog.used_by || 'Ban Tài chính (BTC VMT)',
               receiverName: selectedVoucherLog.used_by || 'Người nhận bàn giao',
+              owner_name: 'Công ty Cổ phần Tập đoàn VMT',
             },
           }}
           transaction={{
             created_at: selectedVoucherLog.log_date,
             created_by: {
-              full_name: selectedVoucherLog.performer?.full_name || profile?.full_name || 'Thủ kho phụ trách',
+              full_name: selectedVoucherLog.performer?.full_name || profile?.full_name || 'Quản lý kho phụ trách',
               email: selectedVoucherLog.performer?.email || profile?.email || '',
             },
           }}

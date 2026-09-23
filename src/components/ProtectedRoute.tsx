@@ -38,7 +38,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
             {profile.status === 'rejected' ? 'Tài khoản đã bị từ chối' : 'Tài khoản đang bị tạm khóa'}
           </h2>
           <p className="text-sm text-gray-600 mb-6">
-            Tài khoản của bạn ({profile.email}) hiện có trạng thái <strong>{profile.status}</strong>. Vui lòng liên hệ Ban Quản Trị hoặc Thủ kho phụ trách để được hỗ trợ.
+            Tài khoản của bạn ({profile.email}) hiện có trạng thái <strong>{profile.status}</strong>. Vui lòng liên hệ Ban Quản Trị hoặc Quản lý kho phụ trách để được hỗ trợ.
           </p>
           <a
             href="/login"

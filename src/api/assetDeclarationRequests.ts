@@ -8,7 +8,7 @@ export async function fetchDeclarationRequests(filters?: any): Promise<any[]> {
 
   let query = supabase.from('asset_declaration_requests').select(`
     *,
-    projects(name),
+    projects(name, areas(name)),
     warehouses(name),
     requester:profiles!requester_id(full_name, email),
     reviewer:profiles!reviewed_by(full_name, email)
@@ -52,6 +52,22 @@ export async function approveDeclarationRequest(requestId: string, assetCodePref
   );
 
   if (error) throw new Error('Lỗi approveDeclarationRequest: ' + error.message);
+}
+
+export async function bulkApproveDeclarationRequests(
+  items: { request_id: string; asset_code_prefix: string | null }[]
+): Promise<{ request_id: string; asset_id: string | null; error_message: string | null }[]> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Tính năng này yêu cầu kết nối Supabase.');
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('approve_asset_declaration_requests_bulk', { p_items: items }),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) throw new Error('Lỗi bulkApproveDeclarationRequests: ' + error.message);
+  return data || [];
 }
 
 export async function rejectDeclarationRequest(requestId: string, reason: string): Promise<void> {

@@ -11,16 +11,18 @@ interface Props {
   custody_status: CustodyStatus;
   lifecycle_status: LifecycleStatus;
   sale_status: SaleStatus;
-  mortgage_status: MortgageStatus;
+  mortgage_status?: MortgageStatus;
   className?: string;
+  showMortgage?: boolean;
 }
 
 export const StatusBadges: React.FC<Props> = ({ 
   custody_status, 
   lifecycle_status, 
   sale_status, 
-  mortgage_status,
-  className 
+  mortgage_status = 'none',
+  className,
+  showMortgage = true
 }) => {
   const getCustodyProps = (status: CustodyStatus) => {
     switch (status) {
@@ -61,7 +63,7 @@ export const StatusBadges: React.FC<Props> = ({
     <span 
       title={title}
       className={cn(
-        'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border',
+        'inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-medium border whitespace-nowrap',
         props.color
       )}
     >
@@ -70,11 +72,11 @@ export const StatusBadges: React.FC<Props> = ({
   );
 
   return (
-    <div className={cn("flex flex-wrap gap-1.5", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1", className)}>
       {renderBadge(getCustodyProps(custody_status), "Lưu kho")}
       {renderBadge(getLifecycleProps(lifecycle_status), "Vòng đời")}
       {renderBadge(getSaleProps(sale_status), "Kinh doanh")}
-      {renderBadge(getMortgageProps(mortgage_status), "Thế chấp")}
+      {showMortgage && renderBadge(getMortgageProps(mortgage_status), "Thế chấp")}
     </div>
   );
 };

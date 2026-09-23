@@ -109,11 +109,11 @@ export const AuditItemDetailModal: React.FC<Props> = ({
               </div>
               <div>
                 <span className="text-gray-500">Phân khu / Thửa:</span>
-                <p className="font-medium text-gray-700">{asset?.subdivision ? `${asset.subdivision} - Lô ${asset.lot_no || asset.land_lot_no || ''}` : '-'}</p>
+                <p className="font-medium text-gray-700">{asset?.legal_lot_code || '-'}</p>
               </div>
               <div>
                 <span className="text-gray-500">Chủ sở hữu:</span>
-                <p className="font-medium text-gray-700">{asset?.owner_name || '-'}</p>
+                <p className="font-medium text-gray-700">{asset?.current_owner_entity?.name || '-'}</p>
               </div>
             </div>
 

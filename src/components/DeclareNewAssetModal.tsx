@@ -36,26 +36,22 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const [registryNo, setRegistryNo] = useState('');
   const [registryDate, setRegistryDate] = useState('');
   const [projectId, setProjectId] = useState('');
-  const [subdivision, setSubdivision] = useState('');
-  const [lotNo, setLotNo] = useState('');
+  const [legalLotCode, setLegalLotCode] = useState('');
   const [landLotNo, setLandLotNo] = useState('');
   const [mapSheetNo, setMapSheetNo] = useState('');
-  const [area, setArea] = useState('');
-  const [ownerName, setOwnerName] = useState('');
+  const [businessProjectName, setBusinessProjectName] = useState('');
+  const [businessPlotCode, setBusinessPlotCode] = useState('');
+    const [area, setArea] = useState('');
   const [currentOwnerEntityId, setCurrentOwnerEntityId] = useState('');
-  const [province, setProvince] = useState('');
-  const [district, setDistrict] = useState('');
-  const [ward, setWard] = useState('');
-  const [addressDetail, setAddressDetail] = useState('');
-  const [usagePurpose, setUsagePurpose] = useState('');
+  const [certificateGroup, setCertificateGroup] = useState<'so_lon' | 'so_nho'>('so_nho');
+    const [usagePurpose, setUsagePurpose] = useState('');
   const [usageTermType, setUsageTermType] = useState('');
   const [usageTermDate, setUsageTermDate] = useState('');
   const [assetType, setAssetType] = useState('Đất nền');
   const [collateralType, setCollateralType] = useState('BDS');
-  const [businessProjectName, setBusinessProjectName] = useState('');
-  const [businessPlotCode, setBusinessPlotCode] = useState('');
-  const [warehouseId, setWarehouseId] = useState('');
+    const [warehouseId, setWarehouseId] = useState('');
   const [notes, setNotes] = useState('');
+  const [keepOpen, setKeepOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -115,25 +111,20 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
         registry_no: registryNo.trim() || null,
         registry_date: registryDate || null,
         project_id: projectId || null,
-        subdivision: subdivision.trim() || null,
-        lot_no: lotNo.trim() || null,
+        legal_lot_code: legalLotCode.trim() || null,
         land_lot_no: landLotNo.trim() || null,
         map_sheet_no: mapSheetNo.trim() || null,
-        area: area ? Number(area) : null,
-        owner_name: ownerName.trim() || null,
+        business_project_name: businessProjectName.trim() || null,
+        business_plot_code: businessPlotCode.trim() || null,
+                area: area ? Number(area) : null,
         current_owner_entity_id: currentOwnerEntityId || null,
-        province: province.trim() || null,
-        district: district.trim() || null,
-        ward: ward.trim() || null,
-        address_detail: addressDetail.trim() || null,
-        usage_purpose: usagePurpose.trim() || null,
+        certificate_group: certificateGroup,
+                usage_purpose: usagePurpose.trim() || null,
         usage_term_type: usageTermType.trim() || null,
         usage_term_date: usageTermDate || null,
         asset_type: assetType.trim() || null,
         collateral_type: collateralType || 'BDS',
-        business_project_name: businessProjectName.trim() || null,
-        business_plot_code: businessPlotCode.trim() || null,
-        old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
+                old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
         warehouse_id: warehouseId || null,
         requester_id: profile?.id,
         notes: notes.trim() || null,
@@ -141,7 +132,22 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
       });
       toast.success('Gửi yêu cầu khai báo GCN thành công!');
       onSuccess();
-      onClose();
+      if (!keepOpen) {
+        onClose();
+      } else {
+        // Reset some fields but keep project, warehouse, owner
+        setCertificateNo('');
+        setRegistryNo('');
+        setLegalLotCode('');
+        setLandLotNo('');
+        setMapSheetNo('');
+        setBusinessProjectName('');
+        setBusinessPlotCode('');
+        setArea('');
+        setOldAssetId('');
+        setSearchOldAsset('');
+        setNotes('');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Lỗi gửi yêu cầu');
     } finally {
@@ -344,14 +350,18 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Phân khu</label>
-                <input type="text" value={subdivision} onChange={e => setSubdivision(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Số tờ bản đồ</label>
+                <input type="text" value={mapSheetNo} onChange={e => setMapSheetNo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Số lô / Thửa</label>
-                <input type="text" value={lotNo} onChange={e => setLotNo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Thửa đất số</label>
+                <input type="text" value={landLotNo} onChange={e => setLandLotNo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Lô Pháp Lý</label>
+                <input type="text" value={legalLotCode} onChange={e => setLegalLotCode(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Phân khu A-Lô 12..." />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Diện tích (m²)</label>
@@ -361,16 +371,19 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Tỉnh / Thành phố</label>
-                <input type="text" value={province} onChange={e => setProvince(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Ví dụ: Đà Nẵng, QNM" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Nhóm Sổ</label>
+                <select value={certificateGroup} onChange={e => setCertificateGroup(e.target.value as 'so_lon' | 'so_nho')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                  <option value="so_nho">Sổ nhỏ</option>
+                  <option value="so_lon">Sổ lớn</option>
+                </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Quận / Huyện</label>
-                <input type="text" value={district} onChange={e => setDistrict(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Tên Dự Án Kinh Doanh</label>
+                <input type="text" value={businessProjectName} onChange={e => setBusinessProjectName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Xã / Phường</label>
-                <input type="text" value={ward} onChange={e => setWard(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Lô Kinh Doanh</label>
+                <input type="text" value={businessPlotCode} onChange={e => setBusinessPlotCode(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
             </div>
 
@@ -387,18 +400,30 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
           </form>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3 rounded-b-xl">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-            Hủy
-          </button>
-          <button
-            type="submit"
-            form="declare-form"
-            disabled={loading}
-            className="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Đang gửi...' : 'Gửi yêu cầu'}
-          </button>
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between rounded-b-xl">
+          <div className="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              id="keepOpen" 
+              checked={keepOpen} 
+              onChange={e => setKeepOpen(e.target.checked)} 
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" 
+            />
+            <label htmlFor="keepOpen" className="text-sm text-gray-600 cursor-pointer">Tiếp tục tạo thêm GCN khác</label>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              Hủy
+            </button>
+            <button
+              type="submit"
+              form="declare-form"
+              disabled={loading}
+              className="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Đang gửi...' : 'Gửi yêu cầu'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

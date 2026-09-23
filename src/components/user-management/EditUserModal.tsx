@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Profile, Role, Warehouse, InvestorEntity } from '../../types';
 import { Edit2, Building, Calendar, X, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { InvestorEntityPicker, OrganizationEntityInput } from './InvestorEntityPicker';
 
 interface EditUserModalProps {
   user: Profile;
@@ -25,6 +26,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const [editStatus, setEditStatus] = useState<string>(user.status || 'pending');
   const [editPhone, setEditPhone] = useState(user.phone || '');
   const [editOrganization, setEditOrganization] = useState(user.organization || '');
+  const [editPurpose, setEditPurpose] = useState(user.purpose || '');
   const [editExpiresAt, setEditExpiresAt] = useState(
     user.access_expires_at ? new Date(user.access_expires_at).toISOString().slice(0, 16) : ''
   );
@@ -51,6 +53,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       status: editStatus as any,
       phone: editPhone.trim() || undefined,
       organization: editOrganization.trim() || undefined,
+      purpose: editPurpose.trim() || undefined,
       access_expires_at: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
       managed_warehouse_ids: editRole === 'warehouse_manager' ? editManagedWarehouseIds : null,
       assigned_warehouse_ids: ['capital_dept', 'project_dept', 're_dept', 'supervisor'].includes(editRole)
@@ -121,10 +124,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               >
                 <option value="user">Tra cứu tạm thời (user)</option>
                 <option value="viewer">Khách tra cứu (viewer)</option>
-                <option value="warehouse_manager">Thủ kho (warehouse_manager)</option>
+                <option value="warehouse_manager">Quản lý kho (warehouse_manager)</option>
                 <option value="btc_manager">Ban Tài Chính (btc_manager)</option>
                 <option value="capital_dept">Phòng Nguồn Vốn (capital_dept)</option>
-                <option value="project_dept">Ban PTDA/BĐN (project_dept)</option>
+                <option value="project_dept">Ban PTDA & Ban Đối Ngoại (project_dept)</option>
                 <option value="re_dept">Khối SPG (re_dept)</option>
                 <option value="supervisor">Quản lý (Xem báo cáo/Truy vấn) (supervisor)</option>
                 <option value="investor">Chủ đầu tư/Nhà đầu tư (investor)</option>
@@ -154,27 +157,55 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Số điện thoại liên hệ
+                Cơ quan / Đơn vị công tác
+              </label>
+              {editRole === 'investor' ? (
+                <OrganizationEntityInput
+                  value={editOrganization}
+                  onChange={setEditOrganization}
+                  entities={investorEntities}
+                  selectedIds={editOwnerEntityIds}
+                  onPickEntity={ent => {
+                    setEditOrganization(ent.name);
+                    setEditOwnerEntityIds(prev => (prev.includes(ent.id) ? prev : [...prev, ent.id]));
+                  }}
+                />
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Ví dụ: Ngân hàng Vietcombank..."
+                  value={editOrganization}
+                  onChange={e => setEditOrganization(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
+                />
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Số điện thoại <span className="text-gray-400 font-normal">(Không bắt buộc)</span>
               </label>
               <input
                 type="tel"
+                placeholder="Không bắt buộc"
                 value={editPhone}
                 onChange={e => setEditPhone(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Cơ quan / Đơn vị công tác
-              </label>
-              <input
-                type="text"
-                value={editOrganization}
-                onChange={e => setEditOrganization(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Mục đích sử dụng / Tra cứu hồ sơ
+            </label>
+            <input
+              type="text"
+              placeholder="VD: Thẩm định hồ sơ pháp lý, phê duyệt tín dụng..."
+              value={editPurpose}
+              onChange={e => setEditPurpose(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A]"
+            />
           </div>
 
           {/* Expiry date setting */}
@@ -300,68 +331,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             </div>
           )}
 
-          {/* Edit Multi-select "Pháp nhân đại diện" for investor */}
+          {/* Edit Multi-select "Pháp nhân đại diện" for investor (có tìm kiếm / chọn nhanh) */}
           {editRole === 'investor' && (
-            <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-rose-950 flex items-center gap-1.5">
-                  <Building className="w-3.5 h-3.5 text-rose-700" />
-                  Pháp nhân đại diện: <span className="font-normal text-rose-700">({editOwnerEntityIds.length} pháp nhân)</span>
-                </label>
-                <div className="flex items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setEditOwnerEntityIds(investorEntities.map(e => e.id))}
-                    className="text-rose-700 hover:text-rose-900 font-medium hover:underline cursor-pointer"
-                  >
-                    Chọn tất cả
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setEditOwnerEntityIds([])}
-                    className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
-                  >
-                    Bỏ chọn
-                  </button>
-                </div>
-              </div>
-              <div className="text-[11px] text-rose-800">
-                Chỉ định các pháp nhân CĐT/NĐT mà tài khoản đại diện sở hữu để phân quyền truy cập và gửi đề xuất mượn/trả GCN.
-              </div>
-              {investorEntities.length === 0 ? (
-                <div className="p-3 bg-white rounded-lg border border-rose-200 text-xs text-rose-600 text-center">
-                  Chưa có dữ liệu danh mục pháp nhân CĐT/NĐT. Vui lòng vào mục Quản trị &gt; Pháp nhân CĐT/NĐT để thêm mới.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
-                  {investorEntities.map(ent => {
-                    const isChecked = editOwnerEntityIds.includes(ent.id);
-                    return (
-                      <label key={ent.id} className={`flex items-center gap-2 text-xs p-2.5 rounded-lg border cursor-pointer transition ${
-                        isChecked ? 'bg-rose-100/70 border-rose-300 text-rose-950 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setEditOwnerEntityIds(prev => [...prev, ent.id]);
-                            } else {
-                              setEditOwnerEntityIds(prev => prev.filter(id => id !== ent.id));
-                            }
-                          }}
-                          className="rounded text-rose-600"
-                        />
-                        <span className="flex-1 truncate">
-                          {ent.name} {ent.company_code ? `(${ent.company_code})` : ''}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <InvestorEntityPicker
+              entities={investorEntities}
+              selectedIds={editOwnerEntityIds}
+              onChange={setEditOwnerEntityIds}
+            />
           )}
 
           <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">

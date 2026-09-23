@@ -38,9 +38,9 @@ export const Admin: React.FC = () => {
   // Key to force refresh sub-components after standard data reset
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Dành cho Admin, Quản lý kho (warehouse_manager) và Ban Tài chính
-  if (profile && profile.role !== 'admin' && profile.role !== 'super_admin' && profile.role !== 'warehouse_manager' && profile.role !== 'btc_manager') {
-    return <Navigate to="/lookup" replace />;
+  // Chỉ dành cho Quản trị viên (Admin / Super Admin)
+  if (profile && profile.role !== 'admin' && profile.role !== 'super_admin') {
+    return <Navigate to="/" replace />;
   }
 
   // Reset standard corporate dataset

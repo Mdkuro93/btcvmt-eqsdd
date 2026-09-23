@@ -17,29 +17,41 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   name?: string
 ) {
   return lazy(async () => {
-    try {
-      const module = await componentImport();
-      if (name && module[name]) {
-        return { default: module[name] };
-      }
-      return module.default ? module : { default: module };
-    } catch (error: any) {
-      console.warn('Lỗi tải module động (chunk load error), đang tự động thử lại...', error);
-      const isFetchError =
-        error?.message?.includes('Failed to fetch dynamically imported module') ||
-        error?.name === 'ChunkLoadError' ||
-        error?.message?.includes('dynamically imported module');
+    const maxRetries = 3;
+    let lastError: any;
 
-      if (isFetchError) {
-        const retryKey = `chunk_retry_${window.location.pathname}`;
-        const hasRetried = sessionStorage.getItem(retryKey);
-        if (!hasRetried) {
-          sessionStorage.setItem(retryKey, 'true');
-          window.location.reload();
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const module = await componentImport();
+        if (name && module[name]) {
+          return { default: module[name] };
+        }
+        return module.default ? module : { default: module };
+      } catch (error: any) {
+        lastError = error;
+        console.warn(`Lỗi tải module động (lần ${attempt}/${maxRetries}):`, error);
+
+        if (attempt < maxRetries) {
+          // Chờ một chút trước khi thử lại để dev server hoặc kết nối mạng ổn định
+          await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
         }
       }
-      throw error;
     }
+
+    const isFetchError =
+      lastError?.message?.includes('Failed to fetch dynamically imported module') ||
+      lastError?.name === 'ChunkLoadError' ||
+      lastError?.message?.includes('dynamically imported module');
+
+    if (isFetchError && typeof window !== 'undefined') {
+      const retryKey = `chunk_retry_${window.location.pathname}`;
+      const hasRetried = sessionStorage.getItem(retryKey);
+      if (!hasRetried) {
+        sessionStorage.setItem(retryKey, 'true');
+        window.location.reload();
+      }
+    }
+    throw lastError;
   });
 }
 
@@ -88,17 +100,20 @@ export default function App() {
                   <Route path="/" element={<RootRoute />} />
 
                   {/* Internal Departments & Managers */}
-                  <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin']} />}>
+                  <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'admin', 'super_admin', 'investor', 'supervisor']} />}>
                     <Route path="/assets" element={<Assets />} />
                     <Route path="/requests" element={<Requests />} />
                   </Route>
                   
-                  {/* Public/External Viewer Lookup */}
-                  <Route path="/lookup" element={<Lookup />} />
+                  {/* Public/External Viewer & Internal Lookup */}
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'investor', 'supervisor', 'viewer', 'user']} />}>
+                    <Route path="/lookup" element={<Lookup />} />
+                  </Route>
 
-                  {/* User Management & Approval: Admin & Warehouse Manager */}
-                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'warehouse_manager', 'btc_manager']} />}>
+                  {/* User Management: Admin Only */}
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin']} />}>
                     <Route path="/user-management" element={<UserManagement />} />
+                    <Route path="/users" element={<Navigate to="/user-management" replace />} />
                   </Route>
 
                   {/* Access Approval, Activity Logs & Reports */}
@@ -109,10 +124,15 @@ export default function App() {
                     <Route path="/reports" element={<Reports />} />
                   </Route>
 
-                  {/* Admin & Data Operations */}
-                  <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'admin', 'super_admin']} />}>
-                    <Route path="/import" element={<Import />} />
+                  {/* Admin / Quản trị danh mục: Admin Only */}
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin']} />}>
                     <Route path="/admin" element={<Admin />} />
+                    <Route path="/categories" element={<Navigate to="/admin" replace />} />
+                  </Route>
+
+                  {/* Data Operations / Import: BTC Manager, Warehouse Manager & Admin */}
+                  <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'admin', 'super_admin']} />}>
+                    <Route path="/import" element={<Import />} />
                   </Route>
                 </Route>
               </Route>

@@ -15,6 +15,8 @@ import {
   Check,
   Calendar,
   Edit2,
+  KeyRound,
+  Trash2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ROLE_LABELS } from './constants';
@@ -31,6 +33,10 @@ interface UserTableProps {
   onExtendClick: (user: Profile) => void;
   onToggleStatus: (user: Profile) => void;
   onEditClick: (user: Profile) => void;
+  onResetPasswordClick?: (user: Profile) => void;
+  onDeleteClick?: (user: Profile) => void;
+  /** Trả về true nếu người đang đăng nhập được phép xóa tài khoản này (server vẫn kiểm tra lại) */
+  canDeleteUser?: (user: Profile) => boolean;
 }
 
 export const UserTable: React.FC<UserTableProps> = ({
@@ -43,6 +49,9 @@ export const UserTable: React.FC<UserTableProps> = ({
   onExtendClick,
   onToggleStatus,
   onEditClick,
+  onResetPasswordClick,
+  onDeleteClick,
+  canDeleteUser,
 }) => {
   return (
     <div className="overflow-x-auto">
@@ -277,6 +286,28 @@ export const UserTable: React.FC<UserTableProps> = ({
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
+
+                      {/* Reset password button */}
+                      {onResetPasswordClick && (
+                        <button
+                          onClick={() => onResetPasswordClick(u)}
+                          className="p-1.5 text-gray-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                          title="Đặt lại mật khẩu cho tài khoản"
+                        >
+                          <KeyRound className="w-4 h-4" />
+                        </button>
+                      )}
+
+                      {/* Delete button */}
+                      {onDeleteClick && (!canDeleteUser || canDeleteUser(u)) && (
+                        <button
+                          onClick={() => onDeleteClick(u)}
+                          className="p-1.5 text-gray-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="Xóa tài khoản"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

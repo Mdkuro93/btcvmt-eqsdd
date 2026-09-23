@@ -81,7 +81,7 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
 
     if (selectedAssetId && selectedAssetId !== item.asset_id) {
       isMajor = true;
-      diffs.push(`Thủ kho đã đổi GCN thực tế bàn giao sang: ${currentAsset?.certificate_no} (khác đề xuất ban đầu: ${originalAsset?.certificate_no}).`);
+      diffs.push(`Quản lý kho đã đổi GCN thực tế bàn giao sang: ${currentAsset?.certificate_no} (khác đề xuất ban đầu: ${originalAsset?.certificate_no}).`);
     }
 
     if (item.type === 'mortgage') {
@@ -117,8 +117,7 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
     return (
       (a.certificate_no || '').toLowerCase().includes(term) ||
       (a.projects?.name || '').toLowerCase().includes(term) ||
-      (a.subdivision || '').toLowerCase().includes(term) ||
-      (a.lot_no || '').toLowerCase().includes(term)
+      (a.legal_lot_code || '').toLowerCase().includes(term)
     );
   }).slice(0, 15);
 
@@ -193,7 +192,7 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
                   <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
-                    placeholder="Tìm theo số seri GCN, dự án, phân khu..."
+                    placeholder="Tìm theo số seri GCN, dự án, mã lô..."
                     value={assetSearch}
                     onChange={e => setAssetSearch(e.target.value)}
                     className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-md"
@@ -212,7 +211,7 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
                       >
                         <div>
                           <span>{a.certificate_no}</span>
-                          <span className="text-gray-400 ml-2">({a.projects?.name || 'VMT'} - {a.subdivision || 'Lô'} {a.lot_no || ''})</span>
+                          <span className="text-gray-400 ml-2">({a.projects?.name || 'VMT'} - {a.legal_lot_code || 'Lô'})</span>
                         </div>
                         {isSelected && <CheckCircle className="w-4 h-4 text-blue-600 shrink-0" />}
                       </div>
@@ -235,8 +234,8 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
                 <span className="text-gray-900 font-medium">{currentAsset?.projects?.name || '---'}</span>
               </div>
               <div>
-                <span className="text-gray-500">Phân khu / Lô:</span>{' '}
-                <span className="text-gray-900">{currentAsset?.subdivision || '-'} / {currentAsset?.lot_no || '-'}</span>
+                <span className="text-gray-500">Mã Lô Pháp Lý:</span>{' '}
+                <span className="text-gray-900">{currentAsset?.legal_lot_code || '-'}</span>
               </div>
               <div>
                 <span className="text-gray-500">Kho hiện tại:</span>{' '}
