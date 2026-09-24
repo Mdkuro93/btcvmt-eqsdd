@@ -10,6 +10,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { MainLayout } from './layouts/MainLayout';
 import { LoadingFallback } from './components/LoadingFallback';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 
 // Helper tải component động có cơ chế tự phục hồi khi gặp lỗi chunk/mạng
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -58,7 +60,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 // Lazy-loaded Pages (Code Splitting có retry bảo vệ)
 const Login = lazyWithRetry(() => import('./pages/Login'), 'Login');
 const Register = lazyWithRetry(() => import('./pages/Register'), 'Register');
-const RegisterAccess = lazyWithRetry(() => import('./pages/RegisterAccess'), 'RegisterAccess');
+const MyAccess = lazyWithRetry(() => import('./pages/MyAccess'), 'MyAccess');
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'), 'Dashboard');
 const Assets = lazyWithRetry(() => import('./pages/Assets'), 'Assets');
 const Requests = lazyWithRetry(() => import('./pages/Requests'), 'Requests');
@@ -83,15 +85,16 @@ function RootRoute() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <ErrorBoundary>
-          <Suspense fallback={<LoadingFallback message="Đang tải giao diện..." className="min-h-[70vh] border-0 shadow-none bg-transparent" />}>
-            <Routes>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback message="Đang tải giao diện..." className="min-h-[70vh] border-0 shadow-none bg-transparent" />}>
+              <Routes>
               {/* Public Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
-              <Route path="/dang-ky-truy-cap" element={<RegisterAccess />} />
+              <Route path="/dang-ky-truy-cap" element={<Navigate to="/register" replace />} />
               
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
@@ -108,6 +111,11 @@ export default function App() {
                   {/* Public/External Viewer & Internal Lookup */}
                   <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'investor', 'supervisor', 'viewer', 'user']} />}>
                     <Route path="/lookup" element={<Lookup />} />
+                  </Route>
+
+                  {/* Quyền truy cập của tôi: tài khoản tra cứu (kể cả đang chờ duyệt) */}
+                  <Route element={<ProtectedRoute allowedRoles={['viewer', 'user']} />}>
+                    <Route path="/my-access" element={<MyAccess />} />
                   </Route>
 
                   {/* User Management: Admin Only */}
@@ -143,5 +151,6 @@ export default function App() {
         </ErrorBoundary>
       </BrowserRouter>
     </AuthProvider>
-  );
+  </QueryClientProvider>
+);
 }

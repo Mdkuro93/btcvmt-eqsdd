@@ -73,6 +73,10 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     const mortgage = filters.mortgageStatus || filters.mortgage_status;
     if (mortgage) query = query.eq('mortgage_status', mortgage);
     
+    if (filters.status) {
+      query = query.or(`status.eq.${filters.status},status.eq.${filters.status.toUpperCase()},status.eq.${filters.status.toLowerCase()}`);
+    }
+    
     if (filters.warehouseId) query = query.eq('warehouse_id', filters.warehouseId);
     if (filters.legal_lot_code) query = query.ilike('legal_lot_code', `%${filters.legal_lot_code.trim()}%`);
   }
@@ -819,7 +823,9 @@ export async function importExcelAndUpdateAssets(
           notes: notes ? String(notes).trim() : null,
           current_owner_entity_id: targetEntityId,
           current_owner_role: targetRole,
-          custody_status: 'in_stock',
+          // GCN đã thế chấp: bản gốc thường đang giữ tại ngân hàng, không nằm tại kho công ty
+          // -> đánh dấu Đã xuất kho ngay khi nhập liệu ban đầu, thay vì mặc định Trong kho.
+          custody_status: (mortgageBank || mortgageUnit) ? 'checked_out' : 'in_stock',
           lifecycle_status: 'active',
           sale_status: 'not_ready',
           mortgage_status: (mortgageBank || mortgageUnit) ? 'mortgaged' : 'none',

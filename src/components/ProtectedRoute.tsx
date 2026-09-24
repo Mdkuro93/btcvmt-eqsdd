@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, Role } from '../contexts/AuthContext';
 import { Loader2, ShieldAlert } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   const { user, profile, loading, effectiveRole } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -49,6 +50,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
         </div>
       </div>
     );
+  }
+
+  // Tài khoản tự đăng ký đang chờ duyệt: chỉ được vào trang "Quyền truy cập của tôi"
+  // để xem trạng thái yêu cầu và xin thêm kho. Không cho vào các trang khác.
+  if (profile.status === 'pending' && location.pathname !== '/my-access') {
+    return <Navigate to="/my-access" replace />;
   }
 
   // Kiểm tra phân quyền theo vai trò (Role-Based Access)

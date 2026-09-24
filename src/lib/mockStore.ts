@@ -1528,6 +1528,10 @@ export const mockStore = {
       if (filters.mortgageStatus) {
         assets = assets.filter(a => a.mortgage_status === filters.mortgageStatus);
       }
+      if (filters.status) {
+        const st = String(filters.status).toLowerCase();
+        assets = assets.filter(a => a.status?.toLowerCase() === st);
+      }
       if (filters.warehouseId) {
         assets = assets.filter(a => a.warehouse_id === filters.warehouseId);
       }

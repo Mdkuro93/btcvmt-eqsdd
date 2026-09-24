@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { ViewerWarehouseAccess } from '../types';
 
@@ -10,35 +10,25 @@ export async function fetchViewerWarehouseAccess(userId?: string): Promise<Viewe
     return mockStore.getViewerWarehouseAccess(userId) as ViewerWarehouseAccess[];
   }
 
-  try {
-    let query = supabase
-      .from('viewer_warehouse_access')
-      .select(`
-        *,
-        profiles:profiles!viewer_warehouse_access_user_id_fkey(id, full_name, email, role, status),
-        approver:profiles!viewer_warehouse_access_approved_by_fkey(id, full_name, email),
-        warehouses:warehouses(id, name, code, is_central)
-      `)
-      .order('approved_at', { ascending: false });
+  let query = supabase
+    .from('viewer_warehouse_access')
+    .select(`
+      *,
+      profiles:profiles!viewer_warehouse_access_user_id_fkey(id, full_name, email, role, status),
+      approver:profiles!viewer_warehouse_access_approved_by_fkey(id, full_name, email),
+      warehouses:warehouses(id, name, code, is_central)
+    `)
+    .order('approved_at', { ascending: false });
 
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-    if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng viewer_warehouse_access hoặc warehouses chưa có trong Supabase, dùng mockStore:', error.message);
-        return mockStore.getViewerWarehouseAccess(userId) as ViewerWarehouseAccess[];
-      }
-      console.warn('Lỗi khi tải danh sách quyền xem kho từ Supabase:', error);
-      return mockStore.getViewerWarehouseAccess(userId) as ViewerWarehouseAccess[];
-    }
-    return (data || []) as ViewerWarehouseAccess[];
-  } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchViewerWarehouseAccess, fallback mockStore:', err);
-    return mockStore.getViewerWarehouseAccess(userId) as ViewerWarehouseAccess[];
+  if (userId) {
+    query = query.eq('user_id', userId);
   }
+
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) {
+    throw new Error('Không tải được danh sách quyền xem kho: ' + error.message);
+  }
+  return (data || []) as ViewerWarehouseAccess[];
 }
 
 /**

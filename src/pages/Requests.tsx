@@ -581,6 +581,18 @@ export const Requests: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
+                      {(tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl) && (
+                        <a
+                          href={tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                          title="Mở file scan đính kèm trên OneDrive"
+                        >
+                          📄 Xem file đính kèm
+                        </a>
+                      )}
                       <span className="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded-full">{total} GCN</span>
                       {pending > 0 && <span className="text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-full">{pending} chờ duyệt</span>}
                       {approved > 0 && <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">{approved} đã duyệt</span>}
@@ -590,8 +602,21 @@ export const Requests: React.FC = () => {
 
                   {isOpen && (
                     <div className="bg-slate-50/70 border-t border-gray-100 px-6 py-4">
-                      <div className="mb-3 text-xs text-gray-600 bg-white p-2.5 rounded-lg border border-gray-200">
-                        <span className="font-semibold text-gray-800">Căn cứ / Ghi chú đề xuất:</span> {detailsSummary(tx.type, tx.details) || 'Không có ghi chú thêm'}
+                      <div className="mb-3 text-xs text-gray-600 bg-white p-3 rounded-lg border border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <span className="font-semibold text-gray-800">Căn cứ / Ghi chú đề xuất:</span> {detailsSummary(tx.type, tx.details) || 'Không có ghi chú thêm'}
+                        </div>
+                        {(tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl) && (
+                          <a
+                            href={tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-900 border border-blue-200 rounded-lg text-xs font-semibold transition-colors"
+                            title="Mở file scan đính kèm trên OneDrive trong tab mới"
+                          >
+                            📄 Xem file đính kèm
+                          </a>
+                        )}
                       </div>
 
                       <div className="overflow-x-auto">

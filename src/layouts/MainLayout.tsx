@@ -1,26 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
-  LayoutDashboard, 
-  Files, 
-  CheckSquare, 
-  BarChart3, 
-  Upload, 
   LogOut, 
   User, 
-  Settings, 
-  BookText, 
-  FileSearch, 
   Bell, 
   Check, 
   Store, 
   Clock, 
   ChevronRight,
-  ShieldCheck,
-  Landmark,
-  Users,
-  ClipboardCheck,
   KeyRound
 } from 'lucide-react';
 import { fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api/notifications';
@@ -30,10 +18,32 @@ import { Notification } from '../types';
 import { format } from 'date-fns';
 import { RoleSwitcher, RoleSimulationBanner } from '../components/RoleSwitcher';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
+import { Sidebar } from '../components/Sidebar';
 
 export const MainLayout: React.FC = () => {
   const { profile, signOut, user } = useAuth();
-  const location = useLocation();
+
+  // Sidebar collapsed state with localStorage persistence
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('sidebar_collapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('sidebar_collapsed', String(next));
+      } catch (err) {
+        console.warn('Cannot write to localStorage:', err);
+      }
+      return next;
+    });
+  };
 
   // Notifications state
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -114,139 +124,18 @@ export const MainLayout: React.FC = () => {
     }
   };
 
-  const navigation = [
-    { 
-      name: 'Tổng quan', 
-      href: '/', 
-      icon: LayoutDashboard, 
-      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor', 'admin', 'super_admin'] 
-    },
-    { 
-      name: 'Tra cứu tình trạng', 
-      href: '/lookup', 
-      icon: FileSearch, 
-      roles: ['admin', 'super_admin', 'warehouse_manager', 'btc_manager', 'capital_dept', 'project_dept', 're_dept', 'investor', 'supervisor', 'viewer', 'user'] 
-    },
-    { 
-      name: 'Quản lý người dùng', 
-      href: '/user-management', 
-      icon: Users, 
-      roles: ['admin', 'super_admin'],
-      badge: pendingUserCount > 0 ? pendingUserCount : undefined
-    },
-    { 
-      name: 'Danh sách GCN', 
-      href: '/assets', 
-      icon: Files, 
-      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor', 'admin', 'super_admin'] 
-    },
-    { 
-      name: profile?.role === 'btc_manager' || profile?.role === 'warehouse_manager' ? 'Duyệt yêu cầu & Kho' : 'Yêu cầu của tôi', 
-      href: '/requests', 
-      icon: CheckSquare, 
-      roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor', 'admin', 'super_admin'] 
-    },
-    { 
-      name: 'Duyệt truy cập kho', 
-      href: '/access-requests', 
-      icon: ShieldCheck, 
-      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'],
-      badge: pendingAccessCount > 0 ? pendingAccessCount : undefined
-    },
-    { 
-      name: 'Kiểm kê kho', 
-      href: '/inventory-audits', 
-      icon: ClipboardCheck, 
-      roles: ['btc_manager', 'warehouse_manager', 'admin', 'super_admin'] 
-    },
-    { 
-      name: 'Nhật ký biến động', 
-      href: '/activity-logs', 
-      icon: BookText, 
-      roles: ['btc_manager', 'warehouse_manager', 'supervisor', 'admin', 'super_admin'] 
-    },
-    { 
-      name: 'Báo cáo', 
-      href: '/reports', 
-      icon: BarChart3, 
-      roles: ['btc_manager', 'warehouse_manager', 'supervisor', 'admin', 'super_admin'] 
-    },
-    { 
-      name: 'Quản trị danh mục', 
-      href: '/admin', 
-      icon: Settings, 
-      roles: ['admin', 'super_admin'] 
-    },
-    { 
-      name: 'Import dữ liệu', 
-      href: '/import', 
-      icon: Upload, 
-      roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
-    },
-  ];
-
-  const allowedNav = navigation.filter(item => {
-    if (!profile) return false;
-    const r = profile.role;
-    if (r === 'admin' || r === 'super_admin') return true;
-    if (item.roles.includes(r)) return true;
-    if (r === 'quan_ly' && (item.roles.includes('warehouse_manager') || item.roles.includes('btc_manager'))) return true;
-    if (r === 'chuyen_vien' && (item.roles.includes('capital_dept') || item.roles.includes('project_dept') || item.roles.includes('re_dept'))) return true;
-    if ((r === 'nguoi_dung' || r === 'user') && item.roles.includes('viewer')) return true;
-    return false;
-  });
-
   return (
-    <div className="flex h-screen bg-[#F8F9FA]">
-      {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        <div className="h-16 flex items-center px-4 border-b border-gray-200 gap-3">
-          {/* Icon Logo Badge - Banking & Corporate */}
-          <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-[#1E3A8A] to-slate-900 border border-white/10 flex items-center justify-center shadow-xs shrink-0">
-            <Landmark className="w-4.5 h-4.5 text-white stroke-[2]" />
-          </div>
-
-          {/* Tên thương hiệu & Hệ thống */}
-          <div className="min-w-0 flex-1">
-            <h1 className="text-sm font-bold text-slate-900 leading-none tracking-tight truncate">
-              eQSDĐ &amp; TSĐB
-            </h1>
-            <p className="text-[11px] font-medium tracking-wider uppercase text-slate-400 mt-1 truncate">
-              Ban Tài chính
-            </p>
-          </div>
-        </div>
-        
-        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-          {allowedNav.map((item) => {
-            const isActive = location.pathname === item.href;
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                  isActive 
-                    ? 'bg-blue-50 text-[#1E3A8A] font-semibold' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <div className="flex items-center">
-                  <item.icon className={`mr-3 h-5 w-5 ${isActive ? 'text-[#1E3A8A]' : 'text-gray-400'}`} />
-                  <span>{item.name}</span>
-                </div>
-                {item.badge !== undefined && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-slate-950">
-                    {item.badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
+    <div className="flex h-screen bg-[#F8F9FA] overflow-hidden">
+      {/* Sidebar Thu gọn / Mở rộng */}
+      <Sidebar
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
+        pendingUserCount={pendingUserCount}
+        pendingAccessCount={pendingAccessCount}
+      />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Role Simulation Warning Banner */}
         <RoleSimulationBanner />
 

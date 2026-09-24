@@ -16,17 +16,16 @@ import { AdminWarehouses } from '../components/admin/AdminWarehouses';
 import { AdminProjects } from '../components/admin/AdminProjects';
 import { AdminInvestorEntities } from '../components/admin/AdminInvestorEntities';
 import { AdminInternalUsers } from '../components/admin/AdminInternalUsers';
-import { AdminAppUsers } from '../components/admin/AdminAppUsers';
 
 export const Admin: React.FC = () => {
   const { profile } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'regions' | 'areas' | 'warehouses' | 'projects' | 'users' | 'app_users' | 'investor_entities'>(() => {
+  const [activeTab, setActiveTab] = useState<'regions' | 'areas' | 'warehouses' | 'projects' | 'users' | 'investor_entities'>(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
     if (tabParam === 'regions' || tabParam === 'areas' || tabParam === 'projects' || 
         tabParam === 'warehouses' || tabParam === 'investor_entities' || 
-        tabParam === 'users' || tabParam === 'app_users') {
+        tabParam === 'users') {
       return tabParam;
     }
     return 'regions';
@@ -134,14 +133,6 @@ export const Admin: React.FC = () => {
         >
           <Shield className="w-4 h-4" /> Tài khoản nội bộ
         </button>
-        <button
-          onClick={() => setActiveTab('app_users')}
-          className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
-            activeTab === 'app_users' ? 'border-[#1E3A8A] text-[#1E3A8A]' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <Users className="w-4 h-4" /> Tài khoản App Users
-        </button>
       </div>
 
       <div className="bg-white p-6 rounded-b-xl border border-gray-200 shadow-xs" key={refreshKey}>
@@ -151,7 +142,6 @@ export const Admin: React.FC = () => {
         {activeTab === 'warehouses' && <AdminWarehouses />}
         {activeTab === 'investor_entities' && <AdminInvestorEntities />}
         {activeTab === 'users' && <AdminInternalUsers />}
-        {activeTab === 'app_users' && <AdminAppUsers />}
       </div>
 
       {/* Confirm Reset Standard Data Modal */}

@@ -192,7 +192,9 @@ export const CreateAssetModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, p
         usage_term_date: usageTermType === 'fixed_date' ? (usageTermDate || null) : null,
         scan_file_url: scanFileUrl.trim() || null,
 
-        custody_status: 'in_stock',
+        // GCN đã thế chấp: bản gốc thường đang giữ tại ngân hàng, không nằm tại kho công ty
+        // -> đánh dấu Đã xuất kho ngay khi tạo, thay vì mặc định Trong kho.
+        custody_status: isMortgaged ? 'checked_out' : 'in_stock',
         lifecycle_status: 'active',
         sale_status: 'not_ready',
         mortgage_status: isMortgaged ? 'mortgaged' : 'none',

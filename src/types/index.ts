@@ -231,6 +231,29 @@ export type TransactionType = 'checkout' | 'checkin';
 export type TransactionReason = 'mượn' | 'thế chấp' | 'chuyển nhượng' | 'xuất bán' | 'sang tên cho khách' | 'tách sổ' | 'thu hồi' | 'đổi sổ' | 'trả' | 'giải chấp' | 'nhập sau bán' | 'cấp mới' | 'khác';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 
+export interface Request {
+  id: string;
+  type: string;
+  notes?: string | null;
+  scan_url?: string | null;
+  details?: Record<string, any> | null;
+  created_by?: { full_name?: string; email?: string } | string | null;
+  created_at: string;
+  items?: any[];
+}
+
+export interface Transaction {
+  id: string;
+  type: TransactionType;
+  notes?: string | null;
+  scan_url?: string | null;
+  details?: Record<string, any> | null;
+  created_by?: { full_name?: string; email?: string } | string | null;
+  created_at: string;
+  items?: TransactionItem[];
+  warehouse_id?: string | null;
+}
+
 export interface AccessRequest {
   id: string;
   full_name: string;

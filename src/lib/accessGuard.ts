@@ -26,8 +26,9 @@ export function canLookupData(profile: Profile | null): boolean {
     return profile.status === 'active' || profile.status === 'approved';
   }
 
-  // 2. Kiểm tra điều kiện: status === 'approved' VÀ (access_expires_at chưa hết hạn hoặc null)
-  if (profile.status !== 'approved') {
+  // 2. Tài khoản tra cứu (viewer): 'active' (do DB đặt khi duyệt) hoặc 'approved' (cũ) đều là đã được duyệt.
+  //    Hạn thực tế được RLS áp theo từng kho (viewer_warehouse_access.expires_at).
+  if (profile.status !== 'approved' && profile.status !== 'active') {
     return false;
   }
 
@@ -80,8 +81,9 @@ export function checkLookupAccess(profile: Profile | null): LookupAccessResult {
   }
 
   // 2. Kiểm tra tài khoản người dùng tra cứu:
-  // Điều kiện: status === 'approved' VÀ (access_expires_at chưa hết hạn hoặc null)
-  if (profile.status !== 'approved') {
+  // Điều kiện: status 'active' (hoặc 'approved' cũ). Hạn tra cứu thực tế nằm ở từng kho (RLS),
+  // access_expires_at chỉ còn là hạn chung tùy chọn.
+  if (profile.status !== 'approved' && profile.status !== 'active') {
     return {
       allowed: false,
       status: (profile.status as any) || 'pending',
@@ -94,8 +96,8 @@ export function checkLookupAccess(profile: Profile | null): LookupAccessResult {
     return {
       allowed: true,
       status: 'approved',
-      remainingText: 'Không giới hạn',
-      message: 'Tài khoản đã được phê duyệt và được phép tra cứu dữ liệu.',
+      remainingText: 'theo hạn từng kho (xem mục "Quyền truy cập của tôi")',
+      message: 'Tài khoản đã được phê duyệt và được phép tra cứu dữ liệu của các kho được cấp quyền.',
     };
   }
 

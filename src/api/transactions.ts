@@ -83,6 +83,13 @@ export async function createTransaction(
     items = param1.items || [];
   }
 
+  const scanUrl =
+    (typeof param1 === 'object' ? (param1.scan_url || param1.scanUrl) : null) ||
+    details?.scan_url ||
+    details?.scanUrl ||
+    (items[0]?.details?.scan_url || items[0]?.details?.scanUrl) ||
+    null;
+
   if (!isSupabaseConfigured) {
     const current = mockStore.getTransactions();
     const newTxId = 'tx-' + Date.now();
@@ -92,6 +99,7 @@ export async function createTransaction(
       id: newTxId,
       type: txType,
       notes: txNotes || '',
+      scan_url: scanUrl,
       created_at: new Date().toISOString(),
       created_by: { full_name: 'Người dùng hiện tại', email: 'user@btcvmt.vn' },
       items: items.map((it, idx) => ({
@@ -100,7 +108,7 @@ export async function createTransaction(
         type: it.type,
         reason: it.details?.reason || null,
         status: 'pending',
-        details: it.details || {},
+        details: { ...it.details, scan_url: scanUrl },
         asset: assets.find(a => a.id === it.asset_id),
       })),
     };
@@ -122,18 +130,46 @@ export async function createTransaction(
     asset_id: it.asset_id,
     type: it.type,
     reason: it.details?.reason || null,
-    details: it.details || {},
+    details: { ...(it.details || {}), scan_url: scanUrl },
   }));
 
-  // Ưu tiên gọi RPC atomic create_transaction_request
-  const { data: rpcResult, error: rpcErr } = await withTimeout(
-    supabase.rpc('create_transaction_request', {
-      p_type: txType,
-      p_notes: txNotes || null,
-      p_items: itemsPayload,
-    }),
-    DEFAULT_WRITE_TIMEOUT
-  );
+  // Ưu tiên gọi RPC atomic create_transaction_request kèm p_scan_url
+  let rpcResult: any = null;
+  let rpcErr: any = null;
+
+  try {
+    const res = await withTimeout(
+      supabase.rpc('create_transaction_request', {
+        p_type: txType,
+        p_notes: txNotes || null,
+        p_items: itemsPayload,
+        p_scan_url: scanUrl,
+      }),
+      DEFAULT_WRITE_TIMEOUT
+    );
+    rpcResult = res.data;
+    rpcErr = res.error;
+  } catch (err) {
+    rpcErr = err;
+  }
+
+  // Fallback gọi phiên bản 3 tham số nếu DB chưa chạy migration nhận p_scan_url
+  if (rpcErr && rpcErr.code === 'PGRST202') {
+    try {
+      const res3 = await withTimeout(
+        supabase.rpc('create_transaction_request', {
+          p_type: txType,
+          p_notes: txNotes || null,
+          p_items: itemsPayload,
+        }),
+        DEFAULT_WRITE_TIMEOUT
+      );
+      rpcResult = res3.data;
+      rpcErr = res3.error;
+    } catch (err) {
+      rpcErr = err;
+    }
+  }
 
   let finalTx: any = null;
   let finalItems: any[] = [];
@@ -142,18 +178,42 @@ export async function createTransaction(
     finalTx = rpcResult;
     finalItems = rpcResult.items || [];
   } else {
-    // Nếu RPC chưa được nạp (PGRST202) hoặc lỗi khác, thực hiện insert trực tiếp qua bảng
-    const { data: tx, error: txErr } = await withTimeout(
+    // Nếu RPC chưa được nạp hoặc lỗi khác, thực hiện insert trực tiếp qua bảng transactions
+    const insertPayload: any = { type: txType, notes: txNotes, created_by: createdBy };
+    if (scanUrl) {
+      insertPayload.scan_url = scanUrl;
+    }
+
+    let tx: any = null;
+    const { data: directTx, error: txErr } = await withTimeout(
       supabase
         .from('transactions')
-        .insert([{ type: txType, notes: txNotes, created_by: createdBy }])
+        .insert([insertPayload])
         .select()
         .single(),
       DEFAULT_WRITE_TIMEOUT
     );
 
     if (txErr) {
-      throw new Error('Lỗi tạo phiếu yêu cầu: ' + (txErr.message || 'Không thể ghi nhận phiếu vào hệ thống'));
+      // Nếu lỗi do cột scan_url chưa có trong schema cache, thử lại không có cột scan_url
+      if (txErr.message?.includes('scan_url')) {
+        const { data: retryTx, error: retryErr } = await withTimeout(
+          supabase
+            .from('transactions')
+            .insert([{ type: txType, notes: txNotes, created_by: createdBy }])
+            .select()
+            .single(),
+          DEFAULT_WRITE_TIMEOUT
+        );
+        if (retryErr) {
+          throw new Error('Lỗi tạo phiếu yêu cầu: ' + retryErr.message);
+        }
+        tx = retryTx;
+      } else {
+        throw new Error('Lỗi tạo phiếu yêu cầu: ' + (txErr.message || 'Không thể ghi nhận phiếu vào hệ thống'));
+      }
+    } else {
+      tx = directTx;
     }
 
     const itemsToInsert = items.map(it => ({
@@ -876,3 +936,67 @@ export const approveRequest = (requestId: string, performerId: string, name: str
   decideTransactionItem(requestId, 'approved', notes, performerId);
 export const rejectRequest = (requestId: string, performerId: string, name: string, notes?: string) =>
   decideTransactionItem(requestId, 'rejected', notes, performerId);
+
+/**
+ * Lấy link scan_url (OneDrive) từ phiếu nhập kho gần nhất của GCN
+ * Phục vụ hiển thị nút "📄 Xem Bản Scan" trong chi tiết GCN và lịch sử giao dịch
+ */
+export async function fetchLatestCheckinScanUrl(assetId: string): Promise<string | null> {
+  if (!isSupabaseConfigured) {
+    const txs = mockStore.getTransactions();
+    for (const tx of txs) {
+      if (tx.type === 'checkin' && (tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl)) {
+        const hasAsset = (tx.items || []).some((it: any) => it.asset_id === assetId || it.asset?.id === assetId);
+        if (hasAsset) {
+          return tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl;
+        }
+      }
+    }
+    return null;
+  }
+
+  try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('transaction_items')
+        .select(`
+          id,
+          type,
+          transaction_id,
+          created_at,
+          transactions:transaction_id (
+            id,
+            type,
+            scan_url,
+            details,
+            created_at
+          )
+        `)
+        .eq('asset_id', assetId)
+        .eq('type', 'checkin')
+        .order('created_at', { ascending: false })
+        .limit(10),
+      DEFAULT_READ_TIMEOUT
+    );
+
+    if (error) {
+      console.warn('Truy vấn phiếu nhập kho của GCN:', error.message);
+      return null;
+    }
+
+    if (data && data.length > 0) {
+      for (const row of data) {
+        const tx: any = row.transactions;
+        const url = tx?.scan_url || tx?.details?.scan_url || tx?.details?.scanUrl;
+        if (url && typeof url === 'string' && url.trim()) {
+          return url.trim();
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('Lỗi khi tìm link scan của phiếu nhập kho:', err?.message);
+    return null;
+  }
+
+  return null;
+}

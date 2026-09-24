@@ -1,77 +1,7 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
-import { AccessRequest } from '../types';
+import { AccessRequest, ViewerWarehouseAccess } from '../types';
 import { grantViewerWarehouseAccess } from './viewerAccess';
-import { createNotification } from './notifications';
-
-export interface CreateAccessRequestPayload {
-  full_name: string;
-  email: string;
-  phone?: string;
-  organization?: string;
-  purpose?: string;
-  warehouse_ids: string[]; // List of warehouse IDs user requests to view
-}
-
-/**
- * Gửi yêu cầu đăng ký viewer theo từng kho (public, không cần đăng nhập)
- */
-export async function submitAccessRequests(payload: CreateAccessRequestPayload): Promise<{ success: boolean; count: number }> {
-  const { full_name, email, phone, organization, purpose, warehouse_ids } = payload;
-  if (!warehouse_ids || warehouse_ids.length === 0) {
-    throw new Error('Vui lòng chọn ít nhất một kho lưu trữ để yêu cầu quyền xem.');
-  }
-
-  const rows = warehouse_ids.map(warehouse_id => ({
-    full_name: full_name.trim(),
-    email: email.trim().toLowerCase(),
-    phone: phone?.trim() || null,
-    organization: organization?.trim() || null,
-    purpose: purpose?.trim() || null,
-    warehouse_id,
-    status: 'pending',
-  }));
-
-  if (!isSupabaseConfigured) {
-    // Fallback / Mock
-    for (const row of rows) {
-      mockStore.addAccessRequest(row);
-    }
-    return { success: true, count: rows.length };
-  }
-
-  try {
-    const { error } = await withTimeout(
-      supabase.from('access_requests').insert(rows),
-      DEFAULT_WRITE_TIMEOUT
-    );
-    if (error) {
-      if (isSchemaMissingError(error)) {
-        for (const row of rows) {
-          mockStore.addAccessRequest(row);
-        }
-        return { success: true, count: rows.length };
-      }
-      throw error;
-    }
-  } catch (err) {
-    if (isSchemaMissingError(err)) {
-      for (const row of rows) {
-        mockStore.addAccessRequest(row);
-      }
-      return { success: true, count: rows.length };
-    }
-    throw err;
-  }
-  
-  try {
-    for (const row of rows) {
-      mockStore.addAccessRequest(row);
-    }
-  } catch {}
-  
-  return { success: true, count: rows.length };
-}
 
 /**
  * Lấy danh sách yêu cầu truy cập kho (Có áp dụng RLS hoặc filter theo role)
@@ -85,48 +15,24 @@ export async function fetchAccessRequests(statusFilter?: 'pending' | 'approved' 
     return reqs as AccessRequest[];
   }
 
-  try {
-    let query = supabase
-      .from('access_requests')
-      .select(`
-        *,
-        reviewer:profiles!access_requests_reviewed_by_fkey(full_name, email),
-        warehouses:warehouses(id, name, code, is_central)
-      `)
-      .order('created_at', { ascending: false });
+  let query = supabase
+    .from('access_requests')
+    .select(`
+      *,
+      reviewer:profiles!access_requests_reviewed_by_fkey(full_name, email),
+      warehouses:warehouses(id, name, code, is_central)
+    `)
+    .order('created_at', { ascending: false });
 
-    if (statusFilter && statusFilter !== 'all') {
-      query = query.eq('status', statusFilter);
-    }
-
-    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-    if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng access_requests hoặc warehouses chưa có trong Supabase, dùng mockStore:', error.message);
-        let reqs = mockStore.getAccessRequests();
-        if (statusFilter && statusFilter !== 'all') {
-          reqs = reqs.filter(r => r.status === statusFilter);
-        }
-        return reqs as AccessRequest[];
-      }
-      throw error;
-    }
-    return (data || []) as AccessRequest[];
-  } catch (err: any) {
-    if (isSchemaMissingError(err)) {
-      let reqs = mockStore.getAccessRequests();
-      if (statusFilter && statusFilter !== 'all') {
-        reqs = reqs.filter(r => r.status === statusFilter);
-      }
-      return reqs as AccessRequest[];
-    }
-    console.warn('Lỗi trong fetchAccessRequests, fallback sang mockStore:', err);
-    let reqs = mockStore.getAccessRequests();
-    if (statusFilter && statusFilter !== 'all') {
-      reqs = reqs.filter(r => r.status === statusFilter);
-    }
-    return reqs as AccessRequest[];
+  if (statusFilter && statusFilter !== 'all') {
+    query = query.eq('status', statusFilter);
   }
+
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) {
+    throw new Error('Không tải được danh sách yêu cầu truy cập: ' + error.message);
+  }
+  return (data || []) as AccessRequest[];
 }
 
 /**
@@ -204,7 +110,7 @@ export async function approveAccessRequest(params: {
     return { success: true };
   }
 
-  // 1. Thử gọi RPC duyệt an toàn
+  // Chỉ duyệt qua RPC (kiểm tra quyền + phạm vi kho ở phía DB). KHÔNG có đường dự phòng ghi thẳng bảng.
   const { data, error } = await withTimeout(
     supabase.rpc('approve_viewer_access_request', {
       p_request_id: requestId,
@@ -213,68 +119,10 @@ export async function approveAccessRequest(params: {
     }),
     DEFAULT_WRITE_TIMEOUT
   );
-
   if (error) {
-    console.warn('RPC approve_viewer_access_request failed, trying direct table update:', error);
-
-    // 2. Direct query fallback if RPC is not deployed yet
-    const { data: reqData, error: reqErr } = await supabase
-      .from('access_requests')
-      .select('*')
-      .eq('id', requestId)
-      .single();
-    if (reqErr || !reqData) throw reqErr || new Error('Không tìm thấy yêu cầu');
-
-    // Find or create profile
-    let targetUserId: string;
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .ilike('email', reqData.email)
-      .maybeSingle();
-
-    if (existingProfile) {
-      targetUserId = existingProfile.id;
-      await supabase.from('profiles').update({ 
-        status: 'active',
-        organization: reqData.organization || undefined,
-        purpose: reqData.purpose || undefined,
-        phone: reqData.phone || undefined,
-      }).eq('id', targetUserId);
-    } else {
-      const { data: newProf, error: pErr } = await supabase.from('profiles').insert([{
-        email: reqData.email.toLowerCase(),
-        full_name: reqData.full_name,
-        role: 'viewer',
-        status: 'active',
-        permissions: ['asset.view'],
-        organization: reqData.organization || null,
-        purpose: reqData.purpose || null,
-        phone: reqData.phone || null,
-      }]).select().single();
-      if (pErr) throw pErr;
-      targetUserId = newProf.id;
-    }
-
-    // Upsert into viewer_warehouse_access
-    await supabase.from('viewer_warehouse_access').upsert({
-      user_id: targetUserId,
-      warehouse_id: reqData.warehouse_id,
-      approved_by: reviewerId,
-      approved_at: new Date().toISOString(),
-      expires_at: expiresAt || null,
-      notes: notes || null,
-    }, { onConflict: 'user_id,warehouse_id' });
-
-    // Update access_requests status
-    await supabase.from('access_requests').update({
-      status: 'approved',
-      reviewed_by: reviewerId,
-      reviewed_at: new Date().toISOString(),
-    }).eq('id', requestId);
+    throw new Error('Không thể duyệt yêu cầu: ' + error.message);
   }
-
-  return { success: true };
+  return data;
 }
 
 /**
@@ -298,28 +146,104 @@ export async function rejectAccessRequest(params: {
   }
 
   const { data, error } = await withTimeout(
-    supabase
-      .from('access_requests')
-      .update({
-        status: 'rejected',
-        reject_reason: rejectReason,
-        reviewed_by: reviewerId,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq('id', requestId)
-      .select(),
+    supabase.rpc('reject_viewer_access_request', {
+      p_request_id: requestId,
+      p_reason: rejectReason,
+    }),
     DEFAULT_WRITE_TIMEOUT
   );
-  if (error) throw error;
-  
-  try {
-    mockStore.updateAccessRequest(requestId, {
-      status: 'rejected',
-      reject_reason: rejectReason,
-      reviewed_by: reviewerId,
-      reviewed_at: new Date().toISOString(),
-    });
-  } catch {}
-
+  if (error) {
+    throw new Error('Không thể từ chối yêu cầu: ' + error.message);
+  }
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// Dành cho tài khoản tra cứu (viewer): xem quyền của mình và xin thêm/gia hạn kho
+// ---------------------------------------------------------------------------
+
+export interface MyWarehouseCatalogItem {
+  id: string;
+  name: string;
+  code: string | null;
+  is_central: boolean | null;
+}
+
+export interface MyAccessOverview {
+  warehouses: MyWarehouseCatalogItem[];
+  access: ViewerWarehouseAccess[];
+  requests: AccessRequest[];
+}
+
+/**
+ * Tổng hợp quyền của chính người dùng: danh mục kho, quyền đã cấp, các yêu cầu đã gửi.
+ * Danh mục kho lấy qua RPC list_registration_warehouses (RLS có thể ẩn kho chưa được cấp quyền).
+ */
+export async function fetchMyAccessOverview(userId: string): Promise<MyAccessOverview> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Hệ thống chưa kết nối Supabase.');
+  }
+
+  const [whRes, accessRes, reqRes] = await Promise.all([
+    withTimeout(supabase.rpc('list_registration_warehouses'), DEFAULT_READ_TIMEOUT),
+    withTimeout(
+      supabase.from('viewer_warehouse_access').select('*').eq('user_id', userId),
+      DEFAULT_READ_TIMEOUT
+    ),
+    withTimeout(
+      supabase.from('access_requests').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+      DEFAULT_READ_TIMEOUT
+    ),
+  ]);
+
+  if (whRes.error) {
+    throw new Error('Không tải được danh sách kho: ' + whRes.error.message + ' (cần chạy migration 0044).');
+  }
+  if (accessRes.error) {
+    throw new Error('Không tải được quyền truy cập của bạn: ' + accessRes.error.message);
+  }
+  if (reqRes.error) {
+    throw new Error('Không tải được các yêu cầu đã gửi: ' + reqRes.error.message + ' (cần chạy migration 0044).');
+  }
+
+  return {
+    warehouses: (whRes.data || []) as MyWarehouseCatalogItem[],
+    access: (accessRes.data || []) as ViewerWarehouseAccess[],
+    requests: (reqRes.data || []) as AccessRequest[],
+  };
+}
+
+export interface RequestWarehouseAccessResult {
+  created: number;
+  skipped_active: number;
+  skipped_pending: number;
+  skipped_invalid: number;
+}
+
+/**
+ * Xin quyền xem thêm một hoặc nhiều kho (hoặc gia hạn kho sắp/đã hết hạn).
+ * Danh tính lấy từ phiên đăng nhập ở phía DB (RPC request_warehouse_access), không nhận email từ trình duyệt.
+ */
+export async function requestWarehouseAccess(params: {
+  warehouseIds: string[];
+  purpose?: string;
+}): Promise<RequestWarehouseAccessResult> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Hệ thống chưa kết nối Supabase.');
+  }
+  if (!params.warehouseIds || params.warehouseIds.length === 0) {
+    throw new Error('Vui lòng chọn ít nhất một kho.');
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('request_warehouse_access', {
+      p_warehouse_ids: params.warehouseIds,
+      p_purpose: params.purpose?.trim() || null,
+    }),
+    DEFAULT_WRITE_TIMEOUT
+  );
+  if (error) {
+    throw new Error('Không thể gửi yêu cầu: ' + error.message);
+  }
+  return data as RequestWarehouseAccessResult;
 }

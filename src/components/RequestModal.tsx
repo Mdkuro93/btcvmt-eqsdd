@@ -69,6 +69,9 @@ export const RequestModal: React.FC<Props> = ({
   const [otherReasonDetail, setOtherReasonDetail] = useState('');
   const OTHER_REASON_MIN_LENGTH = 10;
 
+  // Link bản scan OneDrive chung cho cả phiếu yêu cầu
+  const [scanUrl, setScanUrl] = useState('');
+
   useEffect(() => {
     if (isOpen) {
       fetchInvestorEntities().then(data => setInvestorEntities(data)).catch(console.error);
@@ -205,6 +208,7 @@ export const RequestModal: React.FC<Props> = ({
       setNewOwnerEntityId('');
       setNewOwnerRole('cdt');
       setOtherReasonDetail('');
+      setScanUrl('');
     }
   }, [isOpen, userRole, effectiveRole, profile]);
 
@@ -234,6 +238,8 @@ export const RequestModal: React.FC<Props> = ({
     try {
       let details: any = {
         reason: selectedOpt.reason,
+        scan_url: scanUrl.trim() || null,
+        scanUrl: scanUrl.trim() || null,
       };
 
       if (selectedOpt.reason === 'khác') {
@@ -404,6 +410,24 @@ export const RequestModal: React.FC<Props> = ({
                 onChange={e => setDesiredReceiveDate(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 p-2 text-xs focus:border-blue-500 focus:ring-blue-500"
               />
+            </div>
+          )}
+
+          {selectedOpt && (
+            <div className="pt-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Link bản scan OneDrive (Không bắt buộc)
+              </label>
+              <input
+                type="url"
+                value={scanUrl}
+                onChange={e => setScanUrl(e.target.value)}
+                placeholder="https://sun-my.sharepoint.com/... hoặc link OneDrive"
+                className="w-full rounded-lg border border-gray-300 p-2 text-xs focus:border-blue-500 focus:ring-blue-500 bg-white"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Đính kèm link bản scan OneDrive dùng chung cho toàn bộ {selectedAssets.length} GCN trong phiếu này.
+              </p>
             </div>
           )}
 

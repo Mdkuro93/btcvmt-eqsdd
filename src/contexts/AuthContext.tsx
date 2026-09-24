@@ -3,7 +3,6 @@ import {
   supabase, 
   isSupabaseConfigured, 
   withTimeout, 
-  registerUser, 
 } from '../lib/supabase';
 import { Profile, Role, AppUserSession } from '../types';
 import { mockStore } from '../lib/mockStore';
@@ -36,15 +35,6 @@ interface AuthContextType {
   signInWithPassword: (accountOrEmail: string, password: string) => Promise<{ success: boolean; profile: Profile }>;
   signInWithOtp: (accountOrEmail: string) => Promise<{ success: boolean; message?: string }>;
   verifyOtp: (accountOrEmail: string, token: string) => Promise<{ success: boolean; profile: Profile }>;
-  signUp: (params: {
-    email: string;
-    password: string;
-    fullName: string;
-    username?: string;
-    phone?: string;
-    organization?: string;
-    purpose?: string;
-  }) => Promise<{ success: boolean; message?: string; profile: Profile; requiresEmailConfirmation?: boolean }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -488,146 +478,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Luồng Người dùng tự đăng ký (Tra cứu tạm thời):
-   * Gọi supabase.rpc('register_user', { p_username, p_password })
-   * Đăng ký xong tự động lưu trạng thái pending.
-   */
-  const signUp = async (params: {
-    email: string;
-    password: string;
-    fullName: string;
-    username?: string;
-    phone?: string;
-    organization?: string;
-    purpose?: string;
-  }): Promise<{ success: boolean; message?: string; profile: Profile; requiresEmailConfirmation?: boolean }> => {
-    setLoading(true);
-    const cleanEmail = params.email.trim().toLowerCase();
-    const cleanUsername = params.username?.trim().toLowerCase() || (cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail);
-    const cleanFullName = params.fullName.trim() || cleanUsername;
-
-    // 1. Luôn ưu tiên gọi RPC register_user({ p_username, p_password })
-    let registeredAppUser: any = null;
-    try {
-      registeredAppUser = await registerUser(cleanUsername, params.password);
-    } catch (rpcErr: any) {
-      console.warn('registerUser RPC info:', rpcErr);
-      // Nếu là lỗi username đã tồn tại, dừng và báo lỗi cho người dùng
-      if (rpcErr?.message?.includes('tồn tại') || rpcErr?.message?.includes('already exists') || rpcErr?.message?.includes('duplicate')) {
-        setLoading(false);
-        throw rpcErr;
-      }
-    }
-
-    if (isSupabaseConfigured) {
-      try {
-        const { data: authData } = await supabase.auth.signUp({
-          email: cleanEmail.includes('@') ? cleanEmail : `${cleanUsername}@btcvmt.vn`,
-          password: params.password,
-          options: {
-            data: {
-              full_name: cleanFullName,
-              username: cleanUsername,
-              role: 'user',
-            },
-          },
-        }).catch(() => ({ data: { user: null, session: null } }));
-
-        const userId = registeredAppUser?.id || authData?.user?.id || `user-${Date.now()}`;
-        const newProfile: Profile = {
-          id: userId,
-          email: cleanEmail.includes('@') ? cleanEmail : `${cleanUsername}@btcvmt.vn`,
-          username: cleanUsername,
-          full_name: cleanFullName,
-          role: 'user',
-          status: 'pending',
-          access_expires_at: null,
-          permissions: ['asset.lookup'],
-          region_id: null,
-          area_id: null,
-          project_ids: null,
-          managed_warehouse_ids: null,
-          phone: params.phone?.trim() || null,
-          organization: params.organization?.trim() || null,
-          purpose: params.purpose?.trim() || null,
-          created_at: new Date().toISOString(),
-        };
-
-        let finalProfile: Profile = newProfile;
-        try {
-          const { data: profData } = await supabase
-            .from('profiles')
-            .upsert(newProfile)
-            .select()
-            .single();
-          if (profData) {
-            finalProfile = profData as Profile;
-          }
-        } catch (saveErr) {
-          console.warn('Lưu profile dự phòng:', saveErr);
-        }
-
-        // Đồng bộ vào mockStore
-        const currentMocks = mockStore.getProfiles();
-        mockStore.saveProfiles([finalProfile, ...currentMocks.filter(p => p.id !== finalProfile.id)]);
-
-        await logAccessEvent({
-          userId: finalProfile.id,
-          action: 'register',
-          details: { username: cleanUsername, email: newProfile.email, role: 'user', status: 'pending', organization: params.organization },
-        }).catch(() => {});
-
-        setLoading(false);
-        return {
-          success: true,
-          profile: finalProfile,
-          requiresEmailConfirmation: false,
-          message: 'Đăng ký thành công! Tài khoản đang ở trạng thái Chờ duyệt (status = pending).',
-        };
-      } catch (err: any) {
-        setLoading(false);
-        throw err instanceof Error ? err : new Error('Không thể hoàn tất đăng ký tài khoản.');
-      }
-    }
-
-    // Dev / Mock Mode
-    const currentProfiles = mockStore.getProfiles();
-    const newProfile: Profile = {
-      id: registeredAppUser?.id || ('user-' + Date.now()),
-      email: cleanEmail.includes('@') ? cleanEmail : `${cleanUsername}@btcvmt.vn`,
-      username: cleanUsername,
-      full_name: cleanFullName,
-      role: 'user',
-      status: 'pending',
-      access_expires_at: null,
-      permissions: ['asset.lookup'],
-      region_id: null,
-      area_id: null,
-      project_ids: null,
-      managed_warehouse_ids: null,
-      phone: params.phone?.trim() || null,
-      organization: params.organization?.trim() || null,
-      purpose: params.purpose?.trim() || null,
-      created_at: new Date().toISOString(),
-    };
-
-    mockStore.saveProfiles([newProfile, ...currentProfiles.filter(p => p.id !== newProfile.id)]);
-
-    await logAccessEvent({
-      userId: newProfile.id,
-      action: 'register',
-      details: { username: cleanUsername, email: newProfile.email, role: 'user', status: 'pending', organization: params.organization },
-    }).catch(() => {});
-
-    setLoading(false);
-    return {
-      success: true,
-      profile: newProfile,
-      message: 'Đăng ký thành công! Tài khoản của bạn đang ở trạng thái Chờ duyệt (status = pending).',
-    };
-  };
-
-  /**
    * Đăng xuất an toàn
    */
   const signOut = async () => {
@@ -663,7 +513,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signInWithPassword,
         signInWithOtp,
         verifyOtp,
-        signUp,
         signOut,
         refreshProfile,
       }}
