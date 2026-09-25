@@ -117,9 +117,10 @@ export const BulkDecideModal: React.FC<BulkDecideModalProps> = ({
     if (existing) return;
 
     const templateItem = items[0] || {};
-    const newId = `new-added-${asset.id}-${Date.now()}`;
+    const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}`;
     const newItem = {
       id: newId,
+      isNewlyAdded: true,
       transaction_id: templateItem.transaction_id || templateItem.transaction?.id,
       asset_id: asset.id,
       asset: asset,
@@ -172,6 +173,7 @@ export const BulkDecideModal: React.FC<BulkDecideModalProps> = ({
     try {
       const approvedPayload = activeItems.map(item => ({
         itemId: item.id,
+        isNewlyAdded: Boolean((item as any).isNewlyAdded || item.id?.startsWith('new-added-')),
         assetId: item.asset?.id || item.asset_id,
         decision: 'approved' as const,
         notes: editedItems[item.id]?.notes || globalNotes,
@@ -358,7 +360,7 @@ export const BulkDecideModal: React.FC<BulkDecideModalProps> = ({
                 activeItems.map((item, idx) => {
                   const asset = item.asset;
                   const details = editedItems[item.id]?.details || {};
-                  const isNewlyAdded = item.id?.startsWith('new-added-');
+                  const isNewlyAdded = Boolean((item as any).isNewlyAdded || item.id?.startsWith('new-added-'));
 
                   return (
                     <div

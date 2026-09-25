@@ -913,3 +913,5 @@ export const AccessRequests: React.FC = () => {
     </div>
   );
 };
+
+export default AccessRequests;

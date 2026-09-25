@@ -1220,3 +1220,5 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
     </div>
   );
 };
+
+export default InventoryAudits;

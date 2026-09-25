@@ -453,3 +453,49 @@ export interface AssetOwnershipTransfer {
   to_entity?: InvestorEntity;
   performer?: Profile | { id?: string; full_name?: string | null; email?: string | null } | null;
 }
+export type PlannedLandLotStatus = 'chưa cấp GCN' | 'đã cấp GCN';
+
+export interface PlannedLandLot {
+  id: string;
+  project_id: string;
+  parent_master_asset_id: string;
+  legal_lot_code: string;
+  land_lot_no?: string | null;
+  map_sheet_no?: string | null;
+  business_project_name?: string | null;
+  business_plot_code?: string | null;
+  planned_area: number;
+  status: PlannedLandLotStatus;
+  resulting_asset_id?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  // Quan hệ (khi truy vấn có join)
+  parent_master_asset?: { id: string; certificate_no: string; asset_code?: string | null } | null;
+  resulting_asset?: { id: string; certificate_no: string; asset_code?: string | null } | null;
+}
+
+export interface PlannedLandLotImportRow {
+  legal_lot_code: string;
+  land_lot_no?: string;
+  map_sheet_no?: string;
+  planned_area: string | number;
+  business_project_name?: string;
+  business_plot_code?: string;
+  notes?: string;
+}
+
+export interface PlannedLandLotImportError {
+  row: number;
+  field: string;
+  message: string;
+}
+
+export interface PlannedLandLotImportResult {
+  success: boolean;
+  inserted: number;
+  would_insert?: number;
+  errors: PlannedLandLotImportError[];
+  warnings: { message: string }[];
+}

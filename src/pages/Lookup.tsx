@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Navigate, Link, useSearchParams } from 'react-router-dom';
 import { lookupAssets, fetchProjects } from '../api/assets';
 import { Project } from '../types';
 import { StatusBadges } from '../components/StatusBadges';
@@ -11,7 +11,9 @@ import { format } from 'date-fns';
 
 export const Lookup: React.FC = () => {
   const { profile, refreshProfile, signOut } = useAuth();
-  const [queryText, setQueryText] = useState('');
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get('q') || '';
+  const [queryText, setQueryText] = useState(initialQuery);
   const [projectId, setProjectId] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   
@@ -27,39 +29,22 @@ export const Lookup: React.FC = () => {
 
   const accessCheck = checkLookupAccess(profile);
 
-  useEffect(() => {
-    if (accessCheck.allowed) {
-      loadProjects();
-    }
-  }, [accessCheck.allowed]);
-
-  // Kiểm tra nếu người dùng chưa đăng nhập -> Chuyển về trang Login
-  if (!profile) {
-    return <Navigate to="/login" replace />;
-  }
-
-  const handleRefreshStatus = async () => {
-    setRefreshing(true);
-    try {
-      await refreshProfile();
-      toast.success('Đã cập nhật trạng thái mới nhất!');
-    } catch {
-      toast.error('Không thể làm mới trạng thái');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       const data = await fetchProjects();
       setProjects(data || []);
     } catch (err) {
       console.error('Failed to load projects', err);
     }
-  };
+  }, []);
 
-  const executeSearch = async (pageNum: number, isLoadMore = false) => {
+  useEffect(() => {
+    if (accessCheck.allowed) {
+      loadProjects();
+    }
+  }, [accessCheck.allowed, loadProjects]);
+
+  const executeSearch = useCallback(async (pageNum: number, isLoadMore = false, customQuery?: string) => {
     // Re-verify lookup access before executing search
     const currentAccess = checkLookupAccess(profile);
     if (!currentAccess.allowed) {
@@ -67,7 +52,8 @@ export const Lookup: React.FC = () => {
       return;
     }
 
-    const queries = queryText
+    const textToSearch = customQuery !== undefined ? customQuery : queryText;
+    const queries = textToSearch
       .split('\n')
       .map(q => q.trim())
       .filter(q => q.length > 0);
@@ -103,6 +89,27 @@ export const Lookup: React.FC = () => {
       setLoading(false);
       setLoadingMore(false);
     }
+  }, [profile, queryText, projectId, pageSize]);
+
+  // Tự động tìm kiếm nếu URL có query param 'q'
+  useEffect(() => {
+    const qParam = searchParams.get('q');
+    if (qParam && qParam.trim() && accessCheck.allowed) {
+      setQueryText(qParam.trim());
+      executeSearch(1, false, qParam.trim());
+    }
+  }, [searchParams, accessCheck.allowed, executeSearch]);
+
+  const handleRefreshStatus = async () => {
+    setRefreshing(true);
+    try {
+      await refreshProfile();
+      toast.success('Đã cập nhật trạng thái mới nhất!');
+    } catch {
+      toast.error('Không thể làm mới trạng thái');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -115,6 +122,11 @@ export const Lookup: React.FC = () => {
   };
 
   const hasMore = results.length < totalCount;
+
+  // Kiểm tra nếu người dùng chưa đăng nhập -> Chuyển về trang Login (gọi sau toàn bộ hooks)
+  if (!profile) {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">

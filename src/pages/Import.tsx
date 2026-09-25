@@ -408,3 +408,5 @@ export const Import: React.FC = () => {
     </div>
   );
 };
+
+export default Import;

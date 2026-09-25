@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
+import { sanitizeUuid } from './assets';
 
 export async function fetchActivityLogs(params?: any): Promise<any[]> {
   if (!isSupabaseConfigured) {
@@ -77,14 +78,14 @@ export async function logActivity(logData: {
         .from('activity_logs')
         .insert([
           {
-            asset_id: logData.assetId || null,
+            asset_id: sanitizeUuid(logData.assetId),
             action_type: logData.actionType,
             document_no: logData.documentNo || null,
             description: logData.description || null,
             used_by: logData.usedBy || null,
-            warehouse_id: logData.warehouseId || null,
+            warehouse_id: sanitizeUuid(logData.warehouseId),
             notes: logData.notes || null,
-            performed_by: logData.performedBy || null,
+            performed_by: sanitizeUuid(logData.performedBy),
           },
         ])
         .select()

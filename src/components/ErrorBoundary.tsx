@@ -33,8 +33,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (isMismatchOrChunkError && typeof window !== 'undefined') {
       const reloadKey = `err_mismatch_${window.location.pathname}`;
-      if (!sessionStorage.getItem(reloadKey)) {
-        sessionStorage.setItem(reloadKey, 'true');
+      const now = Date.now();
+      const lastReload = Number(sessionStorage.getItem(reloadKey) || '0');
+      if (now - lastReload > 8000) {
+        sessionStorage.setItem(reloadKey, String(now));
         window.location.reload();
       }
     }

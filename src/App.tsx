@@ -24,7 +24,20 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const module = await componentImport();
+        let module: any;
+        if (attempt > 1 && import.meta.env.DEV && name) {
+          // Trong môi trường Vite dev, nếu lần đầu bị lỗi kết nối/restart server thì trình duyệt (V8)
+          // sẽ cache Promise bị reject cho đúng specifier đó.
+          // Thêm timestamp query param để trình duyệt tạo request mới thay vì trả ngay Promise lỗi cũ.
+          try {
+            module = await import(/* @vite-ignore */ `/src/pages/${name}.tsx?t=${Date.now()}`);
+          } catch {
+            module = await componentImport();
+          }
+        } else {
+          module = await componentImport();
+        }
+
         if (name && module[name]) {
           return { default: module[name] };
         }
@@ -35,7 +48,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
         if (attempt < maxRetries) {
           // Chờ một chút trước khi thử lại để dev server hoặc kết nối mạng ổn định
-          await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
         }
       }
     }
@@ -47,9 +60,11 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
     if (isFetchError && typeof window !== 'undefined') {
       const retryKey = `chunk_retry_${window.location.pathname}`;
-      const hasRetried = sessionStorage.getItem(retryKey);
-      if (!hasRetried) {
-        sessionStorage.setItem(retryKey, 'true');
+      const now = Date.now();
+      const lastRetry = Number(sessionStorage.getItem(retryKey) || '0');
+      // Tránh reload loop vô tận: chỉ cho phép reload tự động nếu cách lần trước tối thiểu 8 giây
+      if (now - lastRetry > 8000) {
+        sessionStorage.setItem(retryKey, String(now));
         window.location.reload();
       }
     }
@@ -132,8 +147,9 @@ export default function App() {
                     <Route path="/reports" element={<Reports />} />
                   </Route>
 
-                  {/* Admin / Quản trị danh mục: Admin Only */}
-                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin']} />}>
+                  {/* Admin / Quản trị danh mục: Admin Only, trừ tab "Dự án" (lô quy hoạch pháp lý)
+                      mà project_dept/btc_manager cũng được vào — Admin.tsx tự giới hạn phạm vi cho 2 vai trò này. */}
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'project_dept', 'btc_manager']} />}>
                     <Route path="/admin" element={<Admin />} />
                     <Route path="/categories" element={<Navigate to="/admin" replace />} />
                   </Route>

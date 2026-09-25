@@ -2,7 +2,7 @@ import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFA
 import { mockStore } from '../lib/mockStore';
 import { DEFAULT_WAREHOUSE_SLA_DAYS, DEFAULT_RETURN_DAYS } from '../lib/constants';
 import { TransactionType, Asset } from '../types';
-import { updateAsset, createAsset, fetchWarehouses } from './assets';
+import { updateAsset, createAsset, fetchWarehouses, generateUuid, sanitizeUuid, isUuid } from './assets';
 import { logActivity } from './activityLogs';
 import { generateNextVoucherCode } from '../lib/voucherEngine';
 import { createNotification } from './notifications';
@@ -218,7 +218,7 @@ export async function createTransaction(
 
     const itemsToInsert = items.map(it => ({
       transaction_id: tx.id,
-      asset_id: it.asset_id,
+      asset_id: sanitizeUuid(it.asset_id),
       type: it.type,
       reason: it.details?.reason || null,
       details: it.details,
@@ -454,13 +454,13 @@ export async function decideTransactionItem(
               if (!child.certificate_no) continue;
               const childAssetData = {
                 certificate_no: child.certificate_no,
-                project_id: currentAsset?.project_id || null,
+                project_id: sanitizeUuid(currentAsset?.project_id),
                 subdivision: child.subdivision || currentAsset?.subdivision || null,
                 lot_no: child.land_lot_no || currentAsset?.lot_no || null,
                 area: child.area ? Number(child.area) : null,
                 owner_name: currentAsset?.owner_name || null,
-                warehouse_id: currentAsset?.warehouse_id || null,
-                parent_asset_id: effectiveAssetId,
+                warehouse_id: sanitizeUuid(currentAsset?.warehouse_id),
+                parent_asset_id: sanitizeUuid(effectiveAssetId),
                 custody_status: 'in_stock' as any,
                 lifecycle_status: 'active' as any,
                 sale_status: 'not_ready' as any,
@@ -482,13 +482,13 @@ export async function decideTransactionItem(
             const reissuedAssetData = {
               certificate_no: details.newCertificateNo,
               registry_no: details.newRegistryNo || currentAsset?.registry_no || null,
-              project_id: currentAsset?.project_id || null,
+              project_id: sanitizeUuid(currentAsset?.project_id),
               subdivision: currentAsset?.subdivision || null,
               lot_no: currentAsset?.lot_no || null,
               area: currentAsset?.area || null,
               owner_name: currentAsset?.owner_name || null,
-              warehouse_id: currentAsset?.warehouse_id || null,
-              parent_asset_id: effectiveAssetId,
+              warehouse_id: sanitizeUuid(currentAsset?.warehouse_id),
+              parent_asset_id: sanitizeUuid(effectiveAssetId),
               custody_status: 'in_stock' as any,
               lifecycle_status: 'active' as any,
               sale_status: currentAsset?.sale_status || 'not_ready',
@@ -828,6 +828,7 @@ async function createTransferReceiptStep(params: {
  */
 export interface BulkDecideItemPayload {
   itemId?: string;
+  isNewlyAdded?: boolean;
   assetId: string;
   decision: 'approved';
   notes?: string;
@@ -848,7 +849,7 @@ export async function bulkDecideTransactionItems(params: {
 
   // 1. Duyệt các mục được chấp thuận
   for (const item of approvedItems) {
-    if (item.itemId && !item.itemId.startsWith('new-added-')) {
+    if (item.itemId && !item.isNewlyAdded && !item.itemId.startsWith('new-added-') && isUuid(item.itemId)) {
       await decideTransactionItem(
         item.itemId,
         'approved',
@@ -861,7 +862,7 @@ export async function bulkDecideTransactionItems(params: {
       // GCN mới thêm trực tiếp trong modal
       const txs = mockStore.getTransactions();
       const parentTx = txs.find(t => t.id === transactionId) || txs[0];
-      const newTxItemId = 'txi-bulk-add-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      const newTxItemId = generateUuid();
       const allAssets = mockStore.getAssets();
       const asset = allAssets.find(a => a.id === item.assetId);
 

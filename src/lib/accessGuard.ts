@@ -154,3 +154,5 @@ export function isAccessExpired(expiresAt: string | null | undefined): boolean {
   const t = new Date(expiresAt).getTime();
   return isNaN(t) || t <= Date.now();
 }
+
+export { checkWarehouseAccess, hasWarehouseAccess } from './permissions';

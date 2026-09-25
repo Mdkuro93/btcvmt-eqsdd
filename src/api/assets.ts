@@ -22,6 +22,30 @@ function getDifferences(oldData: Record<string, any>, newData: Record<string, an
   return { oldDiff, newDiff };
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(val: unknown): val is string {
+  return typeof val === 'string' && UUID_REGEX.test(val.trim());
+}
+
+export function sanitizeUuid(val: unknown): string | null {
+  if (typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (!trimmed || trimmed === '') return null;
+  return isUuid(trimmed) ? trimmed : null;
+}
+
+export function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promise<{ data: Asset[], totalCount: number, source?: 'supabase' | 'mock', error?: any }> {
   if (!isSupabaseConfigured) {
     const allFiltered = mockStore.getAssets(filters);
@@ -355,18 +379,18 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
   const provinceCodeHint = (assetData as any).provinceCodeHint || (assetData as any).province;
   const autoCode = assetData.asset_code || generateNextAssetCode(regionCode, provinceCodeHint, collateralType, current);
 
-  const fullAsset: Asset = {
-    id: 'asset-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+  // Chuẩn hóa dữ liệu insert: chuyển các UUID foreign keys rỗng "" hoặc không hợp lệ thành null
+  const payloadToInsert: Record<string, any> = {
     asset_code: autoCode,
     collateral_type: collateralType,
     certificate_no: assetData.certificate_no || 'GCN-VMT-' + Math.floor(Math.random() * 1000),
-    project_id: assetData.project_id || null,
+    project_id: sanitizeUuid(assetData.project_id),
     certificate_group: assetData.certificate_group || null,
     legal_lot_code: assetData.legal_lot_code || null,
     business_project_name: assetData.business_project_name?.trim() || null,
     business_plot_code: assetData.business_plot_code?.trim() || null,
     area: assetData.area || 0,
-    current_owner_entity_id: assetData.current_owner_entity_id || null,
+    current_owner_entity_id: sanitizeUuid(assetData.current_owner_entity_id),
     
     map_sheet_no: assetData.map_sheet_no || null,
     land_lot_no: assetData.land_lot_no || null,
@@ -389,7 +413,7 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     
     notes: assetData.notes || null,
     scan_file_url: assetData.scan_file_url || null,
-    parent_asset_id: assetData.parent_asset_id || null,
+    parent_asset_id: sanitizeUuid(assetData.parent_asset_id),
     
     expected_return_date: assetData.expected_return_date || null,
     borrow_purpose: assetData.borrow_purpose || null,
@@ -398,12 +422,19 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     lifecycle_status: assetData.lifecycle_status || 'active',
     sale_status: assetData.sale_status || 'not_ready',
     mortgage_status: assetData.mortgage_status || 'none',
-    warehouse_id: assetData.warehouse_id || null,
+    warehouse_id: sanitizeUuid(assetData.warehouse_id),
     current_holder_dept: assetData.current_holder_dept || null,
-    created_at: new Date().toISOString(),
   };
 
+  // TUYỆT ĐỐI không gửi trường id lên Supabase khi tạo mới: PostgreSQL/Supabase tự sinh UUID mặc định
+  delete payloadToInsert.id;
+
   if (!isSupabaseConfigured) {
+    const fullAsset: Asset = {
+      ...(payloadToInsert as any),
+      id: generateUuid(),
+      created_at: new Date().toISOString(),
+    };
     mockStore.saveAssets([fullAsset, ...current]);
     return mockStore.getAssets().find(a => a.id === fullAsset.id)!;
   }
@@ -411,7 +442,7 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
   const { data, error } = await withTimeout(
     supabase
       .from('assets')
-      .insert([fullAsset])
+      .insert([payloadToInsert])
       .select()
       .single(),
     DEFAULT_WRITE_TIMEOUT
@@ -447,11 +478,20 @@ export async function updateAsset(
     currentAsset = dbAsset || {};
   }
 
-  const payload = {
+  const payload: any = {
     ...updates,
     updated_at: new Date().toISOString(),
     updated_by: user?.id || null,
   };
+
+  // Loại bỏ trường id nếu có trong updates để tránh lỗi update primary key
+  delete payload.id;
+
+  // Chuẩn hóa UUID foreign keys: đổi chuỗi rỗng "" hoặc text không hợp lệ thành null
+  if ('project_id' in updates) payload.project_id = sanitizeUuid(updates.project_id);
+  if ('warehouse_id' in updates) payload.warehouse_id = sanitizeUuid(updates.warehouse_id);
+  if ('parent_asset_id' in updates) payload.parent_asset_id = sanitizeUuid(updates.parent_asset_id);
+  if ('current_owner_entity_id' in updates) payload.current_owner_entity_id = sanitizeUuid(updates.current_owner_entity_id);
 
   const { oldDiff, newDiff } = getDifferences(currentAsset, payload);
 
@@ -519,6 +559,12 @@ export async function bulkUpdateAssets(
     updated_at: new Date().toISOString(),
     updated_by: user?.id || null,
   };
+
+  delete payload.id;
+  if ('project_id' in updates) payload.project_id = sanitizeUuid(updates.project_id);
+  if ('warehouse_id' in updates) payload.warehouse_id = sanitizeUuid(updates.warehouse_id);
+  if ('parent_asset_id' in updates) payload.parent_asset_id = sanitizeUuid(updates.parent_asset_id);
+  if ('current_owner_entity_id' in updates) payload.current_owner_entity_id = sanitizeUuid(updates.current_owner_entity_id);
 
   // Clean undefined
   Object.keys(payload).forEach(k => {
@@ -923,11 +969,11 @@ export async function importAssets(assetsData: any[]) {
     const code = a.asset_code || generateNextAssetCode(regionCode, a.provinceCodeHint || a.province, colType, accumulatedAssets);
 
     const assetItem: Asset = {
-      id: 'asset-' + Date.now() + '-' + idx,
+      id: generateUuid(),
       asset_code: code,
       collateral_type: colType,
       certificate_no: a.certificate_no || `GCN-IMPORT-${idx + 1}`,
-      project_id: a.project_id || null,
+      project_id: sanitizeUuid(a.project_id),
       legal_lot_code: a.legal_lot_code || null,
       business_project_name: a.business_project_name || null,
       business_plot_code: a.business_plot_code || null,
@@ -944,9 +990,9 @@ export async function importAssets(assetsData: any[]) {
       custody_status: a.custody_status || 'in_stock',
       lifecycle_status: a.lifecycle_status || 'active',
       sale_status: a.sale_status || 'not_ready',
-      warehouse_id: a.warehouse_id || null,
+      warehouse_id: sanitizeUuid(a.warehouse_id),
       current_holder_dept: a.current_holder_dept || null,
-      current_owner_entity_id: a.current_owner_entity_id || null,
+      current_owner_entity_id: sanitizeUuid(a.current_owner_entity_id),
       current_owner_role: a.current_owner_role || null,
       notes: a.notes || null,
       created_at: new Date().toISOString(),
@@ -961,10 +1007,22 @@ export async function importAssets(assetsData: any[]) {
     return newAssets;
   }
   try {
+    // Khi insert lên Supabase: bỏ trường id để PostgreSQL tự sinh UUID chuẩn
+    const assetsForSupabase = newAssets.map(item => {
+      const { id: _id, ...rest } = item;
+      return {
+        ...rest,
+        project_id: sanitizeUuid(rest.project_id),
+        warehouse_id: sanitizeUuid(rest.warehouse_id),
+        parent_asset_id: sanitizeUuid((rest as any).parent_asset_id),
+        current_owner_entity_id: sanitizeUuid(rest.current_owner_entity_id),
+      };
+    });
+
     const { data, error } = await withTimeout(
       supabase
         .from('assets')
-        .insert(newAssets)
+        .insert(assetsForSupabase)
         .select(),
       DEFAULT_WRITE_TIMEOUT
     );
@@ -1506,10 +1564,21 @@ export async function createMultipleAssets(assetsData: Partial<Asset>[]): Promis
     return importAssets(assetsData);
   }
   try {
+    const assetsForSupabase = assetsData.map(item => {
+      const { id: _id, ...rest } = item;
+      return {
+        ...rest,
+        project_id: sanitizeUuid(rest.project_id),
+        warehouse_id: sanitizeUuid(rest.warehouse_id),
+        parent_asset_id: sanitizeUuid(rest.parent_asset_id),
+        current_owner_entity_id: sanitizeUuid(rest.current_owner_entity_id),
+      };
+    });
+
     const { data, error } = await withTimeout(
       supabase
         .from('assets')
-        .insert(assetsData)
+        .insert(assetsForSupabase)
         .select(),
       DEFAULT_WRITE_TIMEOUT
     );

@@ -3,12 +3,18 @@ import { Project, Area, InvestorEntity } from '../../types';
 import { fetchProjects, createProject, updateProject, deleteProject, fetchAreas } from '../../api/assets';
 import { fetchInvestorEntities } from '../../api/investorEntities';
 import { mockStore } from '../../lib/mockStore';
-import { FolderGit2, Plus, Edit2, Trash2, Search, X } from 'lucide-react';
+import { FolderGit2, Plus, Edit2, Trash2, Search, X, LandPlot } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../ConfirmModal';
 import { LoadingFallback } from '../LoadingFallback';
+import { ProjectPlannedLotsModal } from './ProjectPlannedLotsModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const AdminProjects: React.FC = () => {
+  const { profile } = useAuth();
+  // Ban PTDA (project_dept) chỉ được quản lý Lô quy hoạch pháp lý (nút LandPlot bên dưới),
+  // KHÔNG được thêm/sửa/xóa Dự án — việc đó vẫn thuộc admin/super_admin/btc_manager (theo RLS bảng projects).
+  const canManageProjects = profile?.role !== 'project_dept';
   const [projects, setProjects] = useState<Project[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [entities, setEntities] = useState<InvestorEntity[]>([]);
@@ -24,6 +30,7 @@ export const AdminProjects: React.FC = () => {
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [plannedLotsProject, setPlannedLotsProject] = useState<Project | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -129,7 +136,8 @@ export const AdminProjects: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Form thêm mới dự án */}
+      {/* Form thêm mới dự án — chỉ vai trò được sửa danh mục Dự án mới thấy */}
+      {canManageProjects && (
       <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
         <h3 className="text-xs font-bold uppercase text-[#1E3A8A] mb-3 flex items-center gap-1.5">
           <Plus className="w-4 h-4" /> Thêm Dự án Bất động sản mới
@@ -181,6 +189,7 @@ export const AdminProjects: React.FC = () => {
           </div>
         </form>
       </div>
+      )}
 
       {/* Search Project Toolbar */}
       <div className="relative">
@@ -227,6 +236,16 @@ export const AdminProjects: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
+                    onClick={() => setPlannedLotsProject(p)}
+                    className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
+                    title="Quản lý lô quy hoạch pháp lý"
+                  >
+                    <LandPlot className="w-4 h-4" />
+                  </button>
+                  {canManageProjects && (
+                  <>
+                  <button
+                    type="button"
                     onClick={() => setEditingProject({
                       id: p.id,
                       name: p.name,
@@ -246,6 +265,8 @@ export const AdminProjects: React.FC = () => {
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                  </>
+                  )}
                 </div>
               </div>
             );
@@ -334,6 +355,13 @@ export const AdminProjects: React.FC = () => {
         confirmVariant="danger"
         loading={isDeleting}
       />
+
+      {plannedLotsProject && (
+        <ProjectPlannedLotsModal
+          project={plannedLotsProject}
+          onClose={() => setPlannedLotsProject(null)}
+        />
+      )}
     </div>
   );
 };

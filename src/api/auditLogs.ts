@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { AuditLog } from '../types';
 import { mockStore } from '../lib/mockStore';
+import { sanitizeUuid } from './assets';
 
 export const fetchAuditLogs = async (recordId?: string): Promise<AuditLog[]> => {
   if (!isSupabaseConfigured) {
@@ -49,11 +50,11 @@ export const createAuditLog = async (
       .from('audit_logs')
       .insert([
         {
-          record_id: log.record_id,
+          record_id: String(log.record_id),
           action: log.action,
           old_data: log.old_data || null,
           new_data: log.new_data || null,
-          changed_by: log.changed_by || null,
+          changed_by: sanitizeUuid(log.changed_by),
           changed_by_name: log.changed_by_name || null,
           notes: log.notes || null,
         },

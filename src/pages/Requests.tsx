@@ -886,3 +886,5 @@ export const Requests: React.FC = () => {
     </div>
   );
 };
+
+export default Requests;

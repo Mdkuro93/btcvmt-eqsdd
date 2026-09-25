@@ -266,3 +266,5 @@ export const ActivityLogs: React.FC = () => {
     </div>
   );
 };
+
+export default ActivityLogs;

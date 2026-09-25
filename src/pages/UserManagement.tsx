@@ -546,3 +546,5 @@ export const UserManagement: React.FC = () => {
     </div>
   );
 };
+
+export default UserManagement;

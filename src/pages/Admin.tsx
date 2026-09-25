@@ -20,7 +20,13 @@ import { AdminInternalUsers } from '../components/admin/AdminInternalUsers';
 export const Admin: React.FC = () => {
   const { profile } = useAuth();
 
+  // Quản trị viên: dùng đủ mọi tab. Trưởng phòng Dự án (PTDA) / BTC Manager: CHỈ được vào để quản lý
+  // lô quy hoạch pháp lý trong tab "Dự án" — không thấy/không đụng được các tab quản trị khác.
+  const isFullAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const isProjectScoped = profile?.role === 'project_dept' || profile?.role === 'btc_manager';
+
   const [activeTab, setActiveTab] = useState<'regions' | 'areas' | 'warehouses' | 'projects' | 'users' | 'investor_entities'>(() => {
+    if (!isFullAdmin) return 'projects';
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
     if (tabParam === 'regions' || tabParam === 'areas' || tabParam === 'projects' || 
@@ -37,8 +43,8 @@ export const Admin: React.FC = () => {
   // Key to force refresh sub-components after standard data reset
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Chỉ dành cho Quản trị viên (Admin / Super Admin)
-  if (profile && profile.role !== 'admin' && profile.role !== 'super_admin') {
+  // Quản trị viên vào toàn bộ trang; PTDA/BTC Manager chỉ vào để quản lý lô quy hoạch (tab "Dự án").
+  if (profile && !isFullAdmin && !isProjectScoped) {
     return <Navigate to="/" replace />;
   }
 
@@ -66,25 +72,30 @@ export const Admin: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Settings className="w-5 h-5 text-[#1E3A8A]" />
-            Cấu hình Danh mục &amp; Phân quyền Hệ thống
+            {isFullAdmin ? 'Cấu hình Danh mục & Phân quyền Hệ thống' : 'Quản lý Lô quy hoạch pháp lý theo Dự án'}
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Quản trị Vùng, Địa bàn, Kho lưu trữ chứng từ, Dự án BĐS, Pháp nhân CĐT/NĐT và Phân quyền người dùng
+            {isFullAdmin
+              ? 'Quản trị Vùng, Địa bàn, Kho lưu trữ chứng từ, Dự án BĐS, Pháp nhân CĐT/NĐT và Phân quyền người dùng'
+              : 'Chọn dự án để khai báo/nhập Excel các lô đất chưa cấp GCN riêng'}
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsResetModalOpen(true)}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-[#1E3A8A] border border-blue-200 hover:bg-blue-100 transition-colors shadow-xs cursor-pointer"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Khôi phục Dữ liệu chuẩn VMT
-        </button>
+        {isFullAdmin && (
+          <button
+            type="button"
+            onClick={() => setIsResetModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-[#1E3A8A] border border-blue-200 hover:bg-blue-100 transition-colors shadow-xs cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Khôi phục Dữ liệu chuẩn VMT
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 bg-white px-4 rounded-t-xl overflow-x-auto gap-1">
+        {isFullAdmin && (
         <button
           onClick={() => setActiveTab('regions')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
@@ -93,6 +104,8 @@ export const Admin: React.FC = () => {
         >
           <Building2 className="w-4 h-4" /> Vùng
         </button>
+        )}
+        {isFullAdmin && (
         <button
           onClick={() => setActiveTab('areas')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
@@ -101,6 +114,7 @@ export const Admin: React.FC = () => {
         >
           <MapPin className="w-4 h-4" /> Địa bàn
         </button>
+        )}
         <button
           onClick={() => setActiveTab('projects')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
@@ -109,6 +123,7 @@ export const Admin: React.FC = () => {
         >
           <FolderGit2 className="w-4 h-4" /> Dự án
         </button>
+        {isFullAdmin && (
         <button
           onClick={() => setActiveTab('warehouses')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
@@ -117,6 +132,8 @@ export const Admin: React.FC = () => {
         >
           <WarehouseIcon className="w-4 h-4" /> Kho lưu trữ
         </button>
+        )}
+        {isFullAdmin && (
         <button
           onClick={() => setActiveTab('investor_entities')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
@@ -125,6 +142,8 @@ export const Admin: React.FC = () => {
         >
           <Building className="w-4 h-4 text-rose-600" /> Pháp nhân CĐT/NĐT
         </button>
+        )}
+        {isFullAdmin && (
         <button
           onClick={() => setActiveTab('users')}
           className={`py-3.5 px-3 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer ${
@@ -133,6 +152,7 @@ export const Admin: React.FC = () => {
         >
           <Shield className="w-4 h-4" /> Tài khoản nội bộ
         </button>
+        )}
       </div>
 
       <div className="bg-white p-6 rounded-b-xl border border-gray-200 shadow-xs" key={refreshKey}>

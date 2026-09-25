@@ -142,8 +142,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (!profile) return false;
     // Tài khoản đang chờ duyệt chỉ thấy mục "Quyền truy cập của tôi"
     if (profile.status === 'pending') return item.href === '/my-access';
-    const r = profile.role;
-    if (r === 'admin' || r === 'super_admin') return true;
+    const r = (profile.role || '').toLowerCase();
+    // Admin và Quản trị viên đã có toàn quyền tất cả các kho -> ẩn mục "Quyền truy cập của tôi"
+    if (r === 'admin' || r === 'super_admin') {
+      if (item.href === '/my-access') return false;
+      return true;
+    }
     if (item.roles.includes(r)) return true;
     if (r === 'quan_ly' && (item.roles.includes('warehouse_manager') || item.roles.includes('btc_manager'))) return true;
     if (r === 'chuyen_vien' && (item.roles.includes('capital_dept') || item.roles.includes('project_dept') || item.roles.includes('re_dept'))) return true;
@@ -234,15 +238,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </Link>
 
                 {/* Tooltip khi hover vào Icon ở trạng thái Thu gọn */}
-                <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none absolute left-full ml-3.5 top-1/2 -translate-y-1/2 z-50 whitespace-nowrap">
-                  <div className="bg-slate-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-slate-700">
+                <div 
+                  role="tooltip"
+                  className="opacity-0 invisible -translate-x-1 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-150 ease-out pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 whitespace-nowrap"
+                >
+                  <div className="bg-slate-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-slate-700/80 backdrop-blur-xs">
                     <span>{item.name}</span>
                     {item.badge !== undefined && (
                       <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-slate-950">
                         {item.badge}
                       </span>
                     )}
-                    <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+                    {/* Mũi tên tooltip chỉ về phía icon */}
+                    <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-slate-900" />
                   </div>
                 </div>
               </div>

@@ -24,6 +24,7 @@ import { BtcManagerDashboard } from '../components/dashboard/BtcManagerDashboard
 import { WarehouseManagerDashboard } from '../components/dashboard/WarehouseManagerDashboard';
 import { DepartmentDashboard } from '../components/dashboard/DepartmentDashboard';
 import { ViewerDashboard } from '../components/dashboard/ViewerDashboard';
+import { PlannedLotsCountBanner } from '../components/dashboard/PlannedLotsCountBanner';
 
 export const Dashboard: React.FC = () => {
   const { profile } = useAuth();
@@ -236,6 +237,8 @@ export const Dashboard: React.FC = () => {
         isRealtimeActive={isSupabaseConfigured}
       />
 
+      <PlannedLotsCountBanner />
+
       {/* Dynamic Role-Based Tailored Dashboard (Lối truy cập nhanh đã được loại bỏ) */}
       <div className="mt-8">
         {isAdminOrSupervisorGroup ? (
@@ -274,3 +277,5 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+export default Dashboard;

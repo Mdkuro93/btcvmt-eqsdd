@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
+import { sanitizeUuid } from './assets';
 
 export async function fetchDeclarationRequests(filters?: any): Promise<any[]> {
   if (!isSupabaseConfigured) {
@@ -29,8 +30,19 @@ export async function createDeclarationRequest(payload: any): Promise<any> {
     throw new Error('Tính năng này yêu cầu kết nối Supabase.');
   }
 
+  const { id: _id, ...rest } = payload;
+  const sanitized = {
+    ...rest,
+    parent_asset_id: sanitizeUuid(rest.parent_asset_id),
+    old_asset_id: sanitizeUuid(rest.old_asset_id),
+    project_id: sanitizeUuid(rest.project_id),
+    warehouse_id: sanitizeUuid(rest.warehouse_id),
+    current_owner_entity_id: sanitizeUuid(rest.current_owner_entity_id),
+    requester_id: sanitizeUuid(rest.requester_id),
+  };
+
   const { error } = await withTimeout(
-    supabase.from('asset_declaration_requests').insert([payload]),
+    supabase.from('asset_declaration_requests').insert([sanitized]),
     DEFAULT_WRITE_TIMEOUT
   );
   if (error) throw new Error('Lỗi createDeclarationRequest: ' + error.message);

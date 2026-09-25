@@ -9,7 +9,8 @@ import {
   Store, 
   Clock, 
   ChevronRight,
-  KeyRound
+  KeyRound,
+  Search
 } from 'lucide-react';
 import { fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api/notifications';
 import { fetchAccessRequests } from '../api/accessRequests';
@@ -19,9 +20,26 @@ import { format } from 'date-fns';
 import { RoleSwitcher, RoleSimulationBanner } from '../components/RoleSwitcher';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import { Sidebar } from '../components/Sidebar';
+import { GlobalSearchModal } from '../components/GlobalSearchModal';
 
 export const MainLayout: React.FC = () => {
   const { profile, signOut, user } = useAuth();
+
+  // Global search modal state (Ctrl + K)
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // Lắng nghe phím tắt Ctrl + K / Cmd + K toàn cục
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setIsSearchOpen(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Sidebar collapsed state with localStorage persistence
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -146,6 +164,20 @@ export const MainLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-3">
+            {/* Global Search Button (Ctrl + K) */}
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-900 bg-gray-100/80 hover:bg-gray-200/80 border border-gray-200 rounded-lg transition-all shadow-2xs group cursor-pointer"
+              title="Tìm kiếm nhanh toàn hệ thống (Ctrl + K hoặc Cmd + K)"
+              aria-label="Tìm kiếm nhanh (Ctrl + K)"
+            >
+              <Search className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#1E3A8A] transition-colors" />
+              <span className="hidden sm:inline font-medium text-gray-600">Tìm kiếm...</span>
+              <kbd className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 bg-white border border-gray-200 rounded-sm shadow-2xs">
+                <span className="text-[9px]">⌘</span>K
+              </kbd>
+            </button>
 
             {/* Notification Bell Dropdown */}
             <div className="relative" ref={notifRef}>
@@ -276,6 +308,12 @@ export const MainLayout: React.FC = () => {
           isOpen={isChangePasswordOpen}
           onClose={() => setIsChangePasswordOpen(false)}
           userEmail={user?.email || profile?.email}
+        />
+
+        {/* Global Search Modal (Ctrl + K) */}
+        <GlobalSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
         />
 
         {/* Main scrollable area */}

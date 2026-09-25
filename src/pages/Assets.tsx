@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   fetchAssets,
@@ -20,6 +21,7 @@ import { AssetExtensionModal } from '../components/AssetExtensionModal';
 import { BulkEditModal } from '../components/BulkEditModal';
 import { AssetAuditModal } from '../components/AssetAuditModal';
 import { DeleteAssetsModal } from '../components/DeleteAssetsModal';
+import { AssetTable } from '../components/AssetTable';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { exportAssetsToExcel } from '../lib/excelHelper';
 import { COLLATERAL_TYPES, formatPlotCode } from '../lib/assetIdentifier';
@@ -80,14 +82,24 @@ import { format } from 'date-fns';
 
 export const Assets: React.FC = () => {
   const { user, profile } = useAuth();
+  const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
 
-  // Filters with useDebounce for search
-  const [search, setSearch] = useState('');
+  // Filters with useDebounce for search (hỗ trợ đọc từ ?search= khi điều hướng từ GlobalSearch)
+  const initialSearch = searchParams.get('search') || '';
+  const [search, setSearch] = useState(initialSearch);
   const debouncedSearch = useDebounce(search, 400);
+
+  // Đồng bộ nếu searchParams đổi từ bên ngoài
+  useEffect(() => {
+    const s = searchParams.get('search');
+    if (s !== null && s !== search) {
+      setSearch(s);
+    }
+  }, [searchParams]);
 
   const [collateralType, setCollateralType] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -151,7 +163,7 @@ export const Assets: React.FC = () => {
   }, [debouncedSearch]);
 
   // Selection
-  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -288,25 +300,24 @@ export const Assets: React.FC = () => {
 
   // Selection handlers
   const handleSelectAll = () => {
-    if (selectedAssetIds.size === assets.length && assets.length > 0) {
-      setSelectedAssetIds(new Set());
+    if (selectedAssetIds.length === assets.length && assets.length > 0) {
+      setSelectedAssetIds([]);
     } else {
-      setSelectedAssetIds(new Set(assets.map(a => a.id)));
+      setSelectedAssetIds(assets.map(a => a.id));
     }
   };
 
   const handleToggleSelect = (id: string) => {
-    const next = new Set(selectedAssetIds);
-    if (next.has(id)) {
-      next.delete(id);
+    if (selectedAssetIds.includes(id)) {
+      setSelectedAssetIds(selectedAssetIds.filter(item => item !== id));
     } else {
-      next.add(id);
+      setSelectedAssetIds([...selectedAssetIds, id]);
     }
-    setSelectedAssetIds(next);
   };
 
   const selectedAssetsList = useMemo(() => {
-    return assets.filter(a => selectedAssetIds.has(a.id));
+    const idSet = new Set(selectedAssetIds);
+    return assets.filter(a => idSet.has(a.id));
   }, [assets, selectedAssetIds]);
 
   // Copy helper
@@ -397,7 +408,7 @@ export const Assets: React.FC = () => {
             title="Xuất Excel danh sách hiện tại"
           >
             <Download className="w-4 h-4 text-emerald-600" />
-            <span>Xuất Excel {selectedAssetIds.size > 0 ? `(${selectedAssetIds.size})` : ''}</span>
+            <span>Xuất Excel {selectedAssetIds.length > 0 ? `(${selectedAssetIds.length})` : ''}</span>
           </button>
 
           {canImport && (
@@ -609,69 +620,6 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
-      {/* Bulk Action Banner */}
-      {selectedAssetIds.size > 0 && (
-        <div id="bulk-action-bar" className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <CheckSquare className="w-5 h-5 text-blue-600" />
-            <span className="text-sm font-semibold text-blue-900">
-              Đã chọn {selectedAssetIds.size} / {totalCount} tài sản
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {canBulkTransferAssets(profile, selectedAssetsList) && (
-              <button
-                id="btn-bulk-transfer"
-                onClick={() => {
-                  setTransferTargetAssets(selectedAssetsList);
-                  setIsTransferModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs"
-              >
-                <ArrowLeftRight className="w-3.5 h-3.5" />
-                <span>Chuyển quyền sở hữu ({selectedAssetIds.size})</span>
-              </button>
-            )}
-
-            <button
-              id="btn-bulk-edit"
-              onClick={() => setIsBulkEditOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors shadow-2xs"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-amber-600" />
-              <span>Sửa hàng loạt</span>
-            </button>
-
-            <button
-              id="btn-bulk-request"
-              onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors shadow-2xs"
-            >
-              <Layers className="w-3.5 h-3.5 text-blue-600" />
-              <span>Tạo yêu cầu kho</span>
-            </button>
-
-            {canDelete && (
-              <button
-                id="btn-bulk-delete"
-                onClick={() => setIsDeleteMultipleModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors shadow-2xs"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                <span>Xóa đã chọn</span>
-              </button>
-            )}
-
-            <button
-              id="btn-clear-selection"
-              onClick={() => setSelectedAssetIds(new Set())}
-              className="px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
-            >
-              Bỏ chọn
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Main Asset Table */}
       <div id="assets-table-container" className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -803,336 +751,46 @@ export const Assets: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className={`overflow-x-auto relative transition-opacity duration-150 ${isFetching ? 'opacity-60' : 'opacity-100'}`}>
-            {isFetching && (
-              <div className="absolute top-0 left-0 right-0 z-30 h-0.5 bg-blue-500 animate-pulse" />
-            )}
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                  <th className={`${tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'} w-10 text-center`}>
-                    <input
-                      type="checkbox"
-                      checked={selectedAssetIds.size === assets.length && assets.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                  </th>
-                  <th className={tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'}>Số GCN & Mã TSĐB</th>
-                  <th className={tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'}>Dự Án / Kho</th>
-                  <th className={tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'}>Dự Án KD / Lô KD</th>
-                  <th className={tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'}>Mã Lô PL & Thửa/Tờ</th>
-                  <th className={`${tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'} text-right`}>Diện tích</th>
-                  <th className={tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'}>Chủ Sở Hữu (CĐT/NĐT)</th>
-                  <th className={tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'}>Trạng Thái</th>
-                  <th className={tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'}>Thế Chấp & Ngân Hàng</th>
-                  <th className={`${tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3'} text-center sticky right-0 z-20 bg-slate-800 text-slate-100 border-l border-slate-700 font-semibold uppercase tracking-wider text-xs whitespace-nowrap`}>
-                    Thao tác
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 text-slate-700">
-                {assets.map((asset) => {
-                  const isSelected = selectedAssetIds.has(asset.id);
-                  const isOverdue = isAssetOverdue(asset);
-                  const rowPadding = tableDensity === 'compact' ? 'py-1.5 px-2.5' : 'py-3 px-3';
-                  const textSize = tableDensity === 'compact' ? 'text-xs' : 'text-sm';
-
-                  const ownerName =
-                    asset.current_owner_entity?.name ||
-                    asset.investor_entities?.name ||
-                    'Chưa cập nhật';
-                  const ownerRole =
-                    asset.current_owner_role === 'cdt'
-                      ? 'Chủ đầu tư'
-                      : asset.current_owner_role === 'ndt'
-                      ? 'Nhà đầu tư'
-                      : null;
-
-                  return (
-                    <tr
-                      key={asset.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        isSelected ? 'bg-blue-50/50' : ''
-                      } ${isOverdue ? 'bg-rose-50/30' : ''}`}
-                    >
-                      {/* Checkbox */}
-                      <td className={`${rowPadding} text-center`}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleToggleSelect(asset.id)}
-                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        />
-                      </td>
-
-                      {/* Số GCN & Mã TSĐB (Gộp cột) */}
-                      <td className={rowPadding}>
-                        {/* Hàng 1: Số GCN nổi bật */}
-                        <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                          <span className="text-sm font-bold text-slate-900 tracking-tight">{asset.certificate_no}</span>
-                          {asset.scan_file_url && (
-                            <button
-                              onClick={() =>
-                                setPreviewDoc({
-                                  urlOrPath: asset.scan_file_url!,
-                                  certificateNo: asset.certificate_no,
-                                  title: `Bản scan GCN ${asset.certificate_no}`,
-                                })
-                              }
-                              className="text-blue-600 hover:text-blue-800 transition-colors"
-                              title="Xem bản scan tài liệu"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {asset.certificate_group === 'so_lon' ? (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
-                              Sổ lớn
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 whitespace-nowrap">
-                              Phân lô
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Hàng 2: Mã TSĐB font mono nhỏ nhạt màu + Loại TS */}
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="font-mono text-[11px] text-slate-500 tracking-tight" title={asset.asset_code || ''}>
-                            {asset.asset_code || '-'}
-                          </span>
-                          {asset.asset_code && (
-                            <button
-                              onClick={(e) => handleCopy(asset.asset_code!, e)}
-                              className="text-slate-400 hover:text-slate-600 transition-colors"
-                              title="Sao chép mã TSĐB"
-                            >
-                              {copiedCode === asset.asset_code ? (
-                                <Check className="w-3 h-3 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          )}
-                          <span className="inline-block px-1 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
-                            {asset.collateral_type || 'BDS'}
-                          </span>
-                          {asset.asset_type && (
-                            <span className="text-[10px] text-slate-400 truncate max-w-[90px]" title={asset.asset_type}>
-                              · {asset.asset_type}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Dự Án / Kho */}
-                      <td className={rowPadding}>
-                        <div className="font-medium text-slate-800 flex items-center gap-1">
-                          <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate max-w-[150px]">{asset.projects?.name || '-'}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <WarehouseIcon className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="truncate max-w-[150px]">{asset.warehouses?.name || '-'}</span>
-                        </div>
-                      </td>
-
-                      {/* Dự Án KD / Lô KD */}
-                      <td className={rowPadding}>
-                        <div className="font-medium text-slate-800 truncate max-w-[140px]">
-                          {asset.business_project_name || '-'}
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          {asset.business_plot_code ? (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-medium border border-amber-200/60">
-                              Lô KD: {asset.business_plot_code}
-                            </span>
-                          ) : (
-                            '-'
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Mã Lô PL & Thửa/Tờ */}
-                      <td className={rowPadding}>
-                        <div className="font-semibold text-slate-800">
-                          {formatPlotCode(asset.legal_lot_code)}
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          Thửa: <span className="text-slate-700">{asset.land_lot_no || '-'}</span> · Tờ:{' '}
-                          <span className="text-slate-700">{asset.map_sheet_no || '-'}</span>
-                        </div>
-                      </td>
-
-                      {/* Diện tích */}
-                      <td className={`${rowPadding} text-right font-medium text-slate-800`}>
-                        {asset.area ? `${Number(asset.area).toLocaleString('vi-VN')} m²` : '-'}
-                      </td>
-
-                      {/* Chủ Sở Hữu */}
-                      <td className={rowPadding}>
-                        <div className="font-medium text-slate-900 truncate max-w-[160px]" title={ownerName}>
-                          {ownerName}
-                        </div>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          {ownerRole && (
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                asset.current_owner_role === 'cdt'
-                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              }`}
-                            >
-                              {ownerRole}
-                            </span>
-                          )}
-                          {asset.current_owner_entity?.company_code && (
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              ({asset.current_owner_entity.company_code})
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Trạng Thái Badges */}
-                      <td className={rowPadding}>
-                        <StatusBadges
-                          custody_status={asset.custody_status}
-                          lifecycle_status={asset.lifecycle_status}
-                          sale_status={asset.sale_status}
-                          mortgage_status={asset.mortgage_status}
-                          showMortgage={false}
-                        />
-                        {isOverdue && (
-                          <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-rose-600">
-                            <AlertTriangle className="w-3 h-3 shrink-0" />
-                            <span>Quá hạn trả mượn</span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Thế Chấp & Ngân Hàng */}
-                      <td className={rowPadding}>
-                        {asset.mortgage_status === 'mortgaged' ? (
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
-                                Đang thế chấp
-                              </span>
-                              {asset.mortgage_bank && (
-                                <span className="font-semibold text-slate-900 text-xs truncate max-w-[130px]" title={asset.mortgage_bank}>
-                                  {asset.mortgage_bank}
-                                </span>
-                              )}
-                            </div>
-                            {asset.mortgage_unit && (
-                              <div className="text-[11px] text-slate-500 truncate max-w-[150px]" title={asset.mortgage_unit}>
-                                ĐV: {asset.mortgage_unit}
-                              </div>
-                            )}
-                            {asset.collateral_value && (
-                              <div className="text-[11px] font-semibold text-emerald-700">
-                                {Number(asset.collateral_value).toLocaleString('vi-VN')} đ
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 text-xs" title="Chưa thế chấp">—</span>
-                        )}
-                      </td>
-
-                      {/* Cố định Cột Thao Tác (Sticky Action Column) */}
-                      <td className={`${rowPadding} text-center whitespace-nowrap sticky right-0 z-10 bg-slate-800 border-l border-slate-700`}>
-                        <div className="flex items-center justify-center gap-1">
-                          {/* Xem chi tiết */}
-                          <button
-                            onClick={() => setDetailAsset(asset)}
-                            className="p-1.5 text-slate-300 hover:text-blue-400 hover:bg-slate-700 rounded transition-colors"
-                            title="Xem chi tiết đầy đủ GCN"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {/* Gia hạn nếu đang mượn */}
-                          {asset.custody_status === 'checked_out' && (
-                            <button
-                              onClick={() => setExtensionAsset(asset)}
-                              className="p-1.5 text-slate-300 hover:text-amber-400 hover:bg-slate-700 rounded transition-colors"
-                              title="Gia hạn thời gian mượn"
-                            >
-                              <CalendarClock className="w-4 h-4" />
-                            </button>
-                          )}
-
-                          {/* Chuyển quyền sở hữu */}
-                          {canTransferAsset(profile, asset) && (
-                            <button
-                              onClick={() => {
-                                setTransferTargetAssets([asset]);
-                                setIsTransferModalOpen(true);
-                              }}
-                              className="p-1.5 text-slate-300 hover:text-indigo-400 hover:bg-slate-700 rounded transition-colors"
-                              title="Chuyển quyền sở hữu (CĐT / NĐT)"
-                            >
-                              <ArrowLeftRight className="w-4 h-4" />
-                            </button>
-                          )}
-
-                          {/* Lịch sử hoạt động */}
-                          <button
-                            onClick={() => setHistoryAsset(asset)}
-                            className="p-1.5 text-slate-300 hover:text-cyan-400 hover:bg-slate-700 rounded transition-colors"
-                            title="Xem lịch sử giao dịch & luân chuyển"
-                          >
-                            <History className="w-4 h-4" />
-                          </button>
-
-                          {/* Kiểm toán biến động */}
-                          <button
-                            onClick={() => setAuditAsset(asset)}
-                            className="p-1.5 text-slate-300 hover:text-teal-400 hover:bg-slate-700 rounded transition-colors"
-                            title="Kiểm toán thay đổi dữ liệu"
-                          >
-                            <ShieldCheck className="w-4 h-4" />
-                          </button>
-
-                          {/* Sửa thông tin */}
-                          {canEdit(asset) && (
-                            <button
-                              onClick={() => setEditingAsset(asset)}
-                              className="p-1.5 text-slate-300 hover:text-amber-400 hover:bg-slate-700 rounded transition-colors"
-                              title="Chỉnh sửa thông tin GCN"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                          )}
-
-                          {/* Xóa GCN */}
-                          {canDelete && (
-                            <button
-                              onClick={() =>
-                                setAssetToDelete({
-                                  id: asset.id,
-                                  certificateNo: asset.certificate_no,
-                                  assetCode: asset.asset_code,
-                                  parentAssetId: asset.parent_asset_id,
-                                })
-                              }
-                              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/60 rounded transition-colors"
-                              title="Xóa GCN này"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <AssetTable
+            assets={assets}
+            totalCount={totalCount}
+            tableDensity={tableDensity}
+            isFetching={isFetching}
+            warehouses={warehouses}
+            projects={projects}
+            currentUser={profile}
+            selectedIds={selectedAssetIds}
+            onSelectionChange={setSelectedAssetIds}
+            onViewDetail={(asset) => setDetailAsset(asset)}
+            onEdit={(asset) => setEditingAsset(asset)}
+            onDelete={(asset) =>
+              setAssetToDelete({
+                id: asset.id,
+                certificateNo: asset.certificate_no,
+                assetCode: asset.asset_code,
+                parentAssetId: asset.parent_asset_id,
+              })
+            }
+            onTransfer={(asset) => {
+              setTransferTargetAssets([asset]);
+              setIsTransferModalOpen(true);
+            }}
+            onHistory={(asset) => setHistoryAsset(asset)}
+            onAudit={(asset) => setAuditAsset(asset)}
+            onExtend={(asset) => setExtensionAsset(asset)}
+            onPreviewDoc={(doc) => setPreviewDoc(doc)}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            canTransfer={(asset) => canTransferAsset(profile, asset)}
+            onBulkEdit={() => setIsBulkEditOpen(true)}
+            onBulkRequest={() => setIsModalOpen(true)}
+            onBulkTransferOwnership={() => {
+              setTransferTargetAssets(selectedAssetsList);
+              setIsTransferModalOpen(true);
+            }}
+            onExportExcel={handleExportExcel}
+            onRefreshData={loadAssets}
+          />
         )}
 
         {/* Pagination Footer */}
@@ -1427,7 +1085,9 @@ export const Assets: React.FC = () => {
           warehouses={warehouses}
           onSubmit={async (assetData) => {
             try {
-              await createAsset(assetData);
+              // Bỏ hoàn toàn trường id (nếu có) để PostgreSQL/Supabase tự sinh UUID
+              const { id: _id, ...cleanData } = assetData as any;
+              await createAsset(cleanData);
               toast.success('Đã thêm mới Giấy chứng nhận thành công!');
               setIsCreateModalOpen(false);
               loadAssets();
@@ -1487,7 +1147,7 @@ export const Assets: React.FC = () => {
           onClose={() => setIsBulkEditOpen(false)}
           onSuccess={() => {
             setIsBulkEditOpen(false);
-            setSelectedAssetIds(new Set());
+            setSelectedAssetIds([]);
             loadAssets();
           }}
         />
@@ -1506,7 +1166,7 @@ export const Assets: React.FC = () => {
           onSuccess={() => {
             setIsTransferModalOpen(false);
             setTransferTargetAssets([]);
-            setSelectedAssetIds(new Set());
+            setSelectedAssetIds([]);
             loadAssets();
           }}
         />
@@ -1535,7 +1195,7 @@ export const Assets: React.FC = () => {
               });
               toast.success('Đã tạo yêu cầu kho thành công!');
               setIsModalOpen(false);
-              setSelectedAssetIds(new Set());
+              setSelectedAssetIds([]);
               loadAssets();
             } catch (err: any) {
               toast.error('Lỗi khi gửi yêu cầu kho: ' + err.message);
@@ -1620,7 +1280,7 @@ export const Assets: React.FC = () => {
             );
             setAssetToDelete(null);
             setIsDeleteMultipleModalOpen(false);
-            setSelectedAssetIds(new Set());
+            setSelectedAssetIds([]);
             loadAssets();
           } catch (err: any) {
             toast.error('Không thể xóa: ' + (err?.message || 'Thao tác không thành công'));

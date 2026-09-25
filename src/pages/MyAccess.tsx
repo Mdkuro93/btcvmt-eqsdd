@@ -14,7 +14,7 @@ import {
   MyWarehouseCatalogItem,
 } from '../api/accessRequests';
 
-type RowState = 'active' | 'expiring' | 'expired' | 'pending' | 'rejected' | 'none';
+type RowState = 'admin' | 'active' | 'expiring' | 'expired' | 'pending' | 'rejected' | 'none';
 
 const EXPIRING_DAYS = 30;
 
@@ -28,11 +28,21 @@ interface Row {
 
 const fmt = (iso: string | null | undefined) => (iso ? format(new Date(iso), 'dd/MM/yyyy') : '—');
 
-function buildRows(overview: MyAccessOverview): Row[] {
+function buildRows(overview: MyAccessOverview, isAdmin: boolean): Row[] {
   const now = Date.now();
   const soon = now + EXPIRING_DAYS * 24 * 60 * 60 * 1000;
 
   return overview.warehouses.map(w => {
+    if (isAdmin) {
+      return {
+        warehouse: w,
+        state: 'admin',
+        expiresAt: null,
+        rejectReason: null,
+        requestedAt: null,
+      };
+    }
+
     const acc = overview.access.find(a => a.warehouse_id === w.id);
     const reqs = overview.requests.filter(r => r.warehouse_id === w.id); // đã sắp mới nhất trước
     const pending = reqs.find(r => r.status === 'pending');
@@ -65,6 +75,12 @@ const canSelect = (s: RowState) => s === 'none' || s === 'rejected' || s === 'ex
 
 const StateBadge: React.FC<{ row: Row }> = ({ row }) => {
   switch (row.state) {
+    case 'admin':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <span className="text-[11px] leading-none">🟢</span> Toàn quyền (Quản trị viên)
+        </span>
+      );
     case 'active':
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
@@ -114,6 +130,9 @@ export const MyAccess: React.FC = () => {
   const [purpose, setPurpose] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const role = (profile?.role || '').toLowerCase();
+  const isAdmin = role === 'admin' || role === 'super_admin' || role === 'btc_manager';
+
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
@@ -134,16 +153,17 @@ export const MyAccess: React.FC = () => {
     load();
   }, [load]);
 
-  const rows = useMemo(() => (overview ? buildRows(overview) : []), [overview]);
-  const hasActive = rows.some(r => r.state === 'active' || r.state === 'expiring');
+  const rows = useMemo(() => (overview ? buildRows(overview, isAdmin) : []), [overview, isAdmin]);
+  const hasActive = isAdmin || rows.some(r => r.state === 'active' || r.state === 'expiring' || r.state === 'admin');
 
   const toggle = (id: string) => {
+    if (isAdmin) return;
     setSelected(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   };
 
   const handleSubmit = async () => {
-    if (selected.length === 0) {
-      toast.error('Vui lòng chọn ít nhất một kho');
+    if (isAdmin || selected.length === 0) {
+      if (!isAdmin) toast.error('Vui lòng chọn ít nhất một kho');
       return;
     }
     setSubmitting(true);
@@ -182,7 +202,16 @@ export const MyAccess: React.FC = () => {
         </button>
       </div>
 
-      {profile?.status === 'pending' && (
+      {isAdmin && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-900 flex items-start gap-3 shadow-xs">
+          <span className="text-base shrink-0 leading-none mt-0.5">💡</span>
+          <div className="leading-relaxed font-medium">
+            Bạn đang đăng nhập với vai trò Quản trị hệ thống, bạn có toàn quyền truy cập tất cả các kho.
+          </div>
+        </div>
+      )}
+
+      {!isAdmin && profile?.status === 'pending' && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-900 flex items-start gap-3">
           <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
@@ -192,7 +221,7 @@ export const MyAccess: React.FC = () => {
         </div>
       )}
 
-      {hasActive && profile?.status !== 'pending' && (
+      {hasActive && (isAdmin || profile?.status !== 'pending') && (
         <Link
           to="/lookup"
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg"
@@ -217,19 +246,21 @@ export const MyAccess: React.FC = () => {
                 <div className="p-6 text-sm text-slate-500">Chưa có kho nào trong hệ thống.</div>
               )}
               {rows.map(row => {
-                const selectable = canSelect(row.state);
+                const selectable = !isAdmin && canSelect(row.state);
                 return (
                   <label
                     key={row.warehouse.id}
-                    className={`flex items-center gap-4 px-4 py-3 ${selectable ? 'cursor-pointer hover:bg-slate-50' : 'opacity-90'}`}
+                    className={`flex items-center gap-4 px-4 py-3 ${selectable ? 'cursor-pointer hover:bg-slate-50' : 'bg-white'}`}
                   >
-                    <input
-                      type="checkbox"
-                      disabled={!selectable}
-                      checked={selected.includes(row.warehouse.id)}
-                      onChange={() => toggle(row.warehouse.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-[#1E3A8A] focus:ring-[#1E3A8A] disabled:opacity-30"
-                    />
+                    {!isAdmin && (
+                      <input
+                        type="checkbox"
+                        disabled={!selectable}
+                        checked={selected.includes(row.warehouse.id)}
+                        onChange={() => toggle(row.warehouse.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-[#1E3A8A] focus:ring-[#1E3A8A] disabled:opacity-30"
+                      />
+                    )}
                     <WarehouseIcon className="w-4 h-4 text-slate-400 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-slate-900 truncate">{row.warehouse.name}</div>
@@ -239,10 +270,10 @@ export const MyAccess: React.FC = () => {
                     </div>
                     <div className="shrink-0 text-right">
                       <StateBadge row={row} />
-                      {(row.state === 'expiring' || row.state === 'expired') && (
+                      {!isAdmin && (row.state === 'expiring' || row.state === 'expired') && (
                         <div className="text-[11px] text-slate-500 mt-1">Chọn để xin gia hạn</div>
                       )}
-                      {row.state === 'rejected' && (
+                      {!isAdmin && row.state === 'rejected' && (
                         <div className="text-[11px] text-slate-500 mt-1">Chọn để gửi lại</div>
                       )}
                     </div>
@@ -251,7 +282,7 @@ export const MyAccess: React.FC = () => {
               })}
             </div>
 
-            {rows.some(r => canSelect(r.state)) && (
+            {!isAdmin && rows.some(r => canSelect(r.state)) && (
               <div className="p-4 bg-slate-50 border-t border-gray-200 space-y-3">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Mục đích / lý do (tùy chọn)</label>
@@ -280,3 +311,5 @@ export const MyAccess: React.FC = () => {
     </div>
   );
 };
+
+export default MyAccess;

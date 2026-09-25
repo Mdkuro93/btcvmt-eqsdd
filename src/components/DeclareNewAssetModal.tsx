@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, FileText, AlertTriangle, GitFork } from 'lucide-react';
+import { X, Search, FileText, AlertTriangle, GitFork, LandPlot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchProjects, fetchWarehouses, fetchAssetIdentifierCandidates } from '../api/assets';
 import { createDeclarationRequest } from '../api/assetDeclarationRequests';
 import { fetchInvestorEntities } from '../api/investorEntities';
+import { fetchOpenPlannedLandLotsByParentAsset } from '../api/plannedLandLots';
+import { PlannedLandLot } from '../types';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -24,6 +26,9 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const [splitMode, setSplitMode] = useState<'SPLIT_FULL' | 'SPLIT_PARTIAL'>('SPLIT_FULL');
   const [remainingArea, setRemainingArea] = useState('');
   const [oldAssetId, setOldAssetId] = useState('');
+  const [plannedLots, setPlannedLots] = useState<PlannedLandLot[]>([]);
+  const [loadingPlannedLots, setLoadingPlannedLots] = useState(false);
+  const [selectedPlannedLotId, setSelectedPlannedLotId] = useState('');
   
   // Search state for entity
   const [searchEntityText, setSearchEntityText] = useState('');
@@ -87,6 +92,34 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
     const s = searchEntityText.toLowerCase();
     return (e.name?.toLowerCase().includes(s) || e.company_code?.toLowerCase().includes(s));
   }).slice(0, 50);
+
+  // Lô quy hoạch (nếu có): chỉ áp dụng khi Tách sổ và đã chọn Sổ gốc, giúp điền nhanh dữ liệu lô đã khai trước.
+  useEffect(() => {
+    setSelectedPlannedLotId('');
+    if (requestType !== 'tach_so' || !oldAssetId) {
+      setPlannedLots([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingPlannedLots(true);
+    fetchOpenPlannedLandLotsByParentAsset(oldAssetId)
+      .then(data => { if (!cancelled) setPlannedLots(data); })
+      .catch(() => { if (!cancelled) setPlannedLots([]); })
+      .finally(() => { if (!cancelled) setLoadingPlannedLots(false); });
+    return () => { cancelled = true; };
+  }, [requestType, oldAssetId]);
+
+  const handleSelectPlannedLot = (lotId: string) => {
+    setSelectedPlannedLotId(lotId);
+    const lot = plannedLots.find(l => l.id === lotId);
+    if (!lot) return;
+    setLegalLotCode(lot.legal_lot_code || '');
+    setLandLotNo(lot.land_lot_no || '');
+    setMapSheetNo(lot.map_sheet_no || '');
+    setBusinessProjectName(lot.business_project_name || '');
+    setBusinessPlotCode(lot.business_plot_code || '');
+    if (lot.planned_area) setArea(String(lot.planned_area));
+  };
 
   const filteredAssets = allAssets.filter(a => {
     if (!searchOldAsset) return false;
@@ -540,6 +573,35 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                 )}
               </div>
             </div>
+
+            {requestType === 'tach_so' && oldAssetId && (
+              <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-4">
+                <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <LandPlot className="w-3.5 h-3.5" /> Lô quy hoạch (nếu có)
+                </label>
+                {loadingPlannedLots ? (
+                  <p className="text-xs text-amber-700">Đang tải danh sách lô quy hoạch của sổ gốc...</p>
+                ) : plannedLots.length === 0 ? (
+                  <p className="text-xs text-amber-700">Sổ gốc này chưa có lô quy hoạch nào được khai báo trước. Nhập tay các trường bên dưới.</p>
+                ) : (
+                  <>
+                    <select
+                      value={selectedPlannedLotId}
+                      onChange={e => handleSelectPlannedLot(e.target.value)}
+                      className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm bg-white"
+                    >
+                      <option value="">-- Chọn lô để tự điền Mã lô/Số thửa/Diện tích --</option>
+                      {plannedLots.map(lot => (
+                        <option key={lot.id} value={lot.id}>
+                          {lot.legal_lot_code} — {lot.planned_area} m²{lot.business_plot_code ? ` — KD: ${lot.business_plot_code}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-amber-700 mt-1">Chọn lô sẽ tự điền các trường bên dưới; bạn vẫn có thể sửa lại sau khi điền.</p>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>

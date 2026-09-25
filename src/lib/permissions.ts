@@ -159,3 +159,79 @@ export function canBulkTransferAssets(profile: any, selectedAssets: any[]): bool
   return false;
 }
 
+/**
+ * Kiểm tra quyền truy cập kho:
+ * Nếu role === 'admin' (hoặc 'ADMIN', 'super_admin', 'btc_manager'), tự động trả về hasAccess = true
+ * cho TẤT CẢ các kho mà không cần check bảng viewer_warehouse_access.
+ */
+export function checkWarehouseAccess(
+  profile: { role?: string; status?: string; managed_warehouse_ids?: string[]; assigned_warehouse_ids?: string[] } | null | undefined,
+  warehouseId?: string,
+  viewerAccessList?: Array<{ warehouse_id: string; expires_at?: string | null }>
+): { hasAccess: boolean; reason: string } {
+  if (!profile) {
+    return { hasAccess: false, reason: 'Chưa đăng nhập' };
+  }
+
+  const role = (profile.role || '').toLowerCase();
+
+  // 1. Quản trị viên hệ thống có toàn quyền trên TẤT CẢ các kho mà không cần check bảng viewer_warehouse_access
+  if (role === 'admin' || role === 'super_admin' || role === 'btc_manager') {
+    return { hasAccess: true, reason: 'Toàn quyền (Quản trị viên)' };
+  }
+
+  // 2. Quản lý kho: toàn quyền trên các kho mình phụ trách / được phân công
+  if (role === 'warehouse_manager') {
+    if (!warehouseId) {
+      return { hasAccess: true, reason: 'Quản lý kho' };
+    }
+    const managed = profile.managed_warehouse_ids || [];
+    const assigned = profile.assigned_warehouse_ids || [];
+    const has = managed.includes(warehouseId) || assigned.includes(warehouseId);
+    return {
+      hasAccess: has,
+      reason: has ? 'Kho phụ trách' : 'Không thuộc kho được phân công quản lý',
+    };
+  }
+
+  // 3. Các phòng ban nghiệp vụ nội bộ
+  if (['capital_dept', 'project_dept', 're_dept', 'chuyen_vien', 'quan_ly', 'supervisor'].includes(role)) {
+    if (!warehouseId) {
+      return { hasAccess: true, reason: 'Nghiệp vụ nội bộ' };
+    }
+    const assigned = profile.assigned_warehouse_ids || [];
+    if (assigned.length === 0 || assigned.includes(warehouseId)) {
+      return { hasAccess: true, reason: 'Kho được phân công nghiệp vụ' };
+    }
+  }
+
+  // 4. Người dùng tra cứu (viewer/user): kiểm tra danh sách quyền được cấp (viewer_warehouse_access)
+  if (warehouseId && viewerAccessList && viewerAccessList.length > 0) {
+    const acc = viewerAccessList.find(a => a.warehouse_id === warehouseId);
+    if (acc) {
+      if (!acc.expires_at) {
+        return { hasAccess: true, reason: 'Đang có quyền — không thời hạn' };
+      }
+      const exp = new Date(acc.expires_at).getTime();
+      if (!isNaN(exp) && exp > Date.now()) {
+        return { hasAccess: true, reason: 'Đang có quyền truy cập' };
+      }
+      return { hasAccess: false, reason: 'Quyền truy cập kho đã hết hạn' };
+    }
+  }
+
+  return { hasAccess: false, reason: 'Chưa có quyền truy cập kho này' };
+}
+
+/**
+ * Hàm kiểm tra nhanh quyền truy cập kho (trả về boolean):
+ * Nếu role === 'admin' (hoặc 'ADMIN'), tự động trả về true cho TẤT CẢ các kho.
+ */
+export function hasWarehouseAccess(
+  profile: { role?: string; status?: string; managed_warehouse_ids?: string[]; assigned_warehouse_ids?: string[] } | null | undefined,
+  warehouseId?: string,
+  viewerAccessList?: Array<{ warehouse_id: string; expires_at?: string | null }>
+): boolean {
+  return checkWarehouseAccess(profile, warehouseId, viewerAccessList).hasAccess;
+}
+
