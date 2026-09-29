@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
-import { ReportSnapshot, DenormalizedReportAsset, Asset } from '../types';
+import { ReportSnapshot, DenormalizedReportAsset, Asset, ProjectReportRow } from '../types';
 import { 
   fetchReportSnapshots, 
   createReportSnapshot, 
@@ -35,6 +35,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface ReportSnapshotsManagerProps {
   currentAssets: Asset[];
+  currentProjectRows?: ProjectReportRow[];
   currentRegion: string;
   currentWarehouseName?: string;
   onRefreshParent?: () => void;
@@ -42,6 +43,7 @@ interface ReportSnapshotsManagerProps {
 
 export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
   currentAssets,
+  currentProjectRows,
   currentRegion,
   currentWarehouseName,
   onRefreshParent,
@@ -213,6 +215,7 @@ export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
         period_status: newStatus,
         notes: newNotes.trim(),
         assets: currentAssets,
+        project_report_data: currentProjectRows || [],
       });
 
       toast.success(

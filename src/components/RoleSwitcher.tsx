@@ -75,9 +75,9 @@ export const RoleSwitcher: React.FC = () => {
   const isChanged = Boolean(user?.role && effectiveRole && effectiveRole !== user.role);
 
   return (
-    <div id="admin-role-switcher" className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
-      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-        <Shield className="w-3.5 h-3.5 text-[#1E3A8A]" />
+    <div id="admin-role-switcher" className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 shadow-2xs">
+      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+        <Shield className="w-3.5 h-3.5 text-[#1E3A8A] dark:text-blue-400" />
         <span className="hidden sm:inline">Mô phỏng vai trò:</span>
       </div>
 
@@ -88,13 +88,13 @@ export const RoleSwitcher: React.FC = () => {
           onChange={(e) => setEffectiveRole(e.target.value)}
           className={`text-xs font-semibold rounded-lg px-2.5 py-1 pr-7 border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${
             isChanged 
-              ? 'bg-amber-50 border-amber-400 text-amber-900 font-bold' 
-              : 'bg-white border-slate-300 text-slate-900 hover:border-slate-400'
+              ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-200 font-bold' 
+              : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 hover:border-slate-400 dark:hover:border-slate-600'
           }`}
           title="Chọn vai trò để kiểm tra phân quyền hiển thị (Menu, nút bấm, dữ liệu)"
         >
           {options.map((r) => (
-            <option key={r} value={r}>
+            <option key={r} value={r} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
               {formatRoleLabel(r)} {r === actualRole ? ' (Quyền gốc)' : ''}
             </option>
           ))}
@@ -106,10 +106,10 @@ export const RoleSwitcher: React.FC = () => {
           type="button"
           id="reset-admin-role-btn-inline"
           onClick={resetRole}
-          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition shadow-2xs cursor-pointer"
+          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 transition shadow-2xs cursor-pointer"
           title="Khôi phục về vai trò Admin gốc"
         >
-          <RotateCcw className="w-3 h-3 text-[#1E3A8A]" />
+          <RotateCcw className="w-3 h-3 text-[#1E3A8A] dark:text-blue-400" />
           <span className="hidden md:inline">Khôi phục</span>
         </button>
       )}

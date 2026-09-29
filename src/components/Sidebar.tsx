@@ -159,10 +159,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside 
       className={`${
         isCollapsed ? 'w-20' : 'w-64'
-      } bg-white border-r border-gray-200 flex flex-col shrink-0 transition-all duration-300 ease-in-out relative z-30 select-none`}
+      } bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 flex flex-col shrink-0 transition-all duration-300 ease-in-out relative z-30 select-none`}
     >
       {/* Header & Logo */}
-      <div className={`h-16 flex items-center border-b border-gray-200 transition-all duration-300 relative ${
+      <div className={`h-16 flex items-center border-b border-gray-200 dark:border-slate-800 transition-all duration-300 relative ${
         isCollapsed ? 'justify-center px-2' : 'justify-between px-4'
       }`}>
         <div className={`flex items-center gap-3 overflow-hidden ${isCollapsed ? 'justify-center' : 'min-w-0 flex-1'}`}>
@@ -177,10 +177,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Tên thương hiệu & Hệ thống (chỉ hiển thị khi mở rộng) */}
           {!isCollapsed && (
             <div className="min-w-0 flex-1 overflow-hidden transition-opacity duration-200">
-              <h1 className="text-sm font-bold text-slate-900 leading-none tracking-tight truncate">
+              <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-none tracking-tight truncate">
                 eQSDĐ &amp; TSĐB
               </h1>
-              <p className="text-[11px] font-medium tracking-wider uppercase text-slate-400 mt-1 truncate">
+              <p className="text-[11px] font-medium tracking-wider uppercase text-slate-400 dark:text-slate-400 mt-1 truncate">
                 Ban Tài chính
               </p>
             </div>
@@ -192,7 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={toggleCollapse}
-            className="absolute -right-3.5 top-5 z-40 w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 hover:border-blue-300 shadow-sm transition-all duration-200 cursor-pointer"
+            className="absolute -right-3.5 top-5 z-40 w-7 h-7 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-full flex items-center justify-center text-gray-500 dark:text-slate-400 hover:text-[#1E3A8A] dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700 hover:border-blue-300 dark:hover:border-blue-500 shadow-sm transition-all duration-200 cursor-pointer"
             title="Mở rộng menu"
             aria-label="Mở rộng menu"
           >
@@ -202,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={toggleCollapse}
-            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+            className="p-1.5 text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
             title="Thu gọn menu"
             aria-label="Thu gọn menu"
           >
@@ -223,15 +223,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   to={item.href}
                   className={`flex items-center justify-center w-11 h-11 rounded-lg transition-colors relative ${
                     isActive 
-                      ? 'bg-blue-50 text-[#1E3A8A] font-semibold shadow-2xs' 
-                      : 'text-gray-700 hover:bg-gray-100'
+                      ? 'bg-blue-50 dark:bg-slate-800 text-[#1E3A8A] dark:text-blue-400 font-semibold shadow-2xs' 
+                      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 dark:hover:text-white'
                   }`}
                   aria-label={item.name}
                 >
-                  <item.icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[#1E3A8A]' : 'text-gray-400'}`} />
+                  <item.icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[#1E3A8A] dark:text-blue-400' : 'text-gray-400 dark:text-slate-400'}`} />
                   
                   {item.badge !== undefined && (
-                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-slate-950 border-2 border-white shadow-xs">
+                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-slate-950 border-2 border-white dark:border-slate-900 shadow-xs">
                       {item.badge}
                     </span>
                   )}
@@ -242,7 +242,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   role="tooltip"
                   className="opacity-0 invisible -translate-x-1 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-150 ease-out pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 whitespace-nowrap"
                 >
-                  <div className="bg-slate-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-slate-700/80 backdrop-blur-xs">
+                  <div className="bg-slate-900 dark:bg-slate-800 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-slate-700/80 backdrop-blur-xs">
                     <span>{item.name}</span>
                     {item.badge !== undefined && (
                       <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-slate-950">
@@ -250,7 +250,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </span>
                     )}
                     {/* Mũi tên tooltip chỉ về phía icon */}
-                    <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-slate-900" />
+                    <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-slate-900 dark:border-r-slate-800" />
                   </div>
                 </div>
               </div>
@@ -263,12 +263,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               to={item.href}
               className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
                 isActive 
-                  ? 'bg-blue-50 text-[#1E3A8A] font-semibold' 
-                  : 'text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-50 dark:bg-slate-800 text-[#1E3A8A] dark:text-blue-400 font-semibold' 
+                  : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 dark:hover:text-white'
               }`}
             >
               <div className="flex items-center min-w-0">
-                <item.icon className={`mr-3 h-5 w-5 shrink-0 ${isActive ? 'text-[#1E3A8A]' : 'text-gray-400'}`} />
+                <item.icon className={`mr-3 h-5 w-5 shrink-0 ${isActive ? 'text-[#1E3A8A] dark:text-blue-400' : 'text-gray-400 dark:text-slate-400'}`} />
                 <span className="truncate">{item.name}</span>
               </div>
               {item.badge !== undefined && (

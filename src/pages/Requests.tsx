@@ -412,23 +412,23 @@ export const Requests: React.FC = () => {
 
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 gap-6 px-1">
+      <div className="flex border-b border-gray-200 dark:border-slate-800 gap-6 px-1">
         <button
           onClick={() => setActiveTab('giao_dich')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-colors ${
+          className={`pb-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
             activeTab === 'giao_dich'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-blue-600 dark:border-blue-400 text-blue-700 dark:text-blue-400'
+              : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
           }`}
         >
           Phiếu yêu cầu giao dịch
         </button>
         <button
           onClick={() => setActiveTab('gcn_moi')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-colors ${
+          className={`pb-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
             activeTab === 'gcn_moi'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-blue-600 dark:border-blue-400 text-blue-700 dark:text-blue-400'
+              : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
           }`}
         >
           Đề xuất GCN mới (Khai báo)
@@ -438,12 +438,12 @@ export const Requests: React.FC = () => {
       {activeTab === 'giao_dich' ? (<>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
             {isApprover ? 'Duyệt phiếu & Quản lý Kho' : 'Phiếu yêu cầu của tôi'}
           </h1>
           {isWarehouseManager && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md mt-1 inline-flex">
-              <Store className="w-3.5 h-3.5 text-amber-700" />
+            <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-md mt-1 inline-flex">
+              <Store className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
               <span>Phân quyền Quản lý kho: Đang phụ trách <b>{managedWarehouseIds.length}</b> kho</span>
             </div>
           )}
@@ -452,7 +452,7 @@ export const Requests: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={loadTransactions}
-            className="p-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="p-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100 border border-gray-300 dark:border-slate-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             title="Tải lại danh sách"
           >
             <RefreshCw className="w-4 h-4" />
@@ -461,7 +461,7 @@ export const Requests: React.FC = () => {
           {isApprover && selectedItems.size > 0 && (
             <button
               onClick={() => setIsBulkModalOpen(true)}
-              className="bg-[#1E3A8A] text-white px-4 py-2 rounded-lg font-semibold text-xs hover:bg-blue-800 shadow-sm"
+              className="bg-[#1E3A8A] dark:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold text-xs hover:bg-blue-800 dark:hover:bg-blue-500 shadow-sm cursor-pointer"
             >
               Duyệt nhanh {selectedItems.size} mục đã chọn
             </button>
@@ -470,20 +470,20 @@ export const Requests: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm flex flex-wrap items-center gap-3 text-xs">
-        <div className="flex items-center gap-1.5 text-gray-600 font-semibold">
-          <Filter className="w-3.5 h-3.5 text-blue-700" /> Bộ lọc:
+      <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center gap-3 text-xs transition-colors">
+        <div className="flex items-center gap-1.5 text-gray-600 dark:text-slate-400 font-semibold">
+          <Filter className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" /> Bộ lọc:
         </div>
 
         {/* Warehouse filter */}
         <select
           value={selectedWarehouseFilter}
           onChange={e => setSelectedWarehouseFilter(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white font-medium focus:ring-blue-500 focus:border-blue-500"
+          className="px-3 py-1.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
         >
-          <option value="all">-- Tất cả kho lưu trữ --</option>
+          <option value="all" className="bg-white dark:bg-slate-900">-- Tất cả kho lưu trữ --</option>
           {warehouses.map(w => (
-            <option key={w.id} value={w.id}>
+            <option key={w.id} value={w.id} className="bg-white dark:bg-slate-900">
               {w.name} {w.is_central ? '(Kho TT)' : ''}
             </option>
           ))}
@@ -493,31 +493,31 @@ export const Requests: React.FC = () => {
         <select
           value={selectedTypeFilter}
           onChange={e => setSelectedTypeFilter(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white font-medium focus:ring-blue-500 focus:border-blue-500"
+          className="px-3 py-1.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
         >
-          <option value="all">-- Tất cả loại nghiệp vụ --</option>
-          <option value="checkout">Mượn/Xuất sổ</option>
-          <option value="checkin">Nhập sổ</option>
-          <option value="split">Tách sổ / Cấp đổi</option>
-          <option value="mortgage">Thế chấp</option>
-          <option value="sale_update">Xuất bán</option>
+          <option value="all" className="bg-white dark:bg-slate-900">-- Tất cả loại nghiệp vụ --</option>
+          <option value="checkout" className="bg-white dark:bg-slate-900">Mượn/Xuất sổ</option>
+          <option value="checkin" className="bg-white dark:bg-slate-900">Nhập sổ</option>
+          <option value="split" className="bg-white dark:bg-slate-900">Tách sổ / Cấp đổi</option>
+          <option value="mortgage" className="bg-white dark:bg-slate-900">Thế chấp</option>
+          <option value="sale_update" className="bg-white dark:bg-slate-900">Xuất bán</option>
         </select>
 
         {/* Status Filter */}
         <select
           value={selectedStatusFilter}
           onChange={e => setSelectedStatusFilter(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white font-medium focus:ring-blue-500 focus:border-blue-500"
+          className="px-3 py-1.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
         >
-          <option value="all">-- Tất cả trạng thái --</option>
-          <option value="pending">Chờ duyệt</option>
-          <option value="approved">Đã duyệt</option>
-          <option value="rejected">Từ chối</option>
+          <option value="all" className="bg-white dark:bg-slate-900">-- Tất cả trạng thái --</option>
+          <option value="pending" className="bg-white dark:bg-slate-900">Chờ duyệt</option>
+          <option value="approved" className="bg-white dark:bg-slate-900">Đã duyệt</option>
+          <option value="rejected" className="bg-white dark:bg-slate-900">Từ chối</option>
         </select>
       </div>
 
       {/* Main Transactions List */}
-      <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden transition-colors">
         {loading ? (
           <LoadingFallback
             message="Đang tải danh sách phiếu yêu cầu..."
@@ -533,26 +533,26 @@ export const Requests: React.FC = () => {
             }}
           />
         ) : loadError ? (
-          <div className="p-8 text-center bg-red-50/50">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 text-red-600 mb-3">
+          <div className="p-8 text-center bg-red-50/50 dark:bg-red-950/30">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 mb-3">
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-red-900 mb-1">Không thể tải dữ liệu phiếu yêu cầu</h3>
-            <p className="text-sm text-red-700 max-w-xl mx-auto mb-4">{loadError}</p>
+            <h3 className="text-base font-bold text-red-900 dark:text-red-200 mb-1">Không thể tải dữ liệu phiếu yêu cầu</h3>
+            <p className="text-sm text-red-700 dark:text-red-300 max-w-xl mx-auto mb-4">{loadError}</p>
             <button
               onClick={() => loadTransactions()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold rounded-lg shadow-xs transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-slate-700 text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Thử lại
             </button>
           </div>
         ) : filteredTransactions.length === 0 ? (
-          <div className="px-6 py-12 text-center text-gray-500">
+          <div className="px-6 py-12 text-center text-gray-500 dark:text-slate-400">
             Không có phiếu yêu cầu nào phù hợp với bộ lọc hiện tại.
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-200 dark:divide-slate-800">
             {filteredTransactions.map((tx: any) => {
               const { total, pending, approved, rejected } = summarize(tx.items || []);
               const isOpen = expanded.has(tx.id);
@@ -560,58 +560,58 @@ export const Requests: React.FC = () => {
                 <div key={tx.id} className="transition-colors">
                   <button
                     onClick={() => toggleExpand(tx.id)}
-                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 text-left transition-colors"
+                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-800/60 text-left transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
-                      {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
+                      {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400 dark:text-slate-500" /> : <ChevronRight className="w-4 h-4 text-gray-400 dark:text-slate-500" />}
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-blue-700 dark:text-blue-400">
                         <FileText className="h-4 w-4" />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-[#1E3A8A] flex items-center gap-2">
+                        <div className="text-sm font-bold text-[#1E3A8A] dark:text-blue-400 flex items-center gap-2">
                           <span>{TYPE_LABEL[tx.type] || tx.type}</span>
-                          <span className="text-xs font-normal text-gray-400">|</span>
-                          <span className="text-xs font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                          <span className="text-xs font-normal text-gray-400 dark:text-slate-500">|</span>
+                          <span className="text-xs font-mono text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded">
                             {tx.id?.slice(0, 8)}
                           </span>
                         </div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          Đề xuất bởi: <span className="font-medium text-gray-700">{tx.created_by?.full_name || tx.created_by?.email || 'N/A'}</span> · {format(new Date(tx.created_at), 'dd/MM/yyyy HH:mm')}
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                          Đề xuất bởi: <span className="font-medium text-gray-700 dark:text-slate-300">{tx.created_by?.full_name || tx.created_by?.email || 'N/A'}</span> · {format(new Date(tx.created_at), 'dd/MM/yyyy HH:mm')}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-slate-300">
                       {(tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl) && (
                         <a
                           href={tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
-                          className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                          className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors"
                           title="Mở file scan đính kèm trên OneDrive"
                         >
                           📄 Xem file đính kèm
                         </a>
                       )}
-                      <span className="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded-full">{total} GCN</span>
-                      {pending > 0 && <span className="text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-full">{pending} chờ duyệt</span>}
-                      {approved > 0 && <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">{approved} đã duyệt</span>}
-                      {rejected > 0 && <span className="text-rose-700 font-semibold bg-rose-50 px-2 py-0.5 rounded-full">{rejected} từ chối</span>}
+                      <span className="font-bold text-gray-900 dark:text-slate-100 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{total} GCN</span>
+                      {pending > 0 && <span className="text-amber-700 dark:text-amber-300 font-semibold bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">{pending} chờ duyệt</span>}
+                      {approved > 0 && <span className="text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">{approved} đã duyệt</span>}
+                      {rejected > 0 && <span className="text-rose-700 dark:text-rose-300 font-semibold bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">{rejected} từ chối</span>}
                     </div>
                   </button>
 
                   {isOpen && (
-                    <div className="bg-slate-50/70 border-t border-gray-100 px-6 py-4">
-                      <div className="mb-3 text-xs text-gray-600 bg-white p-3 rounded-lg border border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                    <div className="bg-slate-50/70 dark:bg-slate-850 border-t border-gray-100 dark:border-slate-800 px-6 py-4">
+                      <div className="mb-3 text-xs text-gray-600 dark:text-slate-300 bg-white dark:bg-slate-900 p-3 rounded-lg border border-gray-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <span className="font-semibold text-gray-800">Căn cứ / Ghi chú đề xuất:</span> {detailsSummary(tx.type, tx.details) || 'Không có ghi chú thêm'}
+                          <span className="font-semibold text-gray-800 dark:text-slate-200">Căn cứ / Ghi chú đề xuất:</span> {detailsSummary(tx.type, tx.details) || 'Không có ghi chú thêm'}
                         </div>
                         {(tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl) && (
                           <a
                             href={tx.scan_url || tx.details?.scan_url || tx.details?.scanUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-900 border border-blue-200 rounded-lg text-xs font-semibold transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-semibold transition-colors"
                             title="Mở file scan đính kèm trên OneDrive trong tab mới"
                           >
                             📄 Xem file đính kèm
@@ -622,7 +622,7 @@ export const Requests: React.FC = () => {
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-xs">
                           <thead>
-                            <tr className="text-left text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                            <tr className="text-left text-gray-500 dark:text-slate-400 uppercase tracking-wider border-b border-gray-200 dark:border-slate-700">
                               {isApprover && <th className="py-2 pr-3 w-8"></th>}
                               <th className="py-2 pr-4 font-semibold">Số GCN</th>
                               <th className="py-2 pr-4 font-semibold">Dự án & Vị trí</th>
@@ -632,7 +632,7 @@ export const Requests: React.FC = () => {
                               <th className="py-2 pr-4 text-right font-semibold">Thao tác</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-100">
+                          <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                             {(tx.items || []).map((item: any) => {
                               const effectiveAsset = item.confirmed_asset || item.asset;
                               const whId = getResponsibleWarehouseId(item, tx.type);
@@ -640,7 +640,7 @@ export const Requests: React.FC = () => {
                               const warehouseObj = warehouses.find(w => w.id === whId);
 
                               return (
-                                <tr key={item.id} className="hover:bg-white transition-colors">
+                                <tr key={item.id} className="hover:bg-white dark:hover:bg-slate-800/60 transition-colors">
                                   {isApprover && (
                                     <td className="py-2.5 pr-3">
                                       {item.status === 'pending' && (
@@ -648,47 +648,47 @@ export const Requests: React.FC = () => {
                                           type="checkbox" 
                                           checked={selectedItems.has(item.id)}
                                           onChange={() => toggleItemSelection(item.id)}
-                                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                          className="w-4 h-4 text-blue-600 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500 cursor-pointer"
                                         />
                                       )}
                                     </td>
                                   )}
                                   <td className="py-2.5 pr-4">
-                                    <div className="font-bold text-gray-900">
+                                    <div className="font-bold text-gray-900 dark:text-slate-100">
                                       {effectiveAsset?.certificate_no}
                                       {item.confirmed_asset_id && item.confirmed_asset_id !== item.asset_id && (
-                                        <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
+                                        <span className="ml-1.5 text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 px-1.5 py-0.5 rounded font-semibold">
                                           Đã đổi GCN
                                         </span>
                                       )}
                                     </div>
                                     
-                                    <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-2 mt-0.5">
+                                    <div className="text-[11px] text-gray-500 dark:text-slate-400 flex flex-wrap items-center gap-2 mt-0.5">
                                       <span>Số vào sổ: {effectiveAsset?.registry_no || '-'}</span>
                                       {isOverdueSLA && (
-                                        <span className="text-red-700 font-bold bg-red-100 border border-red-300 px-1.5 py-0.5 rounded text-[10px] animate-pulse">
+                                        <span className="text-red-700 dark:text-red-300 font-bold bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 px-1.5 py-0.5 rounded text-[10px] animate-pulse">
                                           ⚠️ Quá hạn xử lý (SLA)
                                         </span>
                                       )}
                                     </div>
                                   </td>
                                   <td className="py-2.5 pr-4">
-                                    <div className="text-gray-800 font-medium">{effectiveAsset?.projects?.name || 'VMT'}</div>
-                                    <div className="text-gray-500 text-[11px]">{effectiveAsset?.legal_lot_code || '-'}</div>
+                                    <div className="text-gray-800 dark:text-slate-200 font-medium">{effectiveAsset?.projects?.name || 'VMT'}</div>
+                                    <div className="text-gray-500 dark:text-slate-400 text-[11px]">{effectiveAsset?.legal_lot_code || '-'}</div>
                                   </td>
                                   <td className="py-2.5 pr-4">
-                                    <span className="inline-flex items-center gap-1 text-gray-700 bg-gray-100 px-2 py-0.5 rounded text-[11px]">
-                                      <Store className="w-3 h-3 text-gray-500" />
+                                    <span className="inline-flex items-center gap-1 text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[11px]">
+                                      <Store className="w-3 h-3 text-gray-500 dark:text-slate-400" />
                                       {warehouseObj?.name || 'Kho Trung tâm'}
                                     </span>
                                   </td>
                                   <td className="py-2.5 pr-4">
                                     {item.voucher_code ? (
-                                      <span className="font-mono font-bold text-[#1E3A8A] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                      <span className="font-mono font-bold text-[#1E3A8A] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
                                         {item.voucher_code}
                                       </span>
                                     ) : (
-                                      <span className="text-gray-400 italic">Chưa phát hành</span>
+                                      <span className="text-gray-400 dark:text-slate-500 italic">Chưa phát hành</span>
                                     )}
                                   </td>
                                   <td className="py-2.5 pr-4">
@@ -701,7 +701,7 @@ export const Requests: React.FC = () => {
                                         <button
                                           type="button"
                                           onClick={() => setPrintModalData({ item, tx })}
-                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#1E3A8A] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#1E3A8A] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-md transition-colors cursor-pointer"
                                           title="In phiếu xuất/nhập A4"
                                         >
                                           <Printer className="w-3 h-3" /> In biên bản
@@ -713,14 +713,14 @@ export const Requests: React.FC = () => {
                                           <button
                                             disabled={decidingItemId === item.id}
                                             onClick={() => handleDecide(item, 'rejected')}
-                                            className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                                            className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 disabled:opacity-50 cursor-pointer"
                                           >
                                             Từ chối
                                           </button>
                                           <button
                                             disabled={decidingItemId === item.id}
                                             onClick={() => handleDecide(item, 'approved')}
-                                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+                                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 dark:bg-emerald-500 text-white hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 shadow-sm cursor-pointer"
                                           >
                                             {decidingItemId === item.id ? 'Đang xử lý...' : 'Duyệt phiếu'}
                                           </button>
@@ -746,19 +746,19 @@ export const Requests: React.FC = () => {
       
 
       </>) : (
-      <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden transition-colors">
         {loadingDeclarations ? (
-          <div className="p-12 text-center text-gray-500"><Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" /> Đang tải...</div>
+          <div className="p-12 text-center text-gray-500 dark:text-slate-400"><Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" /> Đang tải...</div>
         ) : declarationRequests.length === 0 ? (
-          <div className="px-6 py-12 text-center text-gray-500">Chưa có đề xuất khai báo GCN nào.</div>
+          <div className="px-6 py-12 text-center text-gray-500 dark:text-slate-400">Chưa có đề xuất khai báo GCN nào.</div>
         ) : (
           <>
           {isApprover && selectedDeclarations.size > 0 && (
-            <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
-              <span className="text-sm font-medium text-blue-900">Đã chọn {selectedDeclarations.size} đề xuất</span>
+            <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/60 border-b border-blue-100 dark:border-blue-900/60 flex items-center justify-between">
+              <span className="text-sm font-medium text-blue-900 dark:text-blue-200">Đã chọn {selectedDeclarations.size} đề xuất</span>
               <button 
                 onClick={handleBulkApproveDeclarations}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm"
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm cursor-pointer"
               >
                 Duyệt hàng loạt
               </button>
@@ -766,8 +766,8 @@ export const Requests: React.FC = () => {
           )}
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-gray-500 uppercase tracking-wider border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-slate-800/80">
+                <tr className="text-left text-gray-500 dark:text-slate-400 uppercase tracking-wider border-b border-gray-200 dark:border-slate-700">
                   <th className="py-3 px-4 font-semibold">Loại YC / Ngày</th>
                   <th className="py-3 px-4 font-semibold">GCN & Lô đất</th>
                   <th className="py-3 px-4 font-semibold">Người yêu cầu</th>
@@ -775,15 +775,15 @@ export const Requests: React.FC = () => {
                   <th className="py-3 px-4 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                 {declarationRequests.map(req => (
-                  <tr key={req.id} className="hover:bg-gray-50">
+                  <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors">
                     {isApprover && (
                       <td className="py-3 pl-4 pr-2">
                         {req.status === 'pending' && (
                           <input 
                             type="checkbox" 
-                            className="rounded border-gray-300"
+                            className="rounded border-gray-300 dark:border-slate-600 cursor-pointer"
                             checked={selectedDeclarations.has(req.id)}
                             onChange={() => handleSelectDeclaration(req.id)}
                           />
@@ -791,18 +791,18 @@ export const Requests: React.FC = () => {
                       </td>
                     )}
                     <td className="py-3 px-4">
-                      <div className="font-bold text-blue-900">
+                      <div className="font-bold text-blue-900 dark:text-blue-400">
                         {req.request_type === 'cap_moi' ? 'Cấp mới' : req.request_type === 'tach_so' ? 'Tách sổ' : 'Cấp đổi'}
                       </div>
-                      <div className="text-gray-500">{format(new Date(req.created_at), 'dd/MM/yyyy HH:mm')}</div>
+                      <div className="text-gray-500 dark:text-slate-400">{format(new Date(req.created_at), 'dd/MM/yyyy HH:mm')}</div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-bold">{req.certificate_no}</div>
-                      <div className="text-gray-500">{req.projects?.name || '-'} {req.legal_lot_code ? '· ' + req.legal_lot_code : ''}</div>
+                      <div className="font-bold text-slate-900 dark:text-slate-100">{req.certificate_no}</div>
+                      <div className="text-gray-500 dark:text-slate-400">{req.projects?.name || '-'} {req.legal_lot_code ? '· ' + req.legal_lot_code : ''}</div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-medium text-gray-900">{req.requester?.full_name || '-'}</div>
-                      <div className="text-gray-500">{req.requester?.email || '-'}</div>
+                      <div className="font-medium text-gray-900 dark:text-slate-100">{req.requester?.full_name || '-'}</div>
+                      <div className="text-gray-500 dark:text-slate-400">{req.requester?.email || '-'}</div>
                     </td>
                     <td className="py-3 px-4">
                       <ItemStatusBadge status={req.status} />
@@ -814,7 +814,7 @@ export const Requests: React.FC = () => {
                           className={`px-3 py-1 rounded font-semibold text-xs transition-colors cursor-pointer ${
                             isApprover && req.status === 'pending'
                               ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
-                              : 'text-blue-700 hover:bg-blue-50 border border-blue-200'
+                              : 'text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 border border-blue-200 dark:border-slate-700'
                           }`}
                         >
                           {isApprover && req.status === 'pending' ? 'Xem & Phê duyệt' : 'Chi tiết'}
@@ -822,14 +822,14 @@ export const Requests: React.FC = () => {
                         {isApprover && req.status === 'pending' && (
                           <button
                             onClick={() => handleRejectDeclaration(req)}
-                            className="px-3 py-1 rounded text-red-700 hover:bg-red-50 border border-red-200 font-semibold text-xs cursor-pointer"
+                            className="px-3 py-1 rounded text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-rose-950/50 border border-red-200 dark:border-rose-800 font-semibold text-xs cursor-pointer"
                           >
                             Từ chối
                           </button>
                         )}
                       </div>
                       {req.status === 'rejected' && req.rejection_reason && (
-                        <div className="text-red-600 text-[11px] mt-1 text-right">Lý do: {req.rejection_reason}</div>
+                        <div className="text-red-600 dark:text-red-400 text-[11px] mt-1 text-right">Lý do: {req.rejection_reason}</div>
                       )}
                     </td>
                   </tr>

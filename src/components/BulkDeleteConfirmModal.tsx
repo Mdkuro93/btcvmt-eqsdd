@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Asset } from '../types';
+import { Asset, Profile } from '../types';
 import { deleteMultipleAssets } from '../api/assets';
 import { adminDeleteAssets } from '../api/assetDeletion';
+import { sendNotification } from '../services/notificationService';
 import { AlertTriangle, Loader2, Trash2, X, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -11,6 +12,7 @@ export interface BulkDeleteConfirmModalProps {
   onSuccess: () => void;
   selectedAssets: Asset[];
   canForceDelete?: boolean;
+  currentUser?: Profile | { id: string; email?: string; full_name?: string } | null;
 }
 
 export const BulkDeleteConfirmModal: React.FC<BulkDeleteConfirmModalProps> = ({
@@ -19,6 +21,7 @@ export const BulkDeleteConfirmModal: React.FC<BulkDeleteConfirmModalProps> = ({
   onSuccess,
   selectedAssets,
   canForceDelete = false,
+  currentUser,
 }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -53,6 +56,18 @@ export const BulkDeleteConfirmModal: React.FC<BulkDeleteConfirmModalProps> = ({
       // Xóa hàng loạt chuẩn: gửi 1 request duy nhất lên Supabase (Query DELETE WHERE id IN (...selectedIds))
       await deleteMultipleAssets(ids);
       toast.success(`Đã xóa thành công ${count} GCN đã chọn!`);
+
+      // Gửi thông báo hệ thống về sự kiện xóa hàng loạt
+      if (currentUser?.id) {
+        sendNotification({
+          userIds: [currentUser.id],
+          title: `Xóa hàng loạt (${count} GCN)`,
+          message: `Đã xóa thành công ${count} Giấy chứng nhận khỏi hệ thống.`,
+          link: '/assets',
+          type: 'asset_deletion',
+        }).catch(err => console.warn('Không thể gửi thông báo xóa hàng loạt:', err));
+      }
+
       onSuccess();
       onClose();
     } catch (err: any) {

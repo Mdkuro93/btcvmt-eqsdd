@@ -38,6 +38,7 @@ export interface Project {
   id: string;
   area_id: string;
   name: string;
+  project_code?: string | null;
   default_owner_entity_id?: string | null;
   areas?: { name: string; region_id?: string; regions?: { name: string }; province_code?: string | null };
 }
@@ -92,9 +93,11 @@ export interface Profile {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'request_approved' | 'request_approved_with_changes' | 'request_rejected' | string;
+  type?: 'request_approved' | 'request_approved_with_changes' | 'request_rejected' | string;
   title: string;
-  body: string;
+  message?: string;
+  body?: string;
+  link?: string | null;
   transaction_item_id?: string | null;
   is_read: boolean;
   created_at: string;
@@ -127,6 +130,7 @@ export type InvalidationType = 'NONE' | 'PARTIAL' | 'FULL';
 export interface Asset {
   id: string;
   asset_code?: string | null;         // Mã định danh tự sinh: VMT_BDS_00001
+  import_receipt_number?: string | null; // Số Phiếu Nhập Kho (e.g. PNK-2026/05-012, VMT-001-PN-0001/2026)
   collateral_type?: string | null;     // Loại TSĐB (BDS, TSCD, VONGOP, COPHAN...)
   certificate_no: string;
   project_id: string | null;
@@ -379,6 +383,7 @@ export interface ReportSnapshot {
   
   // Dữ liệu tĩnh denormalized JSONB
   report_data: DenormalizedReportAsset[];
+  project_report_data?: ProjectReportRow[];
   
   summary_stats?: Record<string, any>;
   notes?: string | null;
@@ -458,7 +463,8 @@ export type PlannedLandLotStatus = 'chưa cấp GCN' | 'đã cấp GCN';
 export interface PlannedLandLot {
   id: string;
   project_id: string;
-  parent_master_asset_id: string;
+  parent_master_asset_id?: string | null;
+  asset_code?: string | null;
   legal_lot_code: string;
   land_lot_no?: string | null;
   map_sheet_no?: string | null;
@@ -472,8 +478,52 @@ export interface PlannedLandLot {
   created_at?: string;
   updated_at?: string;
   // Quan hệ (khi truy vấn có join)
-  parent_master_asset?: { id: string; certificate_no: string; asset_code?: string | null } | null;
-  resulting_asset?: { id: string; certificate_no: string; asset_code?: string | null } | null;
+  parent_master_asset?: { id: string; certificate_no: string; asset_code?: string | null; area?: number | null } | null;
+  resulting_asset?: { id: string; certificate_no: string; asset_code?: string | null; area?: number | null } | null;
+  projects?: { id: string; name: string; areas?: { name: string; regions?: { name: string } } } | null;
+}
+
+export interface ProjectReportRow {
+  col_a_system_id: string;        // Mã Tài Sản / TSĐB (đã gộp "ID Hệ Thống" — trước đây 2 cột luôn trùng giá trị)
+  col_c_project_name: string;     // Dự Án (Pháp lý)
+  col_d_asset_type: string;       // Loại Tài Sản
+  col_e_cert_group: string;       // Nhóm Sổ
+  col_f_lot_code: string;         // Lô đất (Mã Lô Pháp Lý)
+  col_g_area: number;             // Diện Tích (m²)
+  col_i_small_cert_no: string;    // Số nhỏ (SỐ GCN QSDĐ)
+  col_j_master_cert_no: string;   // Số lớn (SỐ GCN QSDĐ)
+  col_k_cdt_name: string;         // GCN tồn CĐT - Tên Chủ đầu tư (Lấy tên CĐT pháp lý của dự án/lô)
+  col_k_cdt_count: number;        // GCN tồn CĐT - Số lượng GCN (0 | 1)
+  col_l_cdt_area: number;         // GCN tồn CĐT - Diện tích
+  col_m_investor_name: string;    // GCN tồn NĐT - Tên Nhà Đầu tư
+  col_n_investor_count: number;   // GCN tồn NĐT - Số lượng GCN (0 | 1)
+  col_o_investor_area: number;    // GCN tồn NĐT - Diện tích
+  col_p_unsplit_count: number;    // Chưa tách sổ nhỏ - Số lượng GCN (0 | 1)
+  col_q_unsplit_area: number;     // Chưa tách sổ nhỏ - Diện tích
+  col_r_unissued_count: number;   // Chưa được cấp - Số lượng (0 | 1)
+  col_s_unissued_area: number;    // Chưa được cấp - Diện tích
+  col_t_sold_count: number;       // Đã bán KH - Số lượng GCN (0 | 1)
+  col_u_sold_area: number;        // Đã bán KH - Diện tích
+  col_z_legal_status: string;     // Trạng Thái Pháp Lý
+  col_aa_business_status: string; // Trạng Thái Kinh Doanh
+  col_ab_custody_status: string;  // Trạng Thái Lưu Kho
+  col_ac_managing_unit: string;   // Đơn vị quản lý sổ
+  col_ad_notes: string;           // Ghi chú
+}
+
+export interface ProjectReportStats {
+  totalLots: number;
+  totalArea: number;
+  cdtCount: number;
+  cdtArea: number;
+  investorCount: number;
+  investorArea: number;
+  unsplitCount: number;
+  unsplitArea: number;
+  unissuedCount: number;
+  unissuedArea: number;
+  soldCount: number;
+  soldArea: number;
 }
 
 export interface PlannedLandLotImportRow {

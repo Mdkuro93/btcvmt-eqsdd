@@ -1065,13 +1065,14 @@ export async function fetchProjects(): Promise<Project[]> {
   }
 }
 
-export async function createProject(project: { name: string; area_id: string; default_owner_entity_id?: string | null }): Promise<Project> {
+export async function createProject(project: { name: string; area_id: string; project_code?: string | null; default_owner_entity_id?: string | null }): Promise<Project> {
   if (!isSupabaseConfigured) {
     const current = mockStore.getProjects();
     const newProj: Project = {
       id: 'proj-' + Date.now(),
       name: project.name,
       area_id: project.area_id,
+      project_code: project.project_code || null,
       default_owner_entity_id: project.default_owner_entity_id || null,
     };
     mockStore.saveProjects([...current, newProj]);
@@ -1104,7 +1105,7 @@ export async function createProject(project: { name: string; area_id: string; de
   }
 }
 
-export async function updateProject(id: string, updates: { name?: string; area_id?: string; default_owner_entity_id?: string | null }) {
+export async function updateProject(id: string, updates: { name?: string; area_id?: string; project_code?: string | null; default_owner_entity_id?: string | null }) {
   if (!isSupabaseConfigured) {
     const current = mockStore.getProjects();
     mockStore.saveProjects(current.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -1151,6 +1152,15 @@ export async function deleteProject(id: string) {
     );
     if (error) {
       console.error('Lỗi khi xóa dự án trên Supabase:', error);
+      // 23503 = foreign_key_violation: dự án còn dữ liệu con tham chiếu tới (thường là
+      // lô quy hoạch pháp lý chưa xóa hết — cố ý chặn theo thiết kế, xem migration 0048/0053).
+      if ((error as any).code === '23503') {
+        const detail = (error as any).details || '';
+        if (detail.includes('planned_land_lots')) {
+          throw new Error('Không thể xóa dự án: dự án vẫn còn "Lô quy hoạch pháp lý" chưa xóa hết. Vào mục "Lô quy hoạch" của dự án để xóa hết các lô trước.');
+        }
+        throw new Error('Không thể xóa dự án: vẫn còn dữ liệu khác đang tham chiếu tới dự án này (' + detail + ').');
+      }
       throw new Error(`Không thể xóa dự án: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
 

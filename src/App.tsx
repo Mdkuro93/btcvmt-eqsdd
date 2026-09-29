@@ -6,6 +6,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { MainLayout } from './layouts/MainLayout';
 import { LoadingFallback } from './components/LoadingFallback';
@@ -101,11 +102,12 @@ function RootRoute() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback message="Đang tải giao diện..." className="min-h-[70vh] border-0 shadow-none bg-transparent" />}>
-              <Routes>
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <ErrorBoundary>
+              <Suspense fallback={<LoadingFallback message="Đang tải giao diện..." className="min-h-[70vh] border-0 shadow-none bg-transparent" />}>
+                <Routes>
               {/* Public Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
@@ -167,6 +169,7 @@ export default function App() {
         </ErrorBoundary>
       </BrowserRouter>
     </AuthProvider>
-  </QueryClientProvider>
+  </ThemeProvider>
+</QueryClientProvider>
 );
 }

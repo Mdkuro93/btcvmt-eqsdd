@@ -6,11 +6,16 @@ import {
 } from '../types';
 
 const SELECT_COLUMNS = `
-  id, project_id, parent_master_asset_id, legal_lot_code, land_lot_no, map_sheet_no,
+  id, project_id, parent_master_asset_id, asset_code, legal_lot_code, land_lot_no, map_sheet_no,
   business_project_name, business_plot_code, planned_area, status, resulting_asset_id,
   notes, created_by, created_at, updated_at,
-  parent_master_asset:assets!parent_master_asset_id(id, certificate_no, asset_code),
-  resulting_asset:assets!resulting_asset_id(id, certificate_no, asset_code)
+  parent_master_asset:assets!parent_master_asset_id(id, certificate_no, asset_code, area),
+  resulting_asset:assets!resulting_asset_id(
+    id, certificate_no, asset_code, area, mortgage_status, mortgage_bank, mortgage_unit,
+    status, invalidation_type, sale_status, custody_status, managing_unit, notes,
+    current_owner_entity:investor_entities!current_owner_entity_id(id, name, company_code)
+  ),
+  projects:projects(id, name, areas(name, regions(name)))
 `;
 
 function ensureConfigured() {
@@ -19,7 +24,7 @@ function ensureConfigured() {
   }
 }
 
-/** Toàn bộ lô quy hoạch của một dự án (dùng cho tab "Lô quy hoạch chưa cấp sổ" trong trang Dự án). */
+/** Toàn bộ lô quy hoạch của một dự án (dùng cho tab "Lô quy hoạch" và báo cáo dự án). */
 export async function fetchPlannedLandLotsByProject(projectId: string): Promise<PlannedLandLot[]> {
   ensureConfigured();
   const { data, error } = await withTimeout(
@@ -27,6 +32,22 @@ export async function fetchPlannedLandLotsByProject(projectId: string): Promise<
     DEFAULT_READ_TIMEOUT
   );
   if (error) throw new Error('Không tải được danh sách lô quy hoạch: ' + error.message);
+  return (data || []) as unknown as PlannedLandLot[];
+}
+
+/** Lô quy hoạch chưa cấp GCN của Dự án (dùng cho ô chọn khi Khai báo / Cấp thẳng GCN mới). */
+export async function fetchOpenPlannedLandLotsByProject(projectId: string): Promise<PlannedLandLot[]> {
+  ensureConfigured();
+  const { data, error } = await withTimeout(
+    supabase
+      .from('planned_land_lots')
+      .select(SELECT_COLUMNS)
+      .eq('project_id', projectId)
+      .eq('status', 'chưa cấp GCN')
+      .order('legal_lot_code'),
+    DEFAULT_READ_TIMEOUT
+  );
+  if (error) throw new Error('Không tải được danh sách lô quy hoạch của dự án: ' + error.message);
   return (data || []) as unknown as PlannedLandLot[];
 }
 
@@ -46,19 +67,58 @@ export async function fetchOpenPlannedLandLotsByParentAsset(parentAssetId: strin
   return (data || []) as unknown as PlannedLandLot[];
 }
 
+export interface PlannedLotsStageCounts {
+  unregistered_count: number; // Q/R: chưa có sổ nào
+  in_master_count: number;    // O/P: trong sổ lớn chưa tách
+  issued_count: number;       // Đã có sổ riêng
+  total_count: number;
+}
+
+/** Lấy chỉ số 3 trạng thái lô quy hoạch cho Dashboard và Báo cáo. */
+export async function fetchPlannedLotsStageCounts(projectId?: string): Promise<PlannedLotsStageCounts> {
+  ensureConfigured();
+  try {
+    const { data, error } = await withTimeout(
+      supabase.rpc('get_planned_lots_stage_counts', {
+        p_project_id: projectId || null
+      }),
+      DEFAULT_READ_TIMEOUT
+    );
+    if (!error && data) {
+      return data as PlannedLotsStageCounts;
+    }
+  } catch {
+    // Fallback qua truy vấn trực tiếp nếu RPC chưa deploy
+  }
+
+  let query = supabase.from('planned_land_lots').select('id, parent_master_asset_id, resulting_asset_id');
+  if (projectId) query = query.eq('project_id', projectId);
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) throw new Error('Không tải được số liệu lô quy hoạch: ' + error.message);
+
+  const rows = data || [];
+  const unregistered_count = rows.filter(r => !r.parent_master_asset_id && !r.resulting_asset_id).length;
+  const in_master_count = rows.filter(r => r.parent_master_asset_id && !r.resulting_asset_id).length;
+  const issued_count = rows.filter(r => Boolean(r.resulting_asset_id)).length;
+
+  return {
+    unregistered_count,
+    in_master_count,
+    issued_count,
+    total_count: rows.length,
+  };
+}
+
 /** Số lô chưa cấp GCN trên toàn hệ thống — dùng cho dòng đếm ở Dashboard. */
 export async function fetchOpenPlannedLandLotsCount(): Promise<number> {
-  ensureConfigured();
-  const { count, error } = await withTimeout(
-    supabase.from('planned_land_lots').select('id', { count: 'exact', head: true }).eq('status', 'chưa cấp GCN'),
-    DEFAULT_READ_TIMEOUT
-  );
-  if (error) throw new Error('Không tải được số lô quy hoạch: ' + error.message);
-  return count || 0;
+  const stats = await fetchPlannedLotsStageCounts();
+  return (stats.unregistered_count + stats.in_master_count) || 0;
 }
 
 export interface CreatePlannedLandLotInput {
-  parent_master_asset_id: string;
+  project_id?: string;
+  parent_master_asset_id?: string | null;
+  asset_code?: string | null;
   legal_lot_code: string;
   land_lot_no?: string | null;
   map_sheet_no?: string | null;
@@ -68,7 +128,7 @@ export interface CreatePlannedLandLotInput {
   notes?: string | null;
 }
 
-/** Thêm 1 lô quy hoạch (nhập tay). project_id do trigger DB tự gắn từ sổ lớn gốc. */
+/** Thêm 1 lô quy hoạch (nhập tay). Nếu có parent_master_asset_id, project_id do trigger DB tự gắn từ sổ lớn. */
 export async function createPlannedLandLot(input: CreatePlannedLandLotInput): Promise<PlannedLandLot> {
   ensureConfigured();
   const { data, error } = await withTimeout(
@@ -80,6 +140,7 @@ export async function createPlannedLandLot(input: CreatePlannedLandLotInput): Pr
 }
 
 export interface UpdatePlannedLandLotInput {
+  parent_master_asset_id?: string | null;
   legal_lot_code?: string;
   land_lot_no?: string | null;
   map_sheet_no?: string | null;
@@ -89,10 +150,7 @@ export interface UpdatePlannedLandLotInput {
   notes?: string | null;
 }
 
-/**
- * Sửa 1 lô quy hoạch. Lưu ý: nếu lô đã "đã cấp GCN", DB chỉ cho sửa
- * business_project_name / business_plot_code / notes (trigger chặn phần còn lại).
- */
+/** Sửa 1 lô quy hoạch. */
 export async function updatePlannedLandLot(id: string, input: UpdatePlannedLandLotInput): Promise<PlannedLandLot> {
   ensureConfigured();
   const { data, error } = await withTimeout(
@@ -101,6 +159,20 @@ export async function updatePlannedLandLot(id: string, input: UpdatePlannedLandL
   );
   if (error) throw new Error('Không cập nhật được lô quy hoạch: ' + error.message);
   return data as unknown as PlannedLandLot;
+}
+
+/** Gán các lô quy hoạch chưa có sổ lớn vào một sổ lớn (Giai đoạn 1 -> 2). */
+export async function assignPlannedLotsToMasterAsset(parentAssetId: string, lotIds: string[]): Promise<number> {
+  ensureConfigured();
+  const { data, error } = await withTimeout(
+    supabase.rpc('assign_planned_lots_to_master_asset', {
+      p_parent_asset_id: parentAssetId,
+      p_lot_ids: lotIds,
+    }),
+    DEFAULT_WRITE_TIMEOUT
+  );
+  if (error) throw new Error('Không gán được lô vào sổ lớn: ' + error.message);
+  return (data?.assigned_count as number) || 0;
 }
 
 /** Xóa 1 lô quy hoạch. DB chỉ cho xóa khi lô còn "chưa cấp GCN" (RLS chặn lô đã cấp). */

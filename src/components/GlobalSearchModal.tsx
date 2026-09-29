@@ -21,7 +21,8 @@ import {
   ShieldCheck, 
   Users, 
   ClipboardCheck, 
-  KeyRound 
+  KeyRound,
+  Package
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { quickSearchAssets, QuickAssetSearchResult } from '../api/quickSearch';
@@ -200,12 +201,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     );
   }, [allowedPages, query]);
 
-  // Debounced search GCN từ Supabase
+  // Debounced search GCN từ Supabase - Bỏ rào cản độ dài (gõ 1 ký tự là kích hoạt tìm kiếm)
   useEffect(() => {
     if (!isOpen) return;
 
     const trimmed = query.trim();
-    if (trimmed.length < 2) {
+    if (!trimmed) {
       setAssetResults([]);
       setLoadingAssets(false);
       return;
@@ -218,7 +219,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const results = await quickSearchAssets(trimmed, 8);
+        const results = await quickSearchAssets(trimmed, 10);
         setAssetResults(results);
       } catch (err) {
         console.error('Lỗi tìm kiếm nhanh GCN:', err);
@@ -226,7 +227,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       } finally {
         setLoadingAssets(false);
       }
-    }, 280);
+    }, 200);
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -323,23 +324,23 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden transform transition-all flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-800 overflow-hidden transform transition-all flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
         {/* Header ô tìm kiếm */}
-        <div className="relative flex items-center border-b border-gray-200 px-4 py-3.5 bg-white">
-          <Search className="w-5 h-5 text-[#1E3A8A] shrink-0 mr-3" />
+        <div className="relative flex items-center border-b border-gray-200 dark:border-slate-800 px-4 py-3.5 bg-white dark:bg-slate-900">
+          <Search className="w-5 h-5 text-[#1E3A8A] dark:text-blue-400 shrink-0 mr-3" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Tìm kiếm trang, mã GCN, số phát hành, phân khu, dự án..."
-            className="w-full text-base bg-transparent text-gray-900 placeholder:text-gray-400 focus:outline-hidden"
+            placeholder="Tìm theo Mã GCN, Mã TSĐB, Lô/Thửa, Dự án, Số Phiếu Nhập..."
+            className="w-full text-base bg-transparent text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-hidden"
           />
           {loadingAssets && (
-            <Loader2 className="w-4 h-4 text-blue-600 animate-spin shrink-0 mx-2" />
+            <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin shrink-0 mx-2" />
           )}
           {query ? (
             <button
@@ -349,24 +350,24 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 setAssetResults([]);
                 inputRef.current?.focus();
               }}
-              className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors mr-1 cursor-pointer"
+              className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors mr-1 cursor-pointer"
               title="Xóa tìm kiếm"
             >
               <X className="w-4 h-4" />
             </button>
           ) : null}
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 rounded-md shrink-0 select-none">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-semibold text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-md shrink-0 select-none">
             ESC
           </kbd>
         </div>
 
         {/* Danh sách kết quả */}
-        <div ref={listRef} className="flex-1 overflow-y-auto p-2 divide-y divide-gray-100 divide-dashed">
+        <div ref={listRef} className="flex-1 overflow-y-auto p-2 divide-y divide-gray-100 dark:divide-slate-800/60 divide-dashed">
           {/* PHẦN 1: ĐIỀU HƯỚNG TRANG */}
           {filteredPages.length > 0 && (
             <div className="py-2 first:pt-1">
-              <div className="px-3 pb-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Compass className="w-3.5 h-3.5 text-[#1E3A8A]" />
+              <div className="px-3 pb-1.5 text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-[#1E3A8A] dark:text-blue-400" />
                 Điều hướng trang ({filteredPages.length})
               </div>
               <div className="space-y-0.5">
@@ -383,23 +384,25 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                       onMouseEnter={() => setSelectedIndex(itemIndex)}
                       className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
                         isSelected 
-                          ? 'bg-blue-50 text-[#1E3A8A] font-semibold shadow-2xs' 
-                          : 'text-gray-700 hover:bg-gray-50'
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-[#1E3A8A] dark:text-blue-300 font-semibold shadow-2xs' 
+                          : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800/60'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`p-2 rounded-lg transition-colors ${
-                          isSelected ? 'bg-[#1E3A8A] text-white shadow-2xs' : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200'
+                          isSelected 
+                            ? 'bg-[#1E3A8A] dark:bg-blue-600 text-white shadow-2xs' 
+                            : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 group-hover:bg-gray-200 dark:group-hover:bg-slate-700'
                         }`}>
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
                           <div className="text-sm font-semibold truncate flex items-center gap-2">
                             <span>{page.name}</span>
-                            <span className="text-[10px] font-mono font-normal text-gray-400">{page.href}</span>
+                            <span className="text-[10px] font-mono font-normal text-gray-400 dark:text-slate-500">{page.href}</span>
                           </div>
                           {page.description && (
-                            <div className="text-xs text-gray-500 truncate mt-0.5">
+                            <div className="text-xs text-gray-500 dark:text-slate-400 truncate mt-0.5">
                               {page.description}
                             </div>
                           )}
@@ -407,7 +410,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-3">
                         {isSelected && (
-                          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-blue-600">
+                          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400">
                             Đi tới <ArrowRight className="w-3.5 h-3.5" />
                           </span>
                         )}
@@ -420,20 +423,20 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           )}
 
           {/* PHẦN 2: TÌM KIẾM GCN / HỒ SƠ */}
-          {query.trim().length >= 2 && (
+          {query.trim().length > 0 && (
             <div className="py-2">
-              <div className="px-3 pb-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+              <div className="px-3 pb-1.5 text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Files className="w-3.5 h-3.5 text-blue-600" />
+                  <Files className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   Hồ sơ Giấy chứng nhận ({assetResults.length})
                 </span>
                 {loadingAssets && (
-                  <span className="text-[11px] font-normal text-gray-400">Đang tra cứu...</span>
+                  <span className="text-[11px] font-normal text-gray-400 dark:text-slate-500">Đang tra cứu...</span>
                 )}
               </div>
 
               {assetResults.length === 0 && !loadingAssets ? (
-                <div className="px-4 py-4 text-center text-xs text-gray-400">
+                <div className="px-4 py-4 text-center text-xs text-gray-400 dark:text-slate-500">
                   Không tìm thấy GCN nào khớp với từ khóa "{query}".
                 </div>
               ) : (
@@ -450,47 +453,58 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         onMouseEnter={() => setSelectedIndex(itemIndex)}
                         className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
                           isSelected 
-                            ? 'bg-blue-50 text-[#1E3A8A] shadow-2xs' 
-                            : 'text-gray-700 hover:bg-gray-50'
+                            ? 'bg-blue-50 dark:bg-blue-950/40 text-[#1E3A8A] dark:text-blue-300 shadow-2xs' 
+                            : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800/60'
                         }`}
                       >
                         <div className="flex items-start gap-3 min-w-0">
                           <div className={`p-2 rounded-lg mt-0.5 transition-colors ${
-                            isSelected ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
+                            isSelected 
+                              ? 'bg-blue-600 text-white' 
+                              : 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/60'
                           }`}>
                             <Tag className="w-4 h-4" />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-bold text-slate-900 group-hover:text-[#1E3A8A]">
+                              <span className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#1E3A8A] dark:group-hover:text-blue-400">
                                 {asset.certificate_no}
                               </span>
                               {asset.asset_code && (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                   {asset.asset_code}
                                 </span>
                               )}
-                              <span className={`px-2 py-0.2 rounded-full text-[10px] font-semibold ${
+                              {asset.import_receipt_number && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                                  <Package className="w-3 h-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                                  {asset.import_receipt_number}
+                                </span>
+                              )}
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                                 asset.is_in_warehouse || asset.custody_status === 'in_stock'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                               }`}>
                                 {asset.is_in_warehouse || asset.custody_status === 'in_stock' ? 'Đang lưu kho' : 'Đã xuất kho'}
                               </span>
                             </div>
 
-                            <div className="text-xs text-gray-500 mt-1 flex items-center gap-3 flex-wrap">
+                            <div className="text-xs text-gray-500 dark:text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
                               {(asset.business_project_name || asset.project_name) && (
-                                <span className="flex items-center gap-1 truncate">
-                                  <Building2 className="w-3 h-3 text-gray-400 shrink-0" />
+                                <span className="flex items-center gap-1 truncate font-medium text-gray-700 dark:text-slate-300">
+                                  <Building2 className="w-3 h-3 text-gray-400 dark:text-slate-500 shrink-0" />
                                   {asset.business_project_name || asset.project_name}
                                 </span>
                               )}
                               {asset.legal_lot_code && (
-                                <span>Thửa/Lô: <strong className="text-gray-700">{asset.legal_lot_code}</strong></span>
+                                <span>Thửa/Lô: <strong className="text-gray-700 dark:text-slate-200 font-semibold">{asset.legal_lot_code}</strong></span>
+                              )}
+                              {asset.business_plot_code && (
+                                <span>Lô KD: <strong className="text-gray-700 dark:text-slate-200 font-semibold">{asset.business_plot_code}</strong></span>
                               )}
                               {asset.warehouse_name && (
-                                <span className="flex items-center gap-1 text-gray-400">
+                                <span className="flex items-center gap-1 text-gray-400 dark:text-slate-500">
                                   <Warehouse className="w-3 h-3" /> {asset.warehouse_name}
                                 </span>
                               )}
@@ -500,7 +514,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
                         <div className="shrink-0 ml-3 flex items-center">
                           {isSelected && (
-                            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-blue-600">
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400">
                               Mở chi tiết <ArrowRight className="w-3.5 h-3.5" />
                             </span>
                           )}
@@ -515,34 +529,34 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
           {/* Trạng thái không có kết quả */}
           {combinedItems.length === 0 && (
-            <div className="py-12 text-center text-gray-400">
-              <Search className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-              <p className="text-sm font-semibold text-gray-600">Không tìm thấy kết quả</p>
-              <p className="text-xs text-gray-400 mt-1">Thử nhập từ khóa khác hoặc bấm ESC để đóng</p>
+            <div className="py-12 text-center text-gray-400 dark:text-slate-500">
+              <Search className="w-8 h-8 mx-auto text-gray-300 dark:text-slate-600 mb-2" />
+              <p className="text-sm font-semibold text-gray-600 dark:text-slate-300">Không tìm thấy kết quả</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">Thử nhập từ khóa khác hoặc bấm ESC để đóng</p>
             </div>
           )}
         </div>
 
         {/* Footer phím tắt hướng dẫn */}
-        <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-[11px] text-gray-500 select-none">
+        <div className="px-4 py-2.5 bg-gray-50 dark:bg-slate-900/90 border-t border-gray-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400 select-none">
           <div className="flex items-center gap-4 flex-wrap">
             <span className="inline-flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded shadow-2xs font-mono font-semibold text-[10px]">↑</kbd>
-              <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded shadow-2xs font-mono font-semibold text-[10px]">↓</kbd>
+              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded shadow-2xs font-mono font-semibold text-[10px] text-gray-700 dark:text-slate-300">↑</kbd>
+              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded shadow-2xs font-mono font-semibold text-[10px] text-gray-700 dark:text-slate-300">↓</kbd>
               <span>chọn</span>
             </span>
             <span className="inline-flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded shadow-2xs font-mono font-semibold text-[10px] flex items-center gap-0.5">
+              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded shadow-2xs font-mono font-semibold text-[10px] text-gray-700 dark:text-slate-300 flex items-center gap-0.5">
                 <CornerDownLeft className="w-2.5 h-2.5" /> Enter
               </kbd>
               <span>đi tới</span>
             </span>
             <span className="inline-flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded shadow-2xs font-mono font-semibold text-[10px]">ESC</kbd>
+              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded shadow-2xs font-mono font-semibold text-[10px] text-gray-700 dark:text-slate-300">ESC</kbd>
               <span>đóng</span>
             </span>
           </div>
-          <span className="hidden sm:inline text-gray-400">Tìm kiếm nhanh eQSDĐ</span>
+          <span className="hidden sm:inline text-gray-400 dark:text-slate-500">Tìm kiếm nhanh eQSDĐ</span>
         </div>
       </div>
     </div>

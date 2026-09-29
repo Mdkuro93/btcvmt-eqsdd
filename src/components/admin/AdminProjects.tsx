@@ -22,10 +22,11 @@ export const AdminProjects: React.FC = () => {
 
   // Form states
   const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectCode, setNewProjectCode] = useState('');
   const [newProjectAreaId, setNewProjectAreaId] = useState('');
   const [newProjectDefaultOwnerId, setNewProjectDefaultOwnerId] = useState('');
   const [projectSearch, setProjectSearch] = useState('');
-  const [editingProject, setEditingProject] = useState<{ id: string; name: string; area_id: string; default_owner_entity_id?: string | null } | null>(null);
+  const [editingProject, setEditingProject] = useState<{ id: string; name: string; project_code?: string | null; area_id: string; default_owner_entity_id?: string | null } | null>(null);
 
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -64,11 +65,13 @@ export const AdminProjects: React.FC = () => {
     try {
       await createProject({
         name: newProjectName.trim(),
+        project_code: newProjectCode.trim() || null,
         area_id: newProjectAreaId,
         default_owner_entity_id: newProjectDefaultOwnerId || null,
       });
       toast.success('Thêm dự án thành công');
       setNewProjectName('');
+      setNewProjectCode('');
       setNewProjectDefaultOwnerId('');
       loadData();
     } catch (err: any) {
@@ -85,6 +88,7 @@ export const AdminProjects: React.FC = () => {
     try {
       await updateProject(editingProject.id, {
         name: editingProject.name.trim(),
+        project_code: editingProject.project_code?.trim() || null,
         area_id: editingProject.area_id,
         default_owner_entity_id: editingProject.default_owner_entity_id || null,
       });
@@ -143,13 +147,23 @@ export const AdminProjects: React.FC = () => {
           <Plus className="w-4 h-4" /> Thêm Dự án Bất động sản mới
         </h3>
         <form onSubmit={handleAddProject} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-          <div className="sm:col-span-4">
+          <div className="sm:col-span-3">
             <label className="block text-xs font-semibold text-gray-700 mb-1">Tên Dự án *</label>
             <input
               type="text"
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
               placeholder="VD: Dự án Khu Đô Thị VMT Central Palm..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Mã dự án</label>
+            <input
+              type="text"
+              value={newProjectCode}
+              onChange={(e) => setNewProjectCode(e.target.value)}
+              placeholder="VD: DND-01"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -166,7 +180,7 @@ export const AdminProjects: React.FC = () => {
               ))}
             </select>
           </div>
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-2">
             <label className="block text-xs font-semibold text-gray-700 mb-1">Chủ đầu tư mặc định</label>
             <select
               value={newProjectDefaultOwnerId}
@@ -225,6 +239,11 @@ export const AdminProjects: React.FC = () => {
                   </div>
                   <div>
                     <span className="font-semibold text-gray-900 text-sm">{p.name}</span>
+                    {p.project_code && (
+                      <span className="ml-2 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-mono font-semibold rounded align-middle">
+                        {p.project_code}
+                      </span>
+                    )}
                     <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                       <span>Địa bàn: <span className="font-medium text-gray-700">{areaName}</span></span>
                       {defaultOwner && (
@@ -249,6 +268,7 @@ export const AdminProjects: React.FC = () => {
                     onClick={() => setEditingProject({
                       id: p.id,
                       name: p.name,
+                      project_code: p.project_code || '',
                       area_id: p.area_id,
                       default_owner_entity_id: p.default_owner_entity_id || '',
                     })}
@@ -295,6 +315,16 @@ export const AdminProjects: React.FC = () => {
                   onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mã dự án</label>
+                <input
+                  type="text"
+                  value={editingProject.project_code || ''}
+                  onChange={(e) => setEditingProject({ ...editingProject, project_code: e.target.value })}
+                  placeholder="VD: DND-01"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
               </div>
               <div>

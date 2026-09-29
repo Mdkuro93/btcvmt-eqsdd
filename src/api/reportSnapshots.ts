@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
-import { ReportSnapshot, DenormalizedReportAsset, Asset } from '../types';
+import { ReportSnapshot, DenormalizedReportAsset, Asset, ProjectReportRow } from '../types';
 import { mockStore } from '../lib/mockStore';
 import { formatPlotCode } from '../lib/assetIdentifier';
 
@@ -154,6 +154,7 @@ export async function createReportSnapshot(params: {
   period_status?: 'open' | 'locked';
   notes?: string;
   assets: Asset[];
+  project_report_data?: ProjectReportRow[];
 }): Promise<ReportSnapshot> {
   const {
     report_code,
@@ -168,6 +169,7 @@ export async function createReportSnapshot(params: {
     period_status = 'open',
     notes = '',
     assets,
+    project_report_data = [],
   } = params;
 
   // 1. Thực hiện Denormalization toàn bộ danh sách tài sản thành chuỗi văn bản tĩnh
@@ -202,10 +204,12 @@ export async function createReportSnapshot(params: {
     total_valuation,
     total_collateral_value,
     report_data: denormalizedData,
+    project_report_data,
     summary_stats: {
       mortgaged_count: denormalizedData.filter(d => d.mortgage_status_label === 'Đã thế chấp').length,
       unmortgaged_count: denormalizedData.filter(d => d.mortgage_status_label === 'Chưa thế chấp').length,
       borrowed_count: denormalizedData.filter(d => d.custody_status_label.includes('Đang xuất mượn')).length,
+      project_rows_count: project_report_data.length,
     },
     notes,
   };

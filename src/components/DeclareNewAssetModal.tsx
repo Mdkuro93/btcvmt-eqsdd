@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchProjects, fetchWarehouses, fetchAssetIdentifierCandidates } from '../api/assets';
 import { createDeclarationRequest } from '../api/assetDeclarationRequests';
 import { fetchInvestorEntities } from '../api/investorEntities';
-import { fetchOpenPlannedLandLotsByParentAsset } from '../api/plannedLandLots';
+import { fetchOpenPlannedLandLotsByParentAsset, fetchOpenPlannedLandLotsByProject } from '../api/plannedLandLots';
 import { PlannedLandLot } from '../types';
 import toast from 'react-hot-toast';
 
@@ -93,21 +93,29 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
     return (e.name?.toLowerCase().includes(s) || e.company_code?.toLowerCase().includes(s));
   }).slice(0, 50);
 
-  // Lô quy hoạch (nếu có): chỉ áp dụng khi Tách sổ và đã chọn Sổ gốc, giúp điền nhanh dữ liệu lô đã khai trước.
+  // Lô quy hoạch (nếu có): áp dụng khi Tách sổ (chọn Sổ gốc) hoặc Cấp mới/Cấp thẳng (chọn Dự án)
   useEffect(() => {
     setSelectedPlannedLotId('');
-    if (requestType !== 'tach_so' || !oldAssetId) {
-      setPlannedLots([]);
-      return;
-    }
     let cancelled = false;
-    setLoadingPlannedLots(true);
-    fetchOpenPlannedLandLotsByParentAsset(oldAssetId)
-      .then(data => { if (!cancelled) setPlannedLots(data); })
-      .catch(() => { if (!cancelled) setPlannedLots([]); })
-      .finally(() => { if (!cancelled) setLoadingPlannedLots(false); });
+
+    if (requestType === 'tach_so' && oldAssetId) {
+      setLoadingPlannedLots(true);
+      fetchOpenPlannedLandLotsByParentAsset(oldAssetId)
+        .then(data => { if (!cancelled) setPlannedLots(data); })
+        .catch(() => { if (!cancelled) setPlannedLots([]); })
+        .finally(() => { if (!cancelled) setLoadingPlannedLots(false); });
+    } else if (requestType === 'cap_moi' && projectId) {
+      setLoadingPlannedLots(true);
+      fetchOpenPlannedLandLotsByProject(projectId)
+        .then(data => { if (!cancelled) setPlannedLots(data); })
+        .catch(() => { if (!cancelled) setPlannedLots([]); })
+        .finally(() => { if (!cancelled) setLoadingPlannedLots(false); });
+    } else {
+      setPlannedLots([]);
+    }
+
     return () => { cancelled = true; };
-  }, [requestType, oldAssetId]);
+  }, [requestType, oldAssetId, projectId]);
 
   const handleSelectPlannedLot = (lotId: string) => {
     setSelectedPlannedLotId(lotId);
@@ -574,15 +582,19 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
               </div>
             </div>
 
-            {requestType === 'tach_so' && oldAssetId && (
+            {((requestType === 'tach_so' && oldAssetId) || (requestType === 'cap_moi' && projectId)) && (
               <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-4">
                 <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                   <LandPlot className="w-3.5 h-3.5" /> Lô quy hoạch (nếu có)
                 </label>
                 {loadingPlannedLots ? (
-                  <p className="text-xs text-amber-700">Đang tải danh sách lô quy hoạch của sổ gốc...</p>
+                  <p className="text-xs text-amber-700">Đang tải danh sách lô quy hoạch...</p>
                 ) : plannedLots.length === 0 ? (
-                  <p className="text-xs text-amber-700">Sổ gốc này chưa có lô quy hoạch nào được khai báo trước. Nhập tay các trường bên dưới.</p>
+                  <p className="text-xs text-amber-700">
+                    {requestType === 'tach_so'
+                      ? 'Sổ gốc này chưa có lô quy hoạch nào được khai báo trước. Nhập tay các trường bên dưới.'
+                      : 'Dự án này chưa có lô quy hoạch chưa cấp sổ nào. Nhập tay các trường bên dưới.'}
+                  </p>
                 ) : (
                   <>
                     <select

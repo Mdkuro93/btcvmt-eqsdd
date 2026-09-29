@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Asset, Warehouse, Profile } from '../types';
 import { bulkUpdateAssets } from '../api/assets';
+import { sendNotification } from '../services/notificationService';
 import { X, Loader2, Warehouse as WarehouseIcon, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -54,6 +55,18 @@ export const BulkWarehouseModal: React.FC<BulkWarehouseModalProps> = ({
       );
 
       toast.success(`Đã chuyển thành công ${res.count} GCN sang kho "${targetWh?.name || 'mới'}"!`);
+
+      // Bắn thông báo nghiệp vụ hệ thống
+      if (currentUser?.id) {
+        sendNotification({
+          userIds: [currentUser.id],
+          title: `Chuyển kho hàng loạt (${res.count} GCN)`,
+          message: `Đã chuyển ${res.count} GCN sang kho "${targetWh?.name || 'kho mới'}". Ghi chú: ${noteText}`,
+          link: `/assets?warehouse_id=${targetWarehouseId}`,
+          type: 'warehouse_transfer',
+        }).catch(notifErr => console.warn('Không thể gửi thông báo chuyển kho:', notifErr));
+      }
+
       onSuccess();
       onClose();
     } catch (err: any) {

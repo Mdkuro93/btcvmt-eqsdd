@@ -84,25 +84,27 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
     return tagged.length > 0 ? tagged : existingAssets;
   }, [existingAssets]);
 
+  const UNASSIGNED_KEY = '__unassigned__';
   const lotsByParent = useMemo(() => {
     const map = new Map<string, PlannedLandLot[]>();
     for (const lot of lots) {
-      const key = lot.parent_master_asset_id;
+      const key = lot.parent_master_asset_id || UNASSIGNED_KEY;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(lot);
     }
     return map;
   }, [lots]);
+  const unassignedLots = lotsByParent.get(UNASSIGNED_KEY) || [];
 
-  const openCreateFor = (assetId: string) => {
-    setParentAssetId(assetId);
+  const openCreateFor = (assetId?: string) => {
+    setParentAssetId(assetId || '');
     setForm(emptyForm);
     setEditingId(null);
     setShowForm(true);
   };
 
   const openEdit = (lot: PlannedLandLot) => {
-    setParentAssetId(lot.parent_master_asset_id);
+    setParentAssetId(lot.parent_master_asset_id || '');
     setForm({
       legal_lot_code: lot.legal_lot_code,
       land_lot_no: lot.land_lot_no || '',
@@ -118,10 +120,8 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
 
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!parentAssetId) {
-      toast.error('Vui lòng chọn Sổ lớn gốc.');
-      return;
-    }
+    // Sổ lớn gốc KHÔNG bắt buộc: dự án chưa có GCN nào vẫn khai báo được lô quy hoạch,
+    // lô đó sẽ gắn thẳng vào dự án (project_id) và chờ cấp thẳng hoặc gán vào sổ lớn sau.
     if (!form.legal_lot_code.trim()) {
       toast.error('Vui lòng nhập Mã Lô Pháp Lý.');
       return;
@@ -133,11 +133,14 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
     setSaving(true);
     try {
       if (editingId) {
-        await updatePlannedLandLot(editingId, form);
+        await updatePlannedLandLot(editingId, { ...form, parent_master_asset_id: parentAssetId || null });
         toast.success('Đã cập nhật lô quy hoạch.');
-      } else {
+      } else if (parentAssetId) {
         await createPlannedLandLot({ ...form, parent_master_asset_id: parentAssetId });
         toast.success('Đã thêm lô quy hoạch.');
+      } else {
+        await createPlannedLandLot({ ...form, parent_master_asset_id: null, project_id: project.id });
+        toast.success('Đã thêm lô quy hoạch (chưa gắn sổ lớn).');
       }
       setShowForm(false);
       setEditingId(null);
@@ -234,13 +237,82 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
               <div className="flex items-center gap-2 text-sm text-slate-500 py-8 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" /> Đang tải...
               </div>
-            ) : masterCandidates.length === 0 ? (
-              <div className="text-sm text-gray-500 text-center py-8">
-                Dự án chưa có GCN nào để làm Sổ lớn gốc. Hãy khai báo GCN trước.
-              </div>
             ) : (
               <div className="space-y-5">
-                {masterCandidates.map(master => {
+                {/* Nhóm lô ĐỘC LẬP — chưa gắn vào sổ lớn nào, kể cả khi dự án CHƯA có bất kỳ GCN nào.
+                    Luôn hiển thị (không chờ có Sổ lớn), vì đây chính là trường hợp chính của tính năng:
+                    khai báo trước lô theo quy hoạch, chờ cấp thẳng hoặc gán vào sổ lớn sau này. */}
+                <div className="border border-dashed border-gray-300 rounded-xl overflow-hidden">
+                  <div className="p-3 bg-slate-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+                    <div className="text-sm">
+                      <span className="text-gray-500">Lô độc lập theo dự án</span>{' '}
+                      <span className="text-xs text-gray-400">(chưa gắn vào sổ lớn nào)</span>
+                    </div>
+                    <button
+                      onClick={() => openCreateFor()}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 px-2.5 py-1.5 rounded-lg cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Thêm lô
+                    </button>
+                  </div>
+                  {unassignedLots.length === 0 ? (
+                    <div className="p-4 text-xs text-gray-400 text-center">
+                      Chưa có lô độc lập nào. Bấm "Thêm lô" để khai báo lô theo quy hoạch — kể cả khi dự án chưa có GCN nào.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {unassignedLots.map(lot => (
+                        <div key={lot.id} className="p-3 flex items-center justify-between gap-3 text-sm hover:bg-gray-50">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono font-semibold text-gray-900">{lot.legal_lot_code}</span>
+                              {lot.status === 'đã cấp GCN' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                                  <CheckCircle2 className="w-3 h-3" /> Đã cấp GCN
+                                  {lot.resulting_asset?.certificate_no ? `: ${lot.resulting_asset.certificate_no}` : ''}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                                  <Clock className="w-3 h-3" /> Chưa cấp GCN
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+                              <span>{lot.planned_area} m²</span>
+                              {lot.land_lot_no && <span>Thửa {lot.land_lot_no}</span>}
+                              {lot.map_sheet_no && <span>Tờ BĐ {lot.map_sheet_no}</span>}
+                              {lot.business_plot_code && <span>KD: {lot.business_plot_code}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => openEdit(lot)}
+                              className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-md cursor-pointer"
+                              title="Sửa"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            {lot.status === 'chưa cấp GCN' && (
+                              <button
+                                onClick={() => setDeleteTarget(lot)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer"
+                                title="Xóa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {masterCandidates.length === 0 ? (
+                  <div className="text-xs text-gray-400 text-center py-2">
+                    Dự án chưa có GCN nào được đánh dấu "Sổ lớn" — khi khai báo GCN và gắn nhãn Sổ lớn, bạn sẽ gán được lô vào đó tại đây.
+                  </div>
+                ) : masterCandidates.map(master => {
                   const rows = lotsByParent.get(master.id) || [];
                   return (
                     <div key={master.id} className="border border-gray-200 rounded-xl overflow-hidden">
