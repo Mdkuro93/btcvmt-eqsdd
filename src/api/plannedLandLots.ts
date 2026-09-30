@@ -9,7 +9,7 @@ const SELECT_COLUMNS = `
   id, project_id, parent_master_asset_id, asset_code, legal_lot_code, land_lot_no, map_sheet_no,
   business_project_name, business_plot_code, planned_area, status, resulting_asset_id,
   notes, created_by, created_at, updated_at,
-  parent_master_asset:assets!parent_master_asset_id(id, certificate_no, asset_code, area),
+  parent_master_asset:assets!parent_master_asset_id(id, certificate_no, asset_code, area, land_lot_no, map_sheet_no),
   resulting_asset:assets!resulting_asset_id(
     id, certificate_no, asset_code, area, mortgage_status, mortgage_bank, mortgage_unit,
     status, invalidation_type, sale_status, custody_status, managing_unit, notes,
@@ -188,18 +188,21 @@ export async function deletePlannedLandLot(id: string): Promise<void> {
 }
 
 /**
- * Nhập hàng loạt lô quy hoạch từ Excel qua RPC nguyên tử (import_planned_land_lots).
+ * Nhập hàng loạt lô quy hoạch từ Excel qua RPC nguyên tử (import_planned_land_lots_v2).
+ * Truyền ĐÚNG 1 trong 2: target.parentAssetId (nhập vào 1 sổ lớn cụ thể) HOẶC
+ * target.projectId (nhập lô độc lập, chưa gắn sổ lớn, thuộc thẳng dự án).
  * dryRun=true chỉ kiểm tra, không ghi dữ liệu — dùng để xem trước lỗi/cảnh báo trước khi nhập thật.
  */
 export async function importPlannedLandLots(
-  parentAssetId: string,
+  target: { parentAssetId?: string | null; projectId?: string | null },
   rows: PlannedLandLotImportRow[],
   dryRun: boolean
 ): Promise<PlannedLandLotImportResult> {
   ensureConfigured();
   const { data, error } = await withTimeout(
-    supabase.rpc('import_planned_land_lots', {
-      p_parent_asset_id: parentAssetId,
+    supabase.rpc('import_planned_land_lots_v2', {
+      p_parent_asset_id: target.parentAssetId || null,
+      p_project_id: target.parentAssetId ? null : (target.projectId || null),
       p_rows: rows,
       p_dry_run: dryRun,
     }),

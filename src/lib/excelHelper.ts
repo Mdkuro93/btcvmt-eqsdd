@@ -344,52 +344,83 @@ export function exportInventoryAuditToExcel(
     (i: any) => i.finding_status === 'missing' || i.finding_status === 'misplaced'
   );
 
-  const discrepancyRows = discrepancyItems.map((i: any, index: number) => {
-    const a = i.asset || {};
-    let statusText = 'Khớp';
-    if (i.finding_status === 'missing') statusText = '❌ KHÔNG TÌM THẤY (THIẾU)';
-    if (i.finding_status === 'misplaced') statusText = '⚠️ SAI VỊ TRÍ';
+  const discrepancyRows = discrepancyItems.length > 0
+    ? discrepancyItems.map((i: any, index: number) => {
+        const a = i.asset || {};
+        let statusText = 'Khớp';
+        if (i.finding_status === 'missing') statusText = '❌ KHÔNG TÌM THẤY (THIẾU)';
+        if (i.finding_status === 'misplaced') statusText = '⚠️ SAI VỊ TRÍ';
 
-    return {
-      'STT': index + 1,
-      'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
-      'Mã Tài Sản / TSĐB': a.asset_code || '-',
-      'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
-      'Mã Lô Pháp Lý': a.legal_lot_code || '-',
-      'Chủ Sở Hữu': a.current_owner_entity?.name || a.investor_entities?.name || '-',
-      'Diện Tích (m²)': a.area || 0,
-      'Hiện Trạng Kiểm Kê': statusText,
-      'Vị Trí Dự Kiến': i.expected_location || '-',
-      'Vị Trí Thực Tế': i.actual_location || (i.finding_status === 'missing' ? 'Không xác định' : '-'),
-      'Ghi Chú Chi Tiết': i.note || '',
-      'Thời Gian Kiểm': i.audited_at ? format(new Date(i.audited_at), 'dd/MM/yyyy HH:mm') : '-',
-    };
-  });
+        return {
+          'STT': index + 1,
+          'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
+          'Mã Tài Sản / TSĐB': a.asset_code || '-',
+          'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
+          'Mã Lô Pháp Lý': a.legal_lot_code || '-',
+          'Chủ Sở Hữu': a.current_owner_entity?.name || a.investor_entities?.name || '-',
+          'Diện Tích (m²)': a.area || 0,
+          'Hiện Trạng Kiểm Kê': statusText,
+          'Vị Trí Dự Kiến': i.expected_location || '-',
+          'Vị Trí Thực Tế': i.actual_location || (i.finding_status === 'missing' ? 'Không xác định' : '-'),
+          'Ghi Chú Chi Tiết': i.note || '',
+          'Thời Gian Kiểm': i.audited_at ? format(new Date(i.audited_at), 'dd/MM/yyyy HH:mm') : '-',
+        };
+      })
+    : [{
+        'STT': 1,
+        'Số GCN QSDĐ': '-',
+        'Mã Tài Sản / TSĐB': '-',
+        'Tên Dự Án': '-',
+        'Mã Lô Pháp Lý': '-',
+        'Chủ Sở Hữu': '-',
+        'Diện Tích (m²)': 0,
+        'Hiện Trạng Kiểm Kê': '✅ Không phát hiện chênh lệch (Tất cả hồ sơ khớp đúng vị trí)',
+        'Vị Trí Dự Kiến': '-',
+        'Vị Trí Thực Tế': '-',
+        'Ghi Chú Chi Tiết': 'Đợt kiểm kê không có hồ sơ khuyết thiếu hoặc sai vị trí lưu kho.',
+        'Thời Gian Kiểm': completedDateStr !== 'Chưa hoàn tất' ? completedDateStr : '-',
+      }];
 
   // 2. Data for All Items Sheet (Toàn bộ danh sách)
-  const allRows = items.map((i: any, index: number) => {
-    const a = i.asset || {};
-    let statusText = 'Chưa kiểm';
-    if (i.finding_status === 'matched') statusText = '✅ Đã tìm thấy - Đúng vị trí';
-    if (i.finding_status === 'misplaced') statusText = '⚠️ Tìm thấy - Sai vị trí';
-    if (i.finding_status === 'missing') statusText = '❌ Không tìm thấy';
+  const allRows = items.length > 0
+    ? items.map((i: any, index: number) => {
+        const a = i.asset || {};
+        let statusText = 'Chưa kiểm';
+        if (i.finding_status === 'matched') statusText = '✅ Đã tìm thấy - Đúng vị trí';
+        if (i.finding_status === 'misplaced') statusText = '⚠️ Tìm thấy - Sai vị trí';
+        if (i.finding_status === 'missing') statusText = '❌ Không tìm thấy';
 
-    return {
-      'STT': index + 1,
-      'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
-      'Mã Tài Sản / TSĐB': a.asset_code || '-',
-      'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
-      'Mã Lô Pháp Lý': a.legal_lot_code || '-',
-      'Chủ Sở Hữu': a.current_owner_entity?.name || a.investor_entities?.name || '-',
-      'Diện Tích (m²)': a.area || 0,
-      'Kết Quả Kiểm Kê': statusText,
-      'Tìm Thấy Thực Tế': i.actual_found ? 'Có' : 'Không',
-      'Vị Trí Dự Kiến': i.expected_location || '-',
-      'Vị Trí Thực Tế': i.actual_location || '-',
-      'Ghi Chú': i.note || '',
-      'Thời Gian Kiểm': i.audited_at ? format(new Date(i.audited_at), 'dd/MM/yyyy HH:mm') : '-',
-    };
-  });
+        return {
+          'STT': index + 1,
+          'Số GCN QSDĐ': a.certificate_no || 'Chưa rõ',
+          'Mã Tài Sản / TSĐB': a.asset_code || '-',
+          'Tên Dự Án': a.business_project_name || a.projects?.name || '-',
+          'Mã Lô Pháp Lý': a.legal_lot_code || '-',
+          'Chủ Sở Hữu': a.current_owner_entity?.name || a.investor_entities?.name || '-',
+          'Diện Tích (m²)': a.area || 0,
+          'Kết Quả Kiểm Kê': statusText,
+          'Tìm Thấy Thực Tế': i.actual_found ? 'Có' : 'Không',
+          'Vị Trí Dự Kiến': i.expected_location || '-',
+          'Vị Trí Thực Tế': i.actual_location || '-',
+          'Ghi Chú': i.note || '',
+          'Thời Gian Kiểm': i.audited_at ? format(new Date(i.audited_at), 'dd/MM/yyyy HH:mm') : '-',
+        };
+      })
+    : [{
+        'STT': 1,
+        'Số GCN QSDĐ': '-',
+        'Mã Tài Sản / TSĐB': '-',
+        'Tên Dự Án': '-',
+        'Mã Lô Pháp Lý': '-',
+        'Chủ Sở Hữu': '-',
+        'Diện Tích (m²)': 0,
+        'Kết Quả Kiểm Kê': 'Không có dữ liệu',
+        'Tìm Thấy Thực Tế': 'Không',
+        'Vị Trí Dự Kiến': '-',
+        'Vị Trí Thực Tế': '-',
+        'Ghi Chú': 'Đợt kiểm kê chưa có hồ sơ hoặc kho không có tài sản.',
+        'Thời Gian Kiểm': '-',
+      }];
 
   const workbook = XLSX.utils.book_new();
 

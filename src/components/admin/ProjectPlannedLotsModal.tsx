@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   X, LandPlot, FileText, Plus, Trash2, Edit2, UploadCloud, Loader2,
-  CheckCircle2, Clock, Save, XCircle,
+  CheckCircle2, Clock, Save, XCircle, Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Asset, PlannedLandLot, Project } from '../../types';
@@ -13,6 +13,7 @@ import {
   deletePlannedLandLot,
   CreatePlannedLandLotInput,
 } from '../../api/plannedLandLots';
+import { exportPlannedLandLotsExcel } from '../../utils/exportPlannedLandLotsExcel';
 import { ConfirmModal } from '../ConfirmModal';
 import { ImportPlannedLotsModal } from './ImportPlannedLotsModal';
 
@@ -96,6 +97,10 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
   }, [lots]);
   const unassignedLots = lotsByParent.get(UNASSIGNED_KEY) || [];
 
+  // Lô đang chọn Sổ lớn gốc (chưa tách): Số thửa/Số tờ bản đồ hiển thị TẠM theo sổ lớn,
+  // không cho gõ tay — chỉ có số thửa/tờ thật của riêng lô sau khi lô được tách sổ.
+  const selectedMaster = parentAssetId ? masterCandidates.find(a => a.id === parentAssetId) || null : null;
+
   const openCreateFor = (assetId?: string) => {
     setParentAssetId(assetId || '');
     setForm(emptyForm);
@@ -132,14 +137,19 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
     }
     setSaving(true);
     try {
+      // Có sổ lớn & chưa tách -> gửi land_lot_no/map_sheet_no = null (không lưu số của sổ lớn
+      // thành số riêng của lô); lô độc lập -> giữ đúng số người dùng nhập (nếu có).
+      const submitForm = selectedMaster
+        ? { ...form, land_lot_no: null, map_sheet_no: null }
+        : form;
       if (editingId) {
-        await updatePlannedLandLot(editingId, { ...form, parent_master_asset_id: parentAssetId || null });
+        await updatePlannedLandLot(editingId, { ...submitForm, parent_master_asset_id: parentAssetId || null });
         toast.success('Đã cập nhật lô quy hoạch.');
       } else if (parentAssetId) {
-        await createPlannedLandLot({ ...form, parent_master_asset_id: parentAssetId });
+        await createPlannedLandLot({ ...submitForm, parent_master_asset_id: parentAssetId });
         toast.success('Đã thêm lô quy hoạch.');
       } else {
-        await createPlannedLandLot({ ...form, parent_master_asset_id: null, project_id: project.id });
+        await createPlannedLandLot({ ...submitForm, parent_master_asset_id: null, project_id: project.id });
         toast.success('Đã thêm lô quy hoạch (chưa gắn sổ lớn).');
       }
       setShowForm(false);
@@ -181,9 +191,20 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">Quản lý GCN và lô quy hoạch pháp lý của dự án</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (lots.length === 0) { toast.error('Dự án chưa có lô quy hoạch nào để xuất.'); return; }
+                exportPlannedLandLotsExcel(project.name, lots);
+              }}
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A] hover:bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" /> Xuất Excel
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -248,12 +269,20 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                       <span className="text-gray-500">Lô độc lập theo dự án</span>{' '}
                       <span className="text-xs text-gray-400">(chưa gắn vào sổ lớn nào)</span>
                     </div>
-                    <button
-                      onClick={() => openCreateFor()}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 px-2.5 py-1.5 rounded-lg cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Thêm lô
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setParentAssetId(''); setShowImportModal(true); }}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A] hover:bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" /> Import Excel
+                      </button>
+                      <button
+                        onClick={() => openCreateFor()}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 px-2.5 py-1.5 rounded-lg cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Thêm lô
+                      </button>
+                    </div>
                   </div>
                   {unassignedLots.length === 0 ? (
                     <div className="p-4 text-xs text-gray-400 text-center">
@@ -360,8 +389,16 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                                 </div>
                                 <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
                                   <span>{lot.planned_area} m²</span>
-                                  {lot.land_lot_no && <span>Thửa {lot.land_lot_no}</span>}
-                                  {lot.map_sheet_no && <span>Tờ BĐ {lot.map_sheet_no}</span>}
+                                  {lot.land_lot_no ? (
+                                    <span>Thửa {lot.land_lot_no}</span>
+                                  ) : lot.status !== 'đã cấp GCN' && master.land_lot_no ? (
+                                    <span className="italic text-gray-400">Thửa {master.land_lot_no} (theo sổ lớn)</span>
+                                  ) : null}
+                                  {lot.map_sheet_no ? (
+                                    <span>Tờ BĐ {lot.map_sheet_no}</span>
+                                  ) : lot.status !== 'đã cấp GCN' && master.map_sheet_no ? (
+                                    <span className="italic text-gray-400">Tờ BĐ {master.map_sheet_no} (theo sổ lớn)</span>
+                                  ) : null}
                                   {lot.business_plot_code && <span>KD: {lot.business_plot_code}</span>}
                                 </div>
                               </div>
@@ -411,14 +448,13 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
             <form onSubmit={handleSubmitForm} className="p-5 space-y-4">
               {!editingId && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Sổ lớn gốc *</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Sổ lớn gốc (nếu có)</label>
                   <select
                     value={parentAssetId}
                     onChange={e => setParentAssetId(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                    required
                   >
-                    <option value="">-- Chọn sổ lớn --</option>
+                    <option value="">-- Không có, lô độc lập theo dự án --</option>
                     {masterCandidates.map(a => (
                       <option key={a.id} value={a.id}>{a.certificate_no}</option>
                     ))}
@@ -442,21 +478,36 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Số thửa</label>
-                  <input
-                    type="text" value={form.land_lot_no || ''}
-                    onChange={e => setForm({ ...form, land_lot_no: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Số tờ bản đồ</label>
-                  <input
-                    type="text" value={form.map_sheet_no || ''}
-                    onChange={e => setForm({ ...form, map_sheet_no: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
+                <div className="col-span-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Số thửa</label>
+                      <input
+                        type="text"
+                        value={selectedMaster ? (selectedMaster.land_lot_no || '') : (form.land_lot_no || '')}
+                        onChange={e => setForm({ ...form, land_lot_no: e.target.value })}
+                        disabled={!!selectedMaster}
+                        placeholder={selectedMaster ? '' : 'Chưa có (giai đoạn pháp lý)'}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm ${selectedMaster ? 'bg-gray-100 text-gray-500' : ''}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Số tờ bản đồ</label>
+                      <input
+                        type="text"
+                        value={selectedMaster ? (selectedMaster.map_sheet_no || '') : (form.map_sheet_no || '')}
+                        onChange={e => setForm({ ...form, map_sheet_no: e.target.value })}
+                        disabled={!!selectedMaster}
+                        placeholder={selectedMaster ? '' : 'Chưa có (giai đoạn pháp lý)'}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm ${selectedMaster ? 'bg-gray-100 text-gray-500' : ''}`}
+                      />
+                    </div>
+                  </div>
+                  {selectedMaster && (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Theo sổ lớn (chưa tách) — lô này sẽ có số thửa/tờ riêng sau khi được tách sổ.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Lô Kinh Doanh</label>
@@ -500,11 +551,12 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
         </div>
       )}
 
-      {showImportModal && importParentAsset && (
+      {showImportModal && (
         <ImportPlannedLotsModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           onSuccess={loadLots}
+          project={project}
           parentAsset={importParentAsset}
         />
       )}

@@ -11,117 +11,140 @@ export async function fetchInventoryAudits(warehouseId?: string): Promise<Invent
     return mockStore.getInventoryAudits(warehouseId);
   }
 
-  try {
-    let query = supabase
-      .from('inventory_audits')
-      .select(`
-        *,
-        warehouses:warehouses(id, name, code, is_central, region_code),
-        performer:profiles!inventory_audits_performed_by_fkey(id, full_name, email)
-      `)
-      .order('started_at', { ascending: false });
+  let query = supabase
+    .from('inventory_audits')
+    .select(`
+      *,
+      warehouses:warehouses(id, name, code, is_central, region_code),
+      performer:profiles!inventory_audits_performed_by_fkey(id, full_name, email)
+    `)
+    .order('started_at', { ascending: false });
 
-    if (warehouseId && warehouseId !== 'all') {
-      query = query.eq('warehouse_id', warehouseId);
-    }
-
-    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-    if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng inventory_audits hoặc warehouses chưa có trên Supabase, dùng mockStore:', error.message);
-        return mockStore.getInventoryAudits(warehouseId);
-      }
-      console.warn('Lỗi khi tải danh sách đợt kiểm kê từ Supabase, dùng mockStore:', error);
-      return mockStore.getInventoryAudits(warehouseId);
-    }
-
-    return (data || []).map((row: any) => ({
-      ...row,
-      warehouse: row.warehouses,
-      profiles: row.performer,
-    }));
-  } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchInventoryAudits, fallback sang mockStore:', err);
-    return mockStore.getInventoryAudits(warehouseId);
+  if (warehouseId && warehouseId !== 'all') {
+    query = query.eq('warehouse_id', warehouseId);
   }
+
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) {
+    console.error('Lỗi khi tải danh sách đợt kiểm kê từ Supabase:', error);
+    throw new Error('Không thể tải danh sách đợt kiểm kê: ' + error.message);
+  }
+
+  return (data || []).map((row: any) => ({
+    ...row,
+    warehouse: row.warehouses,
+    profiles: row.performer,
+  }));
 }
 
 /**
  * Lấy chi tiết một đợt kiểm kê kèm danh sách các dòng kiểm kê (items)
+ * Sử dụng 2 truy vấn phẳng độc lập + in-memory map để triệt tiêu lỗi quan hệ JOIN PostgREST và nuốt lỗi.
  */
 export async function getInventoryAuditDetail(auditId: string): Promise<InventoryAudit | null> {
   if (!isSupabaseConfigured) {
     return mockStore.getInventoryAudit(auditId);
   }
 
-  try {
-    const { data: audit, error: auditError } = await withTimeout(
-      supabase
-        .from('inventory_audits')
-        .select(`
-          *,
-          warehouses:warehouses(id, name, code, is_central, region_code),
-          performer:profiles!inventory_audits_performed_by_fkey(id, full_name, email)
-        `)
-        .eq('id', auditId)
-        .single(),
-      DEFAULT_READ_TIMEOUT
-    );
+  // 1. Tải thông tin đợt kiểm kê cha
+  const { data: audit, error: auditError } = await withTimeout(
+    supabase
+      .from('inventory_audits')
+      .select(`
+        *,
+        warehouses:warehouses(id, name, code, is_central, region_code),
+        performer:profiles!inventory_audits_performed_by_fkey(id, full_name, email)
+      `)
+      .eq('id', auditId)
+      .single(),
+    DEFAULT_READ_TIMEOUT
+  );
 
-    if (auditError) {
-      if (isSchemaMissingError(auditError)) {
-        return mockStore.getInventoryAudit(auditId);
-      }
-      console.warn('Lỗi khi tải thông tin đợt kiểm kê từ Supabase, dùng mockStore:', auditError);
-      return mockStore.getInventoryAudit(auditId);
-    }
-    if (!audit) return null;
-
-    const { data: items, error: itemsError } = await withTimeout(
-      supabase
-        .from('inventory_audit_items')
-        .select(`
-          *,
-          asset:assets(
-            id,
-            asset_code,
-            certificate_no,
-            legal_lot_code,
-            land_lot_no,
-            map_sheet_no,
-            business_project_name,
-            business_plot_code,
-            current_owner_entity_id,
-            current_owner_entity:investor_entities(id, name, company_code),
-            area,
-            custody_status,
-            scan_file_url,
-            projects:projects(name),
-            warehouses:warehouses(name)
-          )
-        `)
-        .eq('audit_id', auditId)
-        .order('created_at', { ascending: true }),
-      DEFAULT_READ_TIMEOUT
-    );
-
-    if (itemsError) {
-      if (isSchemaMissingError(itemsError)) {
-        return mockStore.getInventoryAudit(auditId);
-      }
-      console.warn('Lỗi khi tải items kiểm kê từ Supabase:', itemsError);
-    }
-
-    return {
-      ...audit,
-      warehouse: audit.warehouses,
-      profiles: audit.performer,
-      items: items || [],
-    };
-  } catch (err: any) {
-    console.warn('Lỗi trong hàm getInventoryAuditDetail, fallback sang mockStore:', err);
-    return mockStore.getInventoryAudit(auditId);
+  if (auditError) {
+    console.error('Lỗi khi tải thông tin đợt kiểm kê từ Supabase:', auditError);
+    throw new Error('Không thể tải thông tin đợt kiểm kê: ' + auditError.message);
   }
+  if (!audit) return null;
+
+  // 2. Tải danh sách chi tiết các dòng kiểm kê (truy vấn phẳng không lồng sâu)
+  const { data: rawItems, error: itemsError } = await withTimeout(
+    supabase
+      .from('inventory_audit_items')
+      .select('*')
+      .eq('audit_id', auditId)
+      .order('created_at', { ascending: true }),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  if (itemsError) {
+    console.error('Lỗi khi tải danh sách dòng kiểm kê từ Supabase:', itemsError);
+    throw new Error('Không thể tải danh sách chi tiết kiểm kê: ' + itemsError.message);
+  }
+
+  const itemsList = rawItems || [];
+  const assetIds = itemsList.map((i: any) => i.asset_id).filter(Boolean);
+
+  // 3. Tải thông tin tài sản tương ứng nếu có
+  let assetMap = new Map<string, any>();
+  if (assetIds.length > 0) {
+    // PostgREST hỗ trợ in. Để an toàn với danh sách lớn, chia chunk nếu > 500
+    const chunkSize = 500;
+    const assetPromises = [];
+    for (let i = 0; i < assetIds.length; i += chunkSize) {
+      const slice = assetIds.slice(i, i + chunkSize);
+      assetPromises.push(
+        withTimeout(
+          supabase
+            .from('assets')
+            .select(`
+              id,
+              asset_code,
+              certificate_no,
+              legal_lot_code,
+              land_lot_no,
+              map_sheet_no,
+              business_project_name,
+              business_plot_code,
+              current_owner_entity_id,
+              current_owner_entity:investor_entities(id, name, company_code),
+              area,
+              custody_status,
+              scan_file_url,
+              projects:projects(name),
+              warehouses:warehouses(name)
+            `)
+            .in('id', slice),
+          DEFAULT_READ_TIMEOUT
+        )
+      );
+    }
+
+    const chunkResults = await Promise.all(assetPromises);
+    for (const res of chunkResults) {
+      if (res.error) {
+        console.error('Lỗi khi tải thông tin tài sản chi tiết kiểm kê:', res.error);
+        throw new Error('Không thể tải thông tin tài sản kiểm kê: ' + res.error.message);
+      }
+      if (res.data) {
+        for (const ast of res.data) {
+          if (ast.id) assetMap.set(ast.id, ast);
+        }
+      }
+    }
+  }
+
+  // 4. Ghép nối in-memory
+  const items = itemsList.map((item: any) => ({
+    ...item,
+    asset: assetMap.get(item.asset_id) || null,
+  }));
+
+  return {
+    ...audit,
+    warehouse: audit.warehouses,
+    profiles: audit.performer,
+    items,
+  };
 }
 
 /**
@@ -166,6 +189,9 @@ export async function createInventoryAudit(
       throw new Error(`Không thể tải danh sách GCN trong kho: ${assetErr.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
     const assetList = assets || [];
+    if (assetList.length === 0) {
+      throw new Error('Kho này hiện không có tài sản ở trạng thái "Trong kho" (in_stock). Không thể tạo đợt kiểm kê rỗng.');
+    }
 
     // 2. Tạo bản ghi inventory_audits
     const { data: audit, error: createAuditErr } = await withTimeout(
@@ -465,7 +491,22 @@ export async function deleteInventoryAudit(auditId: string): Promise<boolean> {
   }
 
   try {
-    const { error } = await withTimeout(
+    // Bước 1: Xóa toàn bộ các bản ghi con trong inventory_audit_items trước
+    const { error: itemsDelError } = await withTimeout(
+      supabase
+        .from('inventory_audit_items')
+        .delete()
+        .eq('audit_id', auditId),
+      DEFAULT_WRITE_TIMEOUT
+    );
+
+    if (itemsDelError) {
+      console.error('Lỗi khi xóa các dòng chi tiết kiểm kê trên Supabase:', itemsDelError);
+      throw new Error(`Không thể xóa chi tiết đợt kiểm kê: ${itemsDelError.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    // Bước 2: Xóa bản ghi cha trong inventory_audits
+    const { error: auditDelError } = await withTimeout(
       supabase
         .from('inventory_audits')
         .delete()
@@ -473,9 +514,9 @@ export async function deleteInventoryAudit(auditId: string): Promise<boolean> {
       DEFAULT_WRITE_TIMEOUT
     );
 
-    if (error) {
-      console.error('Lỗi khi xóa đợt kiểm kê trên Supabase:', error);
-      throw new Error(`Không thể xóa đợt kiểm kê: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    if (auditDelError) {
+      console.error('Lỗi khi xóa đợt kiểm kê trên Supabase:', auditDelError);
+      throw new Error(`Không thể xóa đợt kiểm kê: ${auditDelError.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
     return true;
   } catch (err: any) {

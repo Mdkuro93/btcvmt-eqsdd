@@ -88,6 +88,11 @@ export const CreateAuditModal: React.FC<Props> = ({
       return;
     }
 
+    if (stockCount === 0) {
+      toast.error('Kho này hiện không có tài sản ở trạng thái "Trong kho" (in_stock). Không thể tạo đợt kiểm kê rỗng.');
+      return;
+    }
+
     setLoading(true);
     try {
       const newAudit = await createInventoryAudit(selectedWarehouseId, profile, notes.trim());
@@ -173,9 +178,9 @@ export const CreateAuditModal: React.FC<Props> = ({
           </div>
 
           {stockCount === 0 && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start space-x-2.5 text-amber-800 text-xs">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>Kho hiện chưa có tài sản nào ở trạng thái "Trong kho". Bạn vẫn có thể tạo đợt kiểm kê trống hoặc kiểm tra lại bộ lọc tài sản.</span>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-2.5 text-red-800 text-xs">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span className="font-medium">Kho này hiện không có tài sản ở trạng thái "Trong kho" (in_stock). Không thể tạo đợt kiểm kê rỗng.</span>
             </div>
           )}
 
@@ -219,7 +224,7 @@ export const CreateAuditModal: React.FC<Props> = ({
             </button>
             <button
               type="submit"
-              disabled={loading || !selectedWarehouseId}
+              disabled={loading || !selectedWarehouseId || stockCount === 0 || loadingCounts}
               className="inline-flex items-center px-5 py-2.5 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-blue-700/20 cursor-pointer"
             >
               {loading ? (

@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, UploadCloud, Download, Loader2, AlertCircle, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Asset, PlannedLandLotImportRow, PlannedLandLotImportResult } from '../../types';
+import { Asset, Project, PlannedLandLotImportRow, PlannedLandLotImportResult } from '../../types';
 import { importPlannedLandLots } from '../../api/plannedLandLots';
 
 const TEMPLATE_HEADERS = [
@@ -19,7 +19,9 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  parentAsset: Asset;
+  project: Project;
+  /** Có: nhập lô vào 1 sổ lớn cụ thể. Không truyền/`null`: nhập lô độc lập theo dự án (chưa có sổ lớn). */
+  parentAsset?: Asset | null;
 }
 
 function toImportRow(raw: any): PlannedLandLotImportRow {
@@ -34,7 +36,7 @@ function toImportRow(raw: any): PlannedLandLotImportRow {
   };
 }
 
-export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, parentAsset }) => {
+export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, project, parentAsset }) => {
   const [rows, setRows] = useState<PlannedLandLotImportRow[]>([]);
   const [fileName, setFileName] = useState('');
   const [checking, setChecking] = useState(false);
@@ -44,6 +46,10 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const importTarget = parentAsset
+    ? { parentAssetId: parentAsset.id }
+    : { projectId: project.id };
 
   const reset = () => {
     setRows([]);
@@ -62,8 +68,8 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
     const ws = XLSX.utils.json_to_sheet([
       {
         'Mã Lô Pháp Lý': 'LK02-15',
-        'Số thửa': '123',
-        'Số tờ bản đồ': '5',
+        'Số thửa': parentAsset ? '' : '123',
+        'Số tờ bản đồ': parentAsset ? '' : '5',
         'Diện tích dự kiến': 105.5,
         'Mã Lô Kinh Doanh': 'LK02-15',
         'Tên Dự Án Kinh Doanh': 'Cồn Dầu',
@@ -72,7 +78,8 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
     ], { header: TEMPLATE_HEADERS as unknown as string[] });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Lô quy hoạch');
-    XLSX.writeFile(wb, `Mau_Lo_Quy_Hoach_${parentAsset.certificate_no}.xlsx`);
+    const suffix = parentAsset ? parentAsset.certificate_no : project.name.replace(/\s+/g, '-');
+    XLSX.writeFile(wb, `Mau_Lo_Quy_Hoach_${suffix}.xlsx`);
   };
 
   const handleFile = async (file: File) => {
@@ -95,7 +102,7 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
       const parsed = jsonRows.map(toImportRow);
       setRows(parsed);
       setChecking(true);
-      const result = await importPlannedLandLots(parentAsset.id, parsed, true);
+      const result = await importPlannedLandLots(importTarget, parsed, true);
       setPreview(result);
     } catch (err: any) {
       toast.error('Lỗi khi đọc file Excel: ' + (err.message || 'Không xác định'));
@@ -108,7 +115,7 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
     if (!preview?.success || rows.length === 0) return;
     setImporting(true);
     try {
-      const result = await importPlannedLandLots(parentAsset.id, rows, false);
+      const result = await importPlannedLandLots(importTarget, rows, false);
       setFinalResult(result);
       if (result.success) {
         toast.success(`Đã nhập ${result.inserted} lô quy hoạch.`);
@@ -131,10 +138,17 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
               <UploadCloud className="w-4 h-4 text-[#1E3A8A]" /> Import Excel — Lô quy hoạch
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Sổ lớn gốc: <span className="font-semibold">{parentAsset.certificate_no}</span>
-              {parentAsset.asset_code ? ` (${parentAsset.asset_code})` : ''}
-            </p>
+            {parentAsset ? (
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sổ lớn gốc: <span className="font-semibold">{parentAsset.certificate_no}</span>
+                {parentAsset.asset_code ? ` (${parentAsset.asset_code})` : ''}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-0.5">
+                Dự án: <span className="font-semibold">{project.name}</span>{' '}
+                <span className="text-gray-400">(lô độc lập, chưa gắn sổ lớn)</span>
+              </p>
+            )}
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full">
             <X className="w-4 h-4" />
@@ -142,6 +156,22 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
         </div>
 
         <div className="p-5 overflow-y-auto space-y-4">
+          {!parentAsset && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+              Đây là các lô đất theo quy hoạch, dự án <span className="font-semibold">chưa có GCN (sổ lớn)</span> để
+              gán vào. Cột "Số thửa" / "Số tờ bản đồ" trong file có thể để trống — giai đoạn pháp lý thường chưa có
+              2 thông tin này, chỉ có khi lô thực sự được cấp GCN riêng.
+            </div>
+          )}
+          {parentAsset && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+              Lô nhập vào sổ lớn này đang ở trạng thái <span className="font-semibold">chưa tách</span>, nên hệ thống
+              sẽ <span className="font-semibold">bỏ qua cột "Số thửa"/"Số tờ bản đồ"</span> dù bạn có điền trong file —
+              2 thông tin này chỉ có giá trị thật sau khi lô được tách thành sổ riêng; trước đó hệ thống hiển thị tạm
+              theo thông tin của sổ lớn.
+            </div>
+          )}
+
           <button
             type="button"
             onClick={downloadTemplate}
