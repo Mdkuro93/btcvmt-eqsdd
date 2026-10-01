@@ -239,10 +239,24 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
               </div>
               <div>
                 <span className="text-gray-500">Kho hiện tại:</span>{' '}
-                <span className="text-gray-900">{currentWarehouse?.name || 'Kho Trung tâm'}</span>
+                <span className={currentWarehouse?.name ? 'text-gray-900 font-medium' : 'text-amber-600 font-semibold'}>
+                  {currentWarehouse?.name || 'Chưa gán kho'}
+                </span>
               </div>
             </div>
           </div>
+
+          {!currentAsset?.warehouse_id && decisionType === 'approved' && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900 flex items-start gap-2">
+              <span className="text-amber-600 font-bold shrink-0">⚠️</span>
+              <div>
+                <div className="font-bold">Tài sản chưa được gán Kho lưu trữ:</div>
+                <div className="text-[11px] text-amber-800 mt-0.5">
+                  Vui lòng chọn Kho xuất thực tế bên dưới để hệ thống định danh mã phiếu xuất mượn hợp lệ.
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Form Fields by Transaction Type */}
           {decisionType === 'approved' && item.type === 'checkout' && (
@@ -257,12 +271,16 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block font-medium text-gray-700 mb-1">Kho xuất thực tế</label>
+                <label className="block font-medium text-gray-700 mb-1">
+                  Kho xuất thực tế <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={details.targetWarehouseId || currentAsset?.warehouse_id || ''}
                   onChange={e => setDetails({ ...details, targetWarehouseId: e.target.value })}
                   className="w-full px-3 py-2 border rounded-md bg-white"
+                  required
                 >
+                  <option value="">-- Chọn kho xuất --</option>
                   {warehouses.map((w: any) => (
                     <option key={w.id} value={w.id}>{w.name} {w.is_central ? '(Kho TT)' : ''}</option>
                   ))}

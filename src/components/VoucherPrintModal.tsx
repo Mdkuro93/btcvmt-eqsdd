@@ -153,7 +153,7 @@ export const VoucherPrintModal: React.FC<Props> = ({
     senderName: defaultSenderName,
     senderDept: defaultSenderDept,
     senderAddress: defaultSenderAddress,
-    warehouseName: warehouse?.name || 'Kho Trung tâm Novotel',
+    warehouseName: warehouse?.name || 'Chưa gán kho',
   });
 
   const totalArea = activeAssetList.reduce((sum, a) => sum + (Number(a.area) || 0), 0);

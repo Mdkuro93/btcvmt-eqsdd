@@ -38,7 +38,7 @@ export function getWarehouseCode(warehouse?: Warehouse | null, defaultIdx: numbe
   if (warehouse?.code) {
     return String(warehouse.code).padStart(3, '0');
   }
-  if (!warehouse) return '001';
+  if (!warehouse) return 'UNKNOWN';
   const numStr = warehouse.id.replace(/\D/g, '');
   const parsed = parseInt(numStr, 10);
   const val = !isNaN(parsed) && parsed > 0 ? parsed : defaultIdx;
@@ -57,6 +57,9 @@ export async function generateNextVoucherCode(
   existingVoucherCodes?: string[],
   date: Date = new Date()
 ): Promise<{ voucherCode: string; voucherType: VoucherType; seq: number }> {
+  if (!warehouse) {
+    throw new Error('Không xác định được kho lưu trữ của tài sản để sinh mã phiếu. Vui lòng kiểm tra và gán kho cho tài sản trước.');
+  }
   const vType = getVoucherTypeFromTransaction(txType, reason);
   const year = date.getFullYear();
   const regionCode = getRegionCode(warehouse);

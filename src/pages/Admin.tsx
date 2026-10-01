@@ -20,10 +20,11 @@ import { AdminInternalUsers } from '../components/admin/AdminInternalUsers';
 export const Admin: React.FC = () => {
   const { profile } = useAuth();
 
-  // Quản trị viên: dùng đủ mọi tab. Trưởng phòng Dự án (PTDA) / BTC Manager: CHỈ được vào để quản lý
-  // lô quy hoạch pháp lý trong tab "Dự án" — không thấy/không đụng được các tab quản trị khác.
+  // Quản trị viên: dùng đủ mọi tab. Trưởng phòng Dự án (PTDA) / BTC Manager / Quản lý Kho: CHỈ
+  // được vào để quản lý lô quy hoạch pháp lý trong tab "Dự án" — không thấy/không đụng được các
+  // tab quản trị khác.
   const isFullAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const isProjectScoped = profile?.role === 'project_dept' || profile?.role === 'btc_manager';
+  const isProjectScoped = profile?.role === 'project_dept' || profile?.role === 'btc_manager' || profile?.role === 'warehouse_manager';
 
   const [activeTab, setActiveTab] = useState<'regions' | 'areas' | 'warehouses' | 'projects' | 'users' | 'investor_entities'>(() => {
     if (!isFullAdmin) return 'projects';

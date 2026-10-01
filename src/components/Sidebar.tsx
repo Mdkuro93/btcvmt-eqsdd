@@ -128,7 +128,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       name: 'Quản trị danh mục', 
       href: '/admin', 
       icon: Settings, 
-      roles: ['admin', 'super_admin'] 
+      // admin/super_admin: toàn quyền. project_dept/btc_manager/warehouse_manager: route /admin và
+      // trang Admin.tsx tự giới hạn phạm vi chỉ còn tab "Dự án" (quản lý lô quy hoạch pháp lý).
+      roles: ['admin', 'super_admin', 'project_dept', 'btc_manager', 'warehouse_manager'] 
     },
     { 
       name: 'Import dữ liệu', 

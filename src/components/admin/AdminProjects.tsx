@@ -14,7 +14,9 @@ export const AdminProjects: React.FC = () => {
   const { profile } = useAuth();
   // Ban PTDA (project_dept) chỉ được quản lý Lô quy hoạch pháp lý (nút LandPlot bên dưới),
   // KHÔNG được thêm/sửa/xóa Dự án — việc đó vẫn thuộc admin/super_admin/btc_manager (theo RLS bảng projects).
-  const canManageProjects = profile?.role !== 'project_dept';
+  // project_dept & warehouse_manager: chỉ được quản lý "Lô quy hoạch pháp lý" (nút riêng, luôn hiện
+  // bên dưới), KHÔNG được thêm/sửa/xóa cả 1 Dự án — hạn chế đúng phạm vi quyền được giao.
+  const canManageProjects = profile?.role !== 'project_dept' && profile?.role !== 'warehouse_manager';
   const [projects, setProjects] = useState<Project[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [entities, setEntities] = useState<InvestorEntity[]>([]);

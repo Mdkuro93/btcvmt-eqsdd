@@ -134,7 +134,8 @@ const ALL_NAV_PAGES: NavPageItem[] = [
     href: '/admin',
     category: 'Hệ thống',
     icon: Settings,
-    roles: ['admin', 'super_admin'],
+    // project_dept/btc_manager/warehouse_manager: vào chỉ để quản lý lô quy hoạch pháp lý (Admin.tsx tự giới hạn phạm vi).
+    roles: ['admin', 'super_admin', 'project_dept', 'btc_manager', 'warehouse_manager'],
     description: 'Cấu hình kho, dự án, pháp nhân chủ sở hữu, ngân hàng',
   },
   {

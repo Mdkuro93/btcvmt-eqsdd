@@ -25,20 +25,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        let module: any;
-        if (attempt > 1 && import.meta.env.DEV && name) {
-          // Trong môi trường Vite dev, nếu lần đầu bị lỗi kết nối/restart server thì trình duyệt (V8)
-          // sẽ cache Promise bị reject cho đúng specifier đó.
-          // Thêm timestamp query param để trình duyệt tạo request mới thay vì trả ngay Promise lỗi cũ.
-          try {
-            module = await import(/* @vite-ignore */ `/src/pages/${name}.tsx?t=${Date.now()}`);
-          } catch {
-            module = await componentImport();
-          }
-        } else {
-          module = await componentImport();
-        }
-
+        const module = await componentImport();
         if (name && module[name]) {
           return { default: module[name] };
         }
@@ -49,7 +36,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
         if (attempt < maxRetries) {
           // Chờ một chút trước khi thử lại để dev server hoặc kết nối mạng ổn định
-          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+          await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
         }
       }
     }
@@ -150,8 +137,8 @@ export default function App() {
                   </Route>
 
                   {/* Admin / Quản trị danh mục: Admin Only, trừ tab "Dự án" (lô quy hoạch pháp lý)
-                      mà project_dept/btc_manager cũng được vào — Admin.tsx tự giới hạn phạm vi cho 2 vai trò này. */}
-                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'project_dept', 'btc_manager']} />}>
+                      mà project_dept/btc_manager/warehouse_manager cũng được vào — Admin.tsx tự giới hạn phạm vi cho các vai trò này. */}
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'project_dept', 'btc_manager', 'warehouse_manager']} />}>
                     <Route path="/admin" element={<Admin />} />
                     <Route path="/categories" element={<Navigate to="/admin" replace />} />
                   </Route>

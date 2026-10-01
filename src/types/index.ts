@@ -233,7 +233,7 @@ export interface AuditLog {
 
 export type TransactionType = 'checkout' | 'checkin';
 export type TransactionReason = 'mượn' | 'thế chấp' | 'chuyển nhượng' | 'xuất bán' | 'sang tên cho khách' | 'tách sổ' | 'thu hồi' | 'đổi sổ' | 'trả' | 'giải chấp' | 'nhập sau bán' | 'cấp mới' | 'khác';
-export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed' | 'cancelled';
 
 export interface Request {
   id: string;
@@ -478,8 +478,22 @@ export interface PlannedLandLot {
   created_at?: string;
   updated_at?: string;
   // Quan hệ (khi truy vấn có join)
-  parent_master_asset?: { id: string; certificate_no: string; asset_code?: string | null; area?: number | null } | null;
-  resulting_asset?: { id: string; certificate_no: string; asset_code?: string | null; area?: number | null } | null;
+  parent_master_asset?: {
+    id: string;
+    certificate_no: string;
+    asset_code?: string | null;
+    area?: number | null;
+    land_lot_no?: string | null;
+    map_sheet_no?: string | null;
+  } | null;
+  resulting_asset?: {
+    id: string;
+    certificate_no: string;
+    asset_code?: string | null;
+    area?: number | null;
+    land_lot_no?: string | null;
+    map_sheet_no?: string | null;
+  } | null;
   projects?: { id: string; name: string; areas?: { name: string; regions?: { name: string } } } | null;
 }
 

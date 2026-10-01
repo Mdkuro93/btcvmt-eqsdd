@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { DEFAULT_WAREHOUSE_SLA_DAYS, DEFAULT_RETURN_DAYS } from '../lib/constants';
-import { TransactionType, Asset } from '../types';
+import { TransactionType, Asset, Warehouse } from '../types';
 import { updateAsset, createAsset, fetchWarehouses, generateUuid, sanitizeUuid, isUuid } from './assets';
 import { logActivity } from './activityLogs';
 import { generateNextVoucherCode } from '../lib/voucherEngine';
@@ -58,7 +58,7 @@ export async function createTransaction(
   let createdBy: string | undefined;
   let txType: TransactionType;
   let txNotes: string | undefined;
-  let items: Array<{ asset_id: string; type: TransactionType; details?: any }>;
+  let items: Array<{ asset_id: string; type: TransactionType; reason?: string | null; details?: any }>;
 
   // Thêm logic desiredReceiveDate nếu thiếu
   if (details && !details.desiredReceiveDate) {
@@ -74,13 +74,19 @@ export async function createTransaction(
     items = (assetIds || []).map(id => ({
       asset_id: id,
       type: txType,
+      reason: details?.reason || null,
       details,
     }));
   } else {
-    createdBy = param1.created_by;
+    createdBy = param1.created_by || param1.createdBy;
     txType = param1.type;
     txNotes = param1.notes;
-    items = param1.items || [];
+    items = (param1.items || []).map((it: any) => ({
+      asset_id: it.asset_id || it.assetId || it.id,
+      type: it.type || txType,
+      reason: it.reason || it.details?.reason || null,
+      details: it.details,
+    }));
   }
 
   const scanUrl =
@@ -128,8 +134,8 @@ export async function createTransaction(
 
   const itemsPayload = items.map(it => ({
     asset_id: it.asset_id,
-    type: it.type,
-    reason: it.details?.reason || null,
+    type: it.type || txType,
+    reason: it.reason || it.details?.reason || null,
     details: { ...(it.details || {}), scan_url: scanUrl },
   }));
 
@@ -171,6 +177,11 @@ export async function createTransaction(
     }
   }
 
+  // Nếu RPC gặp lỗi thật (không phải PGRST202 function not found) -> báo lỗi rõ ràng theo Rule #15
+  if (rpcErr && rpcErr.code !== 'PGRST202') {
+    throw new Error('Lỗi tạo phiếu yêu cầu: ' + (rpcErr.message || 'Không thể tạo phiếu yêu cầu'));
+  }
+
   let finalTx: any = null;
   let finalItems: any[] = [];
 
@@ -178,8 +189,14 @@ export async function createTransaction(
     finalTx = rpcResult;
     finalItems = rpcResult.items || [];
   } else {
-    // Nếu RPC chưa được nạp hoặc lỗi khác, thực hiện insert trực tiếp qua bảng transactions
-    const insertPayload: any = { type: txType, notes: txNotes, created_by: createdBy };
+    // Nếu RPC chưa được nạp (PGRST202), thực hiện insert trực tiếp qua bảng transactions
+    const { data: authData } = await supabase.auth.getUser();
+    const effectiveCreatedBy = createdBy || authData.user?.id || null;
+
+    const insertPayload: any = { type: txType, notes: txNotes };
+    if (effectiveCreatedBy) {
+      insertPayload.created_by = effectiveCreatedBy;
+    }
     if (scanUrl) {
       insertPayload.scan_url = scanUrl;
     }
@@ -197,10 +214,12 @@ export async function createTransaction(
     if (txErr) {
       // Nếu lỗi do cột scan_url chưa có trong schema cache, thử lại không có cột scan_url
       if (txErr.message?.includes('scan_url')) {
+        const retryPayload: any = { type: txType, notes: txNotes };
+        if (effectiveCreatedBy) retryPayload.created_by = effectiveCreatedBy;
         const { data: retryTx, error: retryErr } = await withTimeout(
           supabase
             .from('transactions')
-            .insert([{ type: txType, notes: txNotes, created_by: createdBy }])
+            .insert([retryPayload])
             .select()
             .single(),
           DEFAULT_WRITE_TIMEOUT
@@ -216,14 +235,20 @@ export async function createTransaction(
       tx = directTx;
     }
 
-    const itemsToInsert = items.map(it => ({
-      transaction_id: tx.id,
-      asset_id: sanitizeUuid(it.asset_id),
-      type: it.type,
-      reason: it.details?.reason || null,
-      details: it.details,
-      status: 'pending',
-    }));
+    const itemsToInsert = items.map(it => {
+      const assetId = sanitizeUuid(it.asset_id);
+      if (!assetId) {
+        throw new Error('Mã tài sản GCN không hợp lệ hoặc bị thiếu (asset_id is null).');
+      }
+      return {
+        transaction_id: tx.id,
+        asset_id: assetId,
+        type: it.type || txType,
+        reason: it.reason || it.details?.reason || null,
+        details: it.details || {},
+        status: 'pending',
+      };
+    });
 
     const { data: insertedItems, error: itErr } = await withTimeout(
       supabase
@@ -322,9 +347,30 @@ export async function decideTransactionItem(
   const details = finalDetails || targetItem.details || {};
   const hasChanges = (confirmedAssetId && confirmedAssetId !== targetItem.asset_id) || (notes && notes.trim().length > 0);
 
-  const allAssets = mockStore.getAssets();
-  const currentAsset = allAssets.find((a: any) => a.id === effectiveAssetId) || targetItem.asset;
-  const warehouses = mockStore.getWarehouses();
+  let currentAsset = targetItem.asset;
+  let warehouses: Warehouse[] = [];
+
+  if (isSupabaseConfigured) {
+    if (!currentAsset || currentAsset.id !== effectiveAssetId) {
+      const { data: dbAsset } = await withTimeout(
+        supabase.from('assets').select('*, warehouses:warehouses(*)').eq('id', effectiveAssetId).maybeSingle(),
+        DEFAULT_READ_TIMEOUT
+      );
+      if (dbAsset) currentAsset = dbAsset;
+    }
+    const { data: dbWhs, error: whErr } = await withTimeout(
+      supabase.from('warehouses').select('*'),
+      DEFAULT_READ_TIMEOUT
+    );
+    if (whErr) {
+      throw new Error('Lỗi khi tải danh sách kho: ' + whErr.message);
+    }
+    warehouses = dbWhs || [];
+  } else {
+    const allAssets = mockStore.getAssets();
+    currentAsset = allAssets.find((a: any) => a.id === effectiveAssetId) || targetItem.asset;
+    warehouses = mockStore.getWarehouses();
+  }
 
   // Unified responsible warehouse determination (Strict rule: NO fallback to warehouses[0])
   const responsibleWarehouseId = getResponsibleWarehouseId(
@@ -338,6 +384,11 @@ export async function decideTransactionItem(
   let generatedVoucher = '';
 
   if (decision === 'approved') {
+    if (!responsibleWarehouse) {
+      throw new Error(
+        `Không xác định được kho lưu trữ của tài sản (GCN ${currentAsset?.certificate_no || ''}) để sinh mã phiếu. Vui lòng gán kho cho tài sản trước khi duyệt xuất.`
+      );
+    }
     const { voucherCode } = await generateNextVoucherCode(responsibleWarehouse, itemType, details?.reason);
     generatedVoucher = voucherCode;
   }
@@ -377,9 +428,6 @@ export async function decideTransactionItem(
     );
     
     if (error) throw error;
-    try {
-      await runLocalDecideLogic();
-    } catch {}
   } else {
     await runLocalDecideLogic();
   }
@@ -556,6 +604,7 @@ export async function decideTransactionItem(
         }
 
     const txs = mockStore.getTransactions();
+    const allAssets = mockStore.getAssets();
     const updatedTxs = txs.map(tx => ({
       ...tx,
       items: (tx.items || []).map((i: any) => {
@@ -1000,4 +1049,52 @@ export async function fetchLatestCheckinScanUrl(assetId: string): Promise<string
   }
 
   return null;
+}
+
+/**
+ * Hủy phiếu giao dịch (Void Ticket) và hoàn trả trạng thái tài sản về kho
+ * Chỉ tài khoản super_admin, admin, btc_manager được phép thực hiện
+ */
+export async function voidTransactionItem(itemId: string, reason: string): Promise<any> {
+  if (!itemId) throw new Error('Mã phiếu không hợp lệ.');
+  const cleanReason = reason?.trim() || 'Hủy phiếu giao dịch test/sai';
+
+  if (isSupabaseConfigured) {
+    const { data, error } = await withTimeout(
+      supabase.rpc('void_transaction_item', {
+        p_item_id: itemId,
+        p_reason: cleanReason,
+      }),
+      DEFAULT_WRITE_TIMEOUT
+    );
+
+    if (error) {
+      throw new Error('Lỗi khi hủy phiếu: ' + (error.message || 'Không thể hủy phiếu'));
+    }
+    return data;
+  } else {
+    // Demo/offline mode
+    const txs = mockStore.getTransactions();
+    let foundItem: any = null;
+    for (const tx of txs) {
+      const it = (tx.items || []).find((i: any) => i.id === itemId);
+      if (it) {
+        it.status = 'cancelled';
+        it.notes = (it.notes ? `${it.notes} | ` : '') + `[ĐÃ HỦY: ${cleanReason}]`;
+        foundItem = it;
+        break;
+      }
+    }
+    if (foundItem) {
+      const assets = mockStore.getAssets();
+      const a = assets.find((x: any) => x.id === foundItem.asset_id);
+      if (a && (a.custody_status === 'checked_out' || a.custody_status === 'in_transit')) {
+        a.custody_status = 'in_stock';
+        a.expected_return_date = null;
+        a.borrow_purpose = null;
+        a.current_holder_dept = null;
+      }
+    }
+    return { success: true };
+  }
 }

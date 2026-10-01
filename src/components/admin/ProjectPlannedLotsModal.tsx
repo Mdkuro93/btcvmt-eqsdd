@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   X, LandPlot, FileText, Plus, Trash2, Edit2, UploadCloud, Loader2,
-  CheckCircle2, Clock, Save, XCircle, Download,
+  CheckCircle2, Clock, Save, XCircle, Download, Link2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Asset, PlannedLandLot, Project } from '../../types';
@@ -11,6 +11,7 @@ import {
   createPlannedLandLot,
   updatePlannedLandLot,
   deletePlannedLandLot,
+  assignPlannedLotsToMasterAsset,
   CreatePlannedLandLotInput,
 } from '../../api/plannedLandLots';
 import { exportPlannedLandLotsExcel } from '../../utils/exportPlannedLandLotsExcel';
@@ -49,6 +50,12 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
   const [deleteTarget, setDeleteTarget] = useState<PlannedLandLot | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+
+  // Chọn nhiều lô độc lập để gán chung vào 1 sổ lớn mới cấp (Giai đoạn 1 -> 2)
+  const [selectedLotIds, setSelectedLotIds] = useState<Set<string>>(new Set());
+  const [showAssignPicker, setShowAssignPicker] = useState(false);
+  const [assignTargetId, setAssignTargetId] = useState('');
+  const [assigning, setAssigning] = useState(false);
 
   const loadExisting = async () => {
     setLoadingExisting(true);
@@ -162,6 +169,31 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
     }
   };
 
+  const toggleLotSelected = (lotId: string) => {
+    setSelectedLotIds(prev => {
+      const next = new Set(prev);
+      if (next.has(lotId)) next.delete(lotId); else next.add(lotId);
+      return next;
+    });
+  };
+
+  const handleAssignToMaster = async () => {
+    if (!assignTargetId || selectedLotIds.size === 0) return;
+    setAssigning(true);
+    try {
+      const count = await assignPlannedLotsToMasterAsset(assignTargetId, Array.from(selectedLotIds));
+      toast.success(`Đã gán ${count} lô vào sổ lớn.`);
+      setSelectedLotIds(new Set());
+      setShowAssignPicker(false);
+      setAssignTargetId('');
+      await loadLots();
+    } catch (err: any) {
+      toast.error(err.message || 'Gán lô vào sổ lớn thất bại.');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -260,57 +292,94 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
               </div>
             ) : (
               <div className="space-y-5">
+                {/* Thanh thao tác gộp chung: chọn nơi thêm (độc lập hoặc 1 sổ lớn) rồi Thêm lô / Import Excel.
+                    Gộp lại thay vì mỗi nhóm 1 bộ nút riêng, cho gọn khi dự án có nhiều sổ lớn. */}
+                <div className="flex items-center justify-between flex-wrap gap-3 p-3 bg-slate-50 border border-gray-200 rounded-xl">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-500 font-semibold shrink-0">Thêm vào:</span>
+                    <select
+                      value={parentAssetId}
+                      onChange={e => setParentAssetId(e.target.value)}
+                      className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white max-w-[260px]"
+                    >
+                      <option value="">-- Lô độc lập (chưa có sổ lớn) --</option>
+                      {masterCandidates.map(a => (
+                        <option key={a.id} value={a.id}>Sổ lớn: {a.certificate_no}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowImportModal(true)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A] hover:bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" /> Import Excel
+                    </button>
+                    <button
+                      onClick={() => openCreateFor(parentAssetId || undefined)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 px-2.5 py-1.5 rounded-lg cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Thêm lô
+                    </button>
+                  </div>
+                </div>
+
                 {/* Nhóm lô ĐỘC LẬP — chưa gắn vào sổ lớn nào, kể cả khi dự án CHƯA có bất kỳ GCN nào.
                     Luôn hiển thị (không chờ có Sổ lớn), vì đây chính là trường hợp chính của tính năng:
-                    khai báo trước lô theo quy hoạch, chờ cấp thẳng hoặc gán vào sổ lớn sau này. */}
+                    khai báo trước lô theo quy hoạch, chờ cấp thẳng hoặc gán chung vào 1 sổ lớn mới sau này. */}
                 <div className="border border-dashed border-gray-300 rounded-xl overflow-hidden">
                   <div className="p-3 bg-slate-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
                     <div className="text-sm">
                       <span className="text-gray-500">Lô độc lập theo dự án</span>{' '}
                       <span className="text-xs text-gray-400">(chưa gắn vào sổ lớn nào)</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    {selectedLotIds.size > 0 && masterCandidates.length > 0 && (
                       <button
-                        onClick={() => { setParentAssetId(''); setShowImportModal(true); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A] hover:bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer"
+                        onClick={() => setShowAssignPicker(true)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1.5 rounded-lg cursor-pointer"
                       >
-                        <UploadCloud className="w-3.5 h-3.5" /> Import Excel
+                        <Link2 className="w-3.5 h-3.5" /> Gán {selectedLotIds.size} lô vào sổ lớn...
                       </button>
-                      <button
-                        onClick={() => openCreateFor()}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 px-2.5 py-1.5 rounded-lg cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Thêm lô
-                      </button>
-                    </div>
+                    )}
                   </div>
                   {unassignedLots.length === 0 ? (
                     <div className="p-4 text-xs text-gray-400 text-center">
-                      Chưa có lô độc lập nào. Bấm "Thêm lô" để khai báo lô theo quy hoạch — kể cả khi dự án chưa có GCN nào.
+                      Chưa có lô độc lập nào. Bấm "Thêm lô" ở trên để khai báo lô theo quy hoạch — kể cả khi dự án chưa có GCN nào.
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {unassignedLots.map(lot => (
                         <div key={lot.id} className="p-3 flex items-center justify-between gap-3 text-sm hover:bg-gray-50">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono font-semibold text-gray-900">{lot.legal_lot_code}</span>
-                              {lot.status === 'đã cấp GCN' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                                  <CheckCircle2 className="w-3 h-3" /> Đã cấp GCN
-                                  {lot.resulting_asset?.certificate_no ? `: ${lot.resulting_asset.certificate_no}` : ''}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
-                                  <Clock className="w-3 h-3" /> Chưa cấp GCN
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
-                              <span>{lot.planned_area} m²</span>
-                              {lot.land_lot_no && <span>Thửa {lot.land_lot_no}</span>}
-                              {lot.map_sheet_no && <span>Tờ BĐ {lot.map_sheet_no}</span>}
-                              {lot.business_plot_code && <span>KD: {lot.business_plot_code}</span>}
+                          <div className="flex items-center gap-3 min-w-0">
+                            {lot.status === 'chưa cấp GCN' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedLotIds.has(lot.id)}
+                                onChange={() => toggleLotSelected(lot.id)}
+                                title="Chọn để gán chung vào 1 sổ lớn"
+                                className="w-4 h-4 rounded border-gray-300 shrink-0 cursor-pointer"
+                              />
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono font-semibold text-gray-900">{lot.legal_lot_code}</span>
+                                {lot.status === 'đã cấp GCN' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                                    <CheckCircle2 className="w-3 h-3" /> Đã cấp GCN
+                                    {lot.resulting_asset?.certificate_no ? `: ${lot.resulting_asset.certificate_no}` : ''}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                                    <Clock className="w-3 h-3" /> Chưa cấp GCN
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+                                <span>{lot.planned_area} m²</span>
+                                {lot.land_lot_no && <span>Thửa {lot.land_lot_no}</span>}
+                                {lot.map_sheet_no && <span>Tờ BĐ {lot.map_sheet_no}</span>}
+                                {lot.business_plot_code && <span>KD: {lot.business_plot_code}</span>}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -351,20 +420,7 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                           <span className="font-mono font-semibold text-gray-900">{master.certificate_no}</span>
                           {master.area ? <span className="text-xs text-gray-500 ml-2">({master.area} m²)</span> : null}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => { setParentAssetId(master.id); setShowImportModal(true); }}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A] hover:bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer"
-                          >
-                            <UploadCloud className="w-3.5 h-3.5" /> Import Excel
-                          </button>
-                          <button
-                            onClick={() => openCreateFor(master.id)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 px-2.5 py-1.5 rounded-lg cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" /> Thêm lô
-                          </button>
-                        </div>
+                        <span className="text-xs text-gray-400">{rows.length} lô</span>
                       </div>
 
                       {rows.length === 0 ? (
@@ -559,6 +615,55 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
           project={project}
           parentAsset={importParentAsset}
         />
+      )}
+
+      {/* Gán nhiều lô độc lập đã chọn vào 1 sổ lớn mới cấp (Giai đoạn 1 -> 2, ra sổ lớn chứa nhiều lô nhỏ) */}
+      {showAssignPicker && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-gray-200">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-[#1E3A8A]" /> Gán {selectedLotIds.size} lô vào sổ lớn
+              </h3>
+              <button onClick={() => setShowAssignPicker(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-gray-500">
+                Dùng khi GCN của sổ lớn đã được cấp cho gộp nhiều lô đang khai báo độc lập bên dưới đây. Sau khi gán,
+                các lô này chuyển sang trạng thái "nằm trong sổ lớn, chưa tách" — tự động chuyển tiếp khi sổ lớn thực
+                sự được tách/cấp riêng cho từng lô.
+              </p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Chọn sổ lớn</label>
+                <select
+                  value={assignTargetId}
+                  onChange={e => setAssignTargetId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                >
+                  <option value="">-- Chọn sổ lớn --</option>
+                  {masterCandidates.map(a => (
+                    <option key={a.id} value={a.id}>{a.certificate_no}{a.area ? ` (${a.area} m²)` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-5 border-t border-gray-100">
+              <button onClick={() => setShowAssignPicker(false)} className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer">
+                Hủy
+              </button>
+              <button
+                onClick={handleAssignToMaster}
+                disabled={!assignTargetId || assigning}
+                className="px-4 py-2 bg-[#1E3A8A] text-white text-xs font-semibold rounded-lg hover:bg-blue-800 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+              >
+                {assigning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Xác nhận gán
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ConfirmModal

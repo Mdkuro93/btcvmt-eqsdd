@@ -1185,11 +1185,15 @@ export const Assets: React.FC = () => {
               await createTransaction({
                 type,
                 createdBy: profile?.id,
+                created_by: profile?.id,
                 notes: details.notes || '',
                 scan_url: details.scan_url || null,
                 desiredReceiveDate: details.desiredReceiveDate,
                 items: selectedAssetsList.map(a => ({
+                  asset_id: a.id,
                   assetId: a.id,
+                  type,
+                  reason: details.reason || null,
                   details,
                 })),
               });

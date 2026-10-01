@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems  } from '../api/transactions';
+import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems, voidTransactionItem } from '../api/transactions';
 import { fetchOverdueAssets } from '../api/assets';
 import { fetchWarehouses, fetchAssets } from '../api/assets';
 import { fetchDeclarationRequests, approveDeclarationRequest, rejectDeclarationRequest, bulkApproveDeclarationRequests } from '../api/assetDeclarationRequests';
@@ -10,7 +10,7 @@ import { BulkDecideModal } from '../components/BulkDecideModal';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
 import { DEFAULT_PERMISSIONS_BY_ROLE, getEffectivePermissions } from '../api/users';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw, CalendarX } from 'lucide-react';
+import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw, CalendarX, Ban } from 'lucide-react';
 import { format } from 'date-fns';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -33,6 +33,7 @@ const ITEM_STATUS_BADGE: Record<string, { label: string; className: string; icon
   approved: { label: 'Đã duyệt', className: 'bg-emerald-100 text-emerald-800 border border-emerald-300', icon: CheckCircle },
   rejected: { label: 'Từ chối', className: 'bg-rose-100 text-rose-800 border border-rose-300', icon: XCircle },
   completed: { label: 'Hoàn tất', className: 'bg-blue-100 text-blue-800 border border-blue-300', icon: CheckCircle },
+  cancelled: { label: 'Đã hủy', className: 'bg-slate-100 text-slate-700 border border-slate-300', icon: Ban },
 };
 
 function ItemStatusBadge({ status }: { status: string }) {
@@ -73,7 +74,7 @@ export const Requests: React.FC = () => {
   const [declarationRequests, setDeclarationRequests] = useState<any[]>([]);
   const [loadingDeclarations, setLoadingDeclarations] = useState(false);
   const [reviewRequest, setReviewRequest] = useState<any>(null);
-  const { profile, user } = useAuth();
+  const { profile, user, effectiveRole, originalRole } = useAuth();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [overdueAssets, setOverdueAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +89,11 @@ export const Requests: React.FC = () => {
   
   // Print Modal
   const [printModalData, setPrintModalData] = useState<{ item: any; tx?: any } | null>(null);
+
+  // Void Modal
+  const [voidModalData, setVoidModalData] = useState<{ item: any; tx?: any } | null>(null);
+  const [voidReason, setVoidReason] = useState<string>('');
+  const [isVoiding, setIsVoiding] = useState<boolean>(false);
 
   // Filters
   const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<string>('all');
@@ -104,6 +110,10 @@ export const Requests: React.FC = () => {
 
   const effectivePerms = getEffectivePermissions(profile);
   const isApprover = effectivePerms.includes('request.approve') || profile?.role === 'warehouse_manager' || profile?.role === 'btc_manager';
+
+  const userRole = effectiveRole || profile?.role || user?.role || '';
+  const origRole = originalRole || (profile as any)?.originalRole || '';
+  const canVoidTicket = ['admin', 'super_admin', 'btc_manager'].includes(userRole) || ['admin', 'super_admin', 'btc_manager'].includes(origRole);
 
   const isWarehouseManager = profile?.role === 'warehouse_manager';
   const managedWarehouseIds = profile?.managed_warehouse_ids || [];
@@ -250,6 +260,28 @@ export const Requests: React.FC = () => {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmVoid = async () => {
+    if (!voidModalData?.item?.id) return;
+    const reason = voidReason.trim();
+    if (!reason) {
+      toast.error('Vui lòng nhập lý do hủy phiếu');
+      return;
+    }
+
+    setIsVoiding(true);
+    try {
+      await voidTransactionItem(voidModalData.item.id, reason);
+      toast.success('Hủy phiếu thành công. Trạng thái tài sản đã được hoàn trả về kho.');
+      setVoidModalData(null);
+      setVoidReason('');
+      await loadTransactions();
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi hủy phiếu');
+    } finally {
+      setIsVoiding(false);
     }
   };
 
@@ -708,6 +740,21 @@ export const Requests: React.FC = () => {
                                         </button>
                                       )}
 
+                                      {/* Void Button */}
+                                      {canVoidTicket && (item.status === 'approved' || item.status === 'checked_out') && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setVoidModalData({ item, tx });
+                                            setVoidReason('');
+                                          }}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800 rounded-md transition-colors cursor-pointer"
+                                          title="Hủy phiếu và hoàn trả tài sản về kho"
+                                        >
+                                          <Ban className="w-3 h-3" /> Hủy phiếu
+                                        </button>
+                                      )}
+
                                       {isApprover && item.status === 'pending' && (
                                         <>
                                           <button
@@ -882,6 +929,103 @@ export const Requests: React.FC = () => {
           transaction={printModalData.tx}
           warehouse={warehouses.find(w => w.id === getResponsibleWarehouseId(printModalData.item, printModalData.tx?.type || 'checkout'))}
         />
+      )}
+
+      {/* Void Ticket Modal */}
+      {voidModalData && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-6 shadow-xl border border-gray-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-slate-800">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="text-base font-bold">Hủy phiếu xuất mượn</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isVoiding) {
+                    setVoidModalData(null);
+                    setVoidReason('');
+                  }
+                }}
+                disabled={isVoiding}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-lg p-3 text-xs text-rose-800 dark:text-rose-300">
+              <p className="font-semibold mb-1">Cảnh báo hành động:</p>
+              <p>Phiếu giao dịch sẽ được chuyển sang trạng thái <span className="font-bold">Đã hủy (cancelled)</span> và tài sản liên quan sẽ được tự động hoàn trả về <span className="font-bold">Trong kho (in_stock)</span>.</p>
+            </div>
+
+            <div className="text-xs space-y-2 bg-gray-50 dark:bg-slate-800/60 p-3 rounded-lg border border-gray-200 dark:border-slate-800">
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-slate-400">Số GCN:</span>
+                <span className="font-semibold text-gray-900 dark:text-slate-100">
+                  {voidModalData.item.confirmed_asset?.certificate_no || voidModalData.item.asset?.certificate_no || '-'}
+                </span>
+              </div>
+              {voidModalData.item.voucher_code && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">Mã phiếu (PN/PX):</span>
+                  <span className="font-mono font-bold text-blue-700 dark:text-blue-400">
+                    {voidModalData.item.voucher_code}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-slate-400">Trạng thái hiện tại:</span>
+                <ItemStatusBadge status={voidModalData.item.status} />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                Lý do hủy phiếu <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                placeholder="Nhập lý do hủy phiếu xuất mượn (bắt buộc)..."
+                className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 dark:bg-slate-800 dark:text-slate-100"
+                disabled={isVoiding}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setVoidModalData(null);
+                  setVoidReason('');
+                }}
+                disabled={isVoiding}
+                className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmVoid}
+                disabled={!voidReason.trim() || isVoiding}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm cursor-pointer transition-colors"
+              >
+                {isVoiding ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang hủy...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-3.5 h-3.5" /> Xác nhận Hủy
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
