@@ -113,32 +113,71 @@ export async function fetchReportStatistics(filters: ReportFilterParams): Promis
   };
 }
 
+export type ReportProgressCallback = (loaded: number, total: number) => void;
+
 /**
- * Fetch full detailed assets matching report filters on demand (e.g. for Excel Export or Snapshot creation)
+ * Fetch full detailed assets matching report filters on demand (e.g. for Excel Export)
+ * Thực hiện:
+ * (a) Tải theo từng trang (1.000 dòng/trang) cho đến hết, gọi callback tiến trình và đối chiếu số dòng tải về với totalCount;
+ *     nếu số dòng nhận được lệch với totalCount từ DB thì ném lỗi, tuyệt đối không trả về dữ liệu thiếu.
+ * (b) Chuyển toàn bộ lọc theo vùng (selectedRegion) và allowedWarehouseIds sang điều kiện truy vấn phía server trong fetchAssets.
  */
-export async function fetchReportDetailedAssets(filters: ReportFilterParams, maxLimit = 10000): Promise<Asset[]> {
-  const result = await fetchAssets({
+export async function fetchReportDetailedAssets(
+  filters: ReportFilterParams,
+  onProgress?: ReportProgressCallback
+): Promise<Asset[]> {
+  const PAGE_SIZE = 1000;
+
+  // Chuyển toàn bộ điều kiện lọc sang điều kiện truy vấn phía server
+  const serverFilters = {
     search: filters.searchTerm,
     projectId: filters.projectId,
     mortgageStatus: filters.mortgageStatus,
-    warehouseId: filters.warehouseId
-  }, 1, maxLimit);
+    warehouseId: filters.warehouseId,
+    selectedRegion: filters.selectedRegion,
+    allowedWarehouseIds: filters.allowedWarehouseIds,
+  };
 
-  let data = result.data || [];
+  // Trang đầu tiên: lấy dữ liệu và totalCount chính xác từ server
+  const firstResult = await fetchAssets(serverFilters, 1, PAGE_SIZE);
+  const totalCount = Number(firstResult.totalCount) || 0;
+  const allAssets: Asset[] = [...(firstResult.data || [])];
 
-  // If region filter is set, refine further by region name
-  if (filters.selectedRegion && filters.selectedRegion !== 'Tất cả vùng') {
-    const searchReg = filters.selectedRegion.replace('Vùng ', '').trim().toLowerCase();
-    data = data.filter(asset => {
-      const regionName = asset.projects?.areas?.regions?.name || (asset.warehouses as any)?.regions?.name || '';
-      return regionName.toLowerCase().includes(searchReg);
-    });
+  if (onProgress) {
+    onProgress(allAssets.length, totalCount);
   }
 
-  // If role-scoped allowed warehouses
-  if (filters.allowedWarehouseIds && filters.allowedWarehouseIds.length > 0) {
-    data = data.filter(a => a.warehouse_id && filters.allowedWarehouseIds!.includes(a.warehouse_id));
+  // Tải các trang tiếp theo nếu tổng số lượng lớn hơn 1.000
+  if (totalCount > PAGE_SIZE) {
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    for (let page = 2; page <= totalPages; page++) {
+      const pageResult = await fetchAssets(serverFilters, page, PAGE_SIZE);
+      const pageRows = pageResult.data || [];
+      allAssets.push(...pageRows);
+
+      if (onProgress) {
+        onProgress(allAssets.length, totalCount);
+      }
+    }
   }
 
-  return data;
+  // Kiểm tra không có id nào xuất hiện 2 lần (dùng Set)
+  const seenIds = new Set<string>();
+  for (const asset of allAssets) {
+    if (seenIds.has(asset.id)) {
+      throw new Error(
+        `Dữ liệu tải về bị trùng dòng (id: ${asset.id}, mã: ${asset.certificate_no || 'Chưa rõ'}). Đã hủy thao tác để đảm bảo không xuất báo cáo sai lệch!`
+      );
+    }
+    seenIds.add(asset.id);
+  }
+
+  // Đối chiếu số dòng nhận được với totalCount từ DB: nếu lệch thì báo lỗi, KHÔNG xuất file thiếu
+  if (allAssets.length !== totalCount) {
+    throw new Error(
+      `Dữ liệu tải về không đầy đủ: Nhận được ${allAssets.length} / ${totalCount} tài sản từ hệ thống. Đã hủy thao tác để đảm bảo không xuất báo cáo thiếu dữ liệu!`
+    );
+  }
+
+  return allAssets;
 }

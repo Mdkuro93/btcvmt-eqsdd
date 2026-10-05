@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { Upload, FileText, CheckCircle, AlertTriangle, Loader2, X } from 'lucide-react';
 import { fetchInvestorEntities } from '../api/investorEntities';
 import { fetchProjects, importAssets, checkDuplicateAssets } from '../api/assets';
+import { validateScanLink } from '../lib/scanLink';
 import { useAuth } from '../contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -132,6 +133,18 @@ export const Import: React.FC = () => {
 
           const isMortgaged = (row['Trạng Thái Thế Chấp']?.toString().toLowerCase().includes('thế chấp') && !row['Trạng Thái Thế Chấp']?.toString().toLowerCase().includes('không')) || Boolean(mortgage_bank);
 
+          const rawScan = (row['Link bản scan'] || row['Link scan'] || row['Đường dẫn scan'] || row['scan_file_url'] || row['scan_url'])?.toString().trim();
+          let scan_file_url: string | null = null;
+          if (rawScan) {
+            const scanVal = validateScanLink(rawScan);
+            if (!scanVal.ok) {
+              hasError = true;
+              errorMessage = scanVal.error || 'Link bản scan không hợp lệ';
+            } else {
+              scan_file_url = scanVal.url || null;
+            }
+          }
+
           return {
             _originalRow: index + 2, // Excel rows are 1-indexed, and header is 1
             certificate_no,
@@ -148,6 +161,7 @@ export const Import: React.FC = () => {
             usage_purpose,
             mortgage_bank,
             mortgage_unit,
+            scan_file_url,
             area,
             current_owner_entity_id,
             current_owner_role,

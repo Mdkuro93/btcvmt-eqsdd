@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Warehouse, Region } from '../../types';
 import { fetchWarehouses, createWarehouse, updateWarehouse, deleteWarehouse, fetchRegions } from '../../api/assets';
-import { mockStore } from '../../lib/mockStore';
+import { resolveRegionCode } from '../../lib/assetIdentifier';
 import { Warehouse as WarehouseIcon, Plus, Edit2, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../ConfirmModal';
@@ -35,14 +35,18 @@ export const AdminWarehouses: React.FC = () => {
     setLoading(true);
     try {
       const [w, r] = await Promise.all([
-        fetchWarehouses().catch(() => mockStore.getWarehouses()),
-        fetchRegions().catch(() => mockStore.getRegions()),
+        fetchWarehouses(),
+        fetchRegions(),
       ]);
       setWarehouses(w || []);
       setRegions(r || []);
-    } catch (err) {
+      if (r && r.length > 0 && !newWarehouseRegionId) {
+        setNewWarehouseRegionId(r[0].id);
+        setNewWarehouseRegionCode(resolveRegionCode(r[0].name));
+      }
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi tải dữ liệu kho lưu trữ');
+      toast.error('Lỗi tải dữ liệu kho lưu trữ: ' + (err.message || 'Không thể kết nối CSDL'));
     } finally {
       setLoading(false);
     }
@@ -114,11 +118,6 @@ export const AdminWarehouses: React.FC = () => {
       <LoadingFallback
         message="Đang tải danh sách kho lưu trữ..."
         onRetry={loadData}
-        onForceLocal={() => {
-          setWarehouses(mockStore.getWarehouses());
-          setRegions(mockStore.getRegions());
-          setLoading(false);
-        }}
       />
     );
   }
@@ -161,9 +160,14 @@ export const AdminWarehouses: React.FC = () => {
                 onChange={(e) => setNewWarehouseRegionCode(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
               >
-                <option value="VMN">VMN (Miền Nam)</option>
-                <option value="VMT">VMT (Miền Trung)</option>
-                <option value="VMB">VMB (Miền Bắc)</option>
+                {regions.map((r) => {
+                  const code = resolveRegionCode(r.name);
+                  return (
+                    <option key={r.id} value={code}>
+                      {code} ({r.name})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -172,7 +176,14 @@ export const AdminWarehouses: React.FC = () => {
             <div className="flex items-center gap-4">
               <select
                 value={newWarehouseRegionId}
-                onChange={(e) => setNewWarehouseRegionId(e.target.value)}
+                onChange={(e) => {
+                  const regId = e.target.value;
+                  setNewWarehouseRegionId(regId);
+                  const selectedReg = regions.find(r => r.id === regId);
+                  if (selectedReg) {
+                    setNewWarehouseRegionCode(resolveRegionCode(selectedReg.name));
+                  }
+                }}
                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white"
               >
                 <option value="">-- Liên kết Vùng --</option>
@@ -208,7 +219,7 @@ export const AdminWarehouses: React.FC = () => {
           <div className="p-4 text-sm text-gray-500 text-center">Chưa có kho nào.</div>
         ) : (
           warehouses.map((w) => {
-            const rCode = w.region_code || (w.regions?.name?.includes('Bắc') ? 'VMB' : w.regions?.name?.includes('Nam') ? 'VMN' : 'VMT');
+            const rCode = w.region_code || resolveRegionCode(w.regions?.name);
             const wCode = w.code || '001';
             return (
               <div key={w.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -298,13 +309,18 @@ export const AdminWarehouses: React.FC = () => {
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Vùng</label>
                   <select
-                    value={editingWarehouse.region_code || 'VMN'}
+                    value={editingWarehouse.region_code || (regions[0] ? resolveRegionCode(regions[0].name) : 'VMT')}
                     onChange={(e) => setEditingWarehouse({ ...editingWarehouse, region_code: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
                   >
-                    <option value="VMN">VMN (Miền Nam)</option>
-                    <option value="VMT">VMT (Miền Trung)</option>
-                    <option value="VMB">VMB (Miền Bắc)</option>
+                    {regions.map((r) => {
+                      const code = resolveRegionCode(r.name);
+                      return (
+                        <option key={r.id} value={code}>
+                          {code} ({r.name})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -312,7 +328,15 @@ export const AdminWarehouses: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Vùng trực thuộc</label>
                 <select
                   value={editingWarehouse.region_id || ''}
-                  onChange={(e) => setEditingWarehouse({ ...editingWarehouse, region_id: e.target.value || null })}
+                  onChange={(e) => {
+                    const regId = e.target.value || null;
+                    const selectedReg = regions.find(r => r.id === regId);
+                    setEditingWarehouse({
+                      ...editingWarehouse,
+                      region_id: regId,
+                      region_code: selectedReg ? resolveRegionCode(selectedReg.name) : editingWarehouse.region_code
+                    });
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
                 >
                   <option value="">-- Không liên kết --</option>

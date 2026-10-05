@@ -1,0 +1,69 @@
+# Đặt vào repo GitHub (private) tại: .github/workflows/supabase_backup_and_keepalive.yml
+# Mục đích (gói Supabase Free: không có sao lưu tự động, và dự án bị tạm dừng sau 1 tuần không hoạt động):
+#   1. keepalive : gọi RPC công khai mỗi ngày để dự án không bị tạm dừng.
+#   2. backup    : sao lưu hằng ngày (public + tài khoản auth), MÃ HÓA bằng mật khẩu riêng, lưu 30 ngày làm artifact.
+# Secrets cần tạo trong GitHub (Settings > Secrets and variables > Actions):
+#   SUPABASE_URL            ví dụ https://xxxx.supabase.co
+#   SUPABASE_ANON_KEY       khóa anon (chỉ dùng gọi RPC list_registration_warehouses)
+#   SUPABASE_POOLER_HOST    Supabase Dashboard > Connect > Session pooler > host (có dạng ...pooler.supabase.com)
+#   SUPABASE_POOLER_USER    dạng postgres.<project-ref>
+#   SUPABASE_DB_PASSWORD    mật khẩu database
+#   BACKUP_PASSPHRASE       mật khẩu mã hóa file sao lưu (TỰ GIỮ KỸ, mất là không giải mã được)
+# LƯU Ý: chưa chạy thử trong môi trường thật. Phải diễn tập KHÔI PHỤC trên dự án Supabase thứ 2 trước khi tin vào bản sao lưu.
+# Bản sao lưu chứa dữ liệu nhạy cảm: chỉ dùng repo private, giới hạn người truy cập.
+name: supabase-backup-and-keepalive
+
+on:
+  schedule:
+    - cron: '0 20 * * *'   # 03:00 giờ Việt Nam (UTC+7)
+  workflow_dispatch: {}
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl -fsS -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/list_registration_warehouses" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" -d '{}' > /dev/null
+          echo "Keepalive OK"
+
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump schema public
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          docker run --rm -e PGPASSWORD postgres:17 pg_dump \
+            "host=${{ secrets.SUPABASE_POOLER_HOST }} port=5432 user=${{ secrets.SUPABASE_POOLER_USER }} dbname=postgres sslmode=require" \
+            --format=custom --no-owner --no-privileges --schema=public > public.dump
+      - name: Dump tài khoản auth (users, identities)
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          docker run --rm -e PGPASSWORD postgres:17 pg_dump \
+            "host=${{ secrets.SUPABASE_POOLER_HOST }} port=5432 user=${{ secrets.SUPABASE_POOLER_USER }} dbname=postgres sslmode=require" \
+            --format=custom --no-owner --no-privileges --data-only \
+            --table=auth.users --table=auth.identities > auth.dump
+      - name: Kiểm tra kích thước (chặn file rỗng)
+        run: |
+          test "$(stat -c%s public.dump)" -gt 10000 || (echo "public.dump quá nhỏ, nghi sao lưu lỗi" && exit 1)
+          ls -l public.dump auth.dump
+      - name: Mã hóa
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          D=$(date -u +%Y%m%d-%H%M)
+          for f in public auth; do
+            openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -in $f.dump -out ${f}-$D.dump.enc
+          done
+          rm -f public.dump auth.dump
+      - name: Lưu 30 ngày
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup
+          path: "*.dump.enc"
+          retention-days: 30

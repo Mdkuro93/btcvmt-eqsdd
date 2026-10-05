@@ -30,7 +30,9 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
   
   // Asset swapping state
   const [isSwappingAsset, setIsSwappingAsset] = useState(false);
-  const [allAssets, setAllAssets] = useState<Asset[]>([]);
+  const [searchResults, setSearchResults] = useState<Asset[]>([]);
+  const [selectedSwappedAsset, setSelectedSwappedAsset] = useState<Asset | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
 
@@ -43,21 +45,48 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
       setNotes(item.decision_notes || '');
       setDetails(item.details ? JSON.parse(JSON.stringify(item.details)) : {});
       setSelectedAssetId(item.confirmed_asset_id || item.asset_id || '');
+      setSelectedSwappedAsset(null);
+      setSearchResults([]);
+      setAssetSearch('');
       setIsSwappingAsset(false);
       setHasMajorDiff(false);
       setDiffWarnings([]);
-
-      fetchAssets().then(res => setAllAssets(res?.data || [])).catch(() => {});
     }
   }, [isOpen, item]);
+
+  // Debounced search for replacement asset (debounce 400ms, minimum 2 characters, max 15 results)
+  useEffect(() => {
+    if (!isOpen || !isSwappingAsset) return;
+    const term = assetSearch.trim();
+    if (term.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchAssets({ search: term }, 1, 15);
+        setSearchResults(res.data ? res.data.slice(0, 15) : []);
+      } catch (err) {
+        console.error('Lỗi tìm kiếm GCN:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [assetSearch, isOpen, isSwappingAsset]);
 
   const originalAsset: Asset = item?.asset;
   const currentAsset: Asset = useMemo(() => {
     if (selectedAssetId && selectedAssetId !== item?.asset_id) {
-      return allAssets.find(a => a.id === selectedAssetId) || originalAsset;
+      return selectedSwappedAsset || originalAsset;
     }
     return originalAsset;
-  }, [selectedAssetId, allAssets, originalAsset, item]);
+  }, [selectedAssetId, selectedSwappedAsset, originalAsset, item]);
 
   // Determine current warehouse for voucher preview
   const currentWarehouse = useMemo(() => {
@@ -110,16 +139,6 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
   }, [details, isOpen, item, decisionType, selectedAssetId, currentAsset, originalAsset, warehouses]);
 
   if (!isOpen || !item) return null;
-
-  const filteredAssets = allAssets.filter(a => {
-    if (!assetSearch.trim()) return true;
-    const term = assetSearch.toLowerCase();
-    return (
-      (a.certificate_no || '').toLowerCase().includes(term) ||
-      (a.projects?.name || '').toLowerCase().includes(term) ||
-      (a.legal_lot_code || '').toLowerCase().includes(term)
-    );
-  }).slice(0, 15);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,31 +211,45 @@ export const DecideRequestModal: React.FC<DecideRequestModalProps> = ({
                   <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
-                    placeholder="Tìm theo số seri GCN, dự án, mã lô..."
+                    placeholder="Tìm theo số seri GCN, dự án, mã lô (tối thiểu 2 ký tự)..."
                     value={assetSearch}
                     onChange={e => setAssetSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-md"
+                    className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-300 rounded-md"
                   />
+                  {isSearching && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 absolute right-2.5 top-2.5" />
+                  )}
                 </div>
                 <div className="max-h-36 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-md">
-                  {filteredAssets.map(a => {
-                    const isSelected = a.id === selectedAssetId;
-                    return (
-                      <div
-                        key={a.id}
-                        onClick={() => setSelectedAssetId(a.id)}
-                        className={`p-2 text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                          isSelected ? 'bg-blue-50 text-blue-900 font-bold' : 'hover:bg-gray-50 text-gray-700'
-                        }`}
-                      >
-                        <div>
-                          <span>{a.certificate_no}</span>
-                          <span className="text-gray-400 ml-2">({a.projects?.name || 'VMT'} - {a.legal_lot_code || 'Lô'})</span>
+                  {searchResults.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-gray-400">
+                      {assetSearch.trim().length < 2
+                        ? 'Nhập tối thiểu 2 ký tự để tìm kiếm GCN'
+                        : isSearching ? 'Đang tìm kiếm...' : 'Không tìm thấy GCN phù hợp'}
+                    </div>
+                  ) : (
+                    searchResults.map(a => {
+                      const isSelected = a.id === selectedAssetId;
+                      return (
+                        <div
+                          key={a.id}
+                          onClick={() => {
+                            setSelectedAssetId(a.id);
+                            setSelectedSwappedAsset(a);
+                          }}
+                          className={`p-2 text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                            isSelected ? 'bg-blue-50 text-blue-900 font-bold' : 'hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <div>
+                            <span>{a.certificate_no}</span>
+                            <span className="text-gray-400 ml-2">({a.projects?.name || '---'} - {a.legal_lot_code || '-'})</span>
+                          </div>
+                          {isSelected && <CheckCircle className="w-4 h-4 text-blue-600 shrink-0" />}
                         </div>
-                        {isSelected && <CheckCircle className="w-4 h-4 text-blue-600 shrink-0" />}
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Area, Region, Project } from '../../types';
 import { fetchAreas, createArea, updateArea, deleteArea, fetchRegions, fetchProjects } from '../../api/assets';
 import { PROVINCE_CODES } from '../../lib/assetIdentifier';
-import { mockStore } from '../../lib/mockStore';
 import { MapPin, Plus, Edit2, Trash2, Search, Filter, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../ConfirmModal';
@@ -30,16 +29,16 @@ export const AdminAreas: React.FC = () => {
     setLoading(true);
     try {
       const [a, r, p] = await Promise.all([
-        fetchAreas().catch(() => mockStore.getAreas()),
-        fetchRegions().catch(() => mockStore.getRegions()),
-        fetchProjects().catch(() => mockStore.getProjects()),
+        fetchAreas(),
+        fetchRegions(),
+        fetchProjects(),
       ]);
       setAreas(a || []);
       setRegions(r || []);
       setProjects(p || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi tải dữ liệu địa bàn');
+      toast.error('Lỗi tải dữ liệu địa bàn: ' + (err.message || 'Lỗi CSDL'));
     } finally {
       setLoading(false);
     }
@@ -123,12 +122,6 @@ export const AdminAreas: React.FC = () => {
       <LoadingFallback
         message="Đang tải dữ liệu địa bàn..."
         onRetry={loadData}
-        onForceLocal={() => {
-          setAreas(mockStore.getAreas());
-          setRegions(mockStore.getRegions());
-          setProjects(mockStore.getProjects());
-          setLoading(false);
-        }}
       />
     );
   }

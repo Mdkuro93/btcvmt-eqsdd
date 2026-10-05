@@ -11,7 +11,8 @@ import {
   Building2,
   ExternalLink,
   Eye,
-  Loader2 
+  Loader2,
+  PackagePlus
 } from 'lucide-react';
 
 interface Props {
@@ -55,7 +56,7 @@ export const AuditItemDetailModal: React.FC<Props> = ({
     e.preventDefault();
     setLoading(true);
     try {
-      const actualFound = findingStatus === 'matched' || findingStatus === 'misplaced';
+      const actualFound = findingStatus === 'matched' || findingStatus === 'misplaced' || findingStatus === 'surplus';
       await onSave(item.id, {
         finding_status: findingStatus,
         actual_found: actualFound,
@@ -135,7 +136,7 @@ export const AuditItemDetailModal: React.FC<Props> = ({
             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
               Kết Quả Đối Soát Thực Tế <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {/* Matched */}
               <button
                 type="button"
@@ -182,6 +183,21 @@ export const AuditItemDetailModal: React.FC<Props> = ({
                 <XCircle className={`w-5 h-5 mb-1 ${findingStatus === 'missing' ? 'text-red-600' : 'text-gray-400'}`} />
                 <span className="text-xs font-bold">Không Tìm Thấy</span>
                 <span className="text-[10px] text-gray-500 mt-0.5">Khuyết thiếu</span>
+              </button>
+
+              {/* Surplus */}
+              <button
+                type="button"
+                onClick={() => setFindingStatus('surplus')}
+                className={`p-3 rounded-xl border flex flex-col items-center text-center transition-all cursor-pointer ${
+                  findingStatus === 'surplus'
+                    ? 'bg-purple-50 border-purple-500 text-purple-900 ring-2 ring-purple-500/20 shadow-xs'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <PackagePlus className={`w-5 h-5 mb-1 ${findingStatus === 'surplus' ? 'text-purple-600' : 'text-gray-400'}`} />
+                <span className="text-xs font-bold">Thừa / Sai Kho</span>
+                <span className="text-[10px] text-gray-500 mt-0.5">Phát sinh thừa</span>
               </button>
             </div>
           </div>

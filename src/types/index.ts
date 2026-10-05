@@ -120,7 +120,7 @@ export interface TransactionItem {
   confirmed_asset?: Asset;
 }
 
-export type CustodyStatus = 'in_stock' | 'checked_out' | 'in_transit';
+export type CustodyStatus = 'in_stock' | 'checked_out' | 'in_transit' | 'missing';
 export type LifecycleStatus = 'active' | 'split' | 'invalidated';
 export type SaleStatus = 'not_ready' | 'ready_for_sale' | 'sold';
 export type MortgageStatus = 'none' | 'mortgaged';
@@ -195,6 +195,15 @@ export interface Asset {
   warehouse_id: string | null;
   location_id?: string | null;
   current_holder_dept?: string | null;
+  duplicate_rule?: string | null;
+  duplicate_ack_reason?: string | null;
+  duplicate_ack_by?: string | null;
+  duplicate_ack_at?: string | null;
+  duplicate_acknowledger?: {
+    id?: string;
+    full_name?: string | null;
+    email?: string | null;
+  } | null;
   created_at: string;
   updated_at?: string | null;
   updated_by?: string | null;
@@ -396,7 +405,7 @@ export interface ReportSnapshot {
 // ==============================================================================
 
 export type InventoryAuditStatus = 'in_progress' | 'completed';
-export type InventoryAuditFindingStatus = 'pending' | 'matched' | 'missing' | 'misplaced';
+export type InventoryAuditFindingStatus = 'pending' | 'matched' | 'missing' | 'misplaced' | 'surplus';
 
 export interface InventoryAuditItem {
   id: string;
@@ -406,7 +415,7 @@ export interface InventoryAuditItem {
   expected_location?: string | null; // Vị trí dự kiến (kệ/ngăn/kho)
   actual_found: boolean;             // Đã tìm thấy hay chưa
   actual_location?: string | null;   // Vị trí thực tế nếu sai vị trí
-  finding_status: InventoryAuditFindingStatus; // 'pending' | 'matched' | 'missing' | 'misplaced'
+  finding_status: InventoryAuditFindingStatus; // 'pending' | 'matched' | 'missing' | 'misplaced' | 'surplus'
   note?: string | null;              // Ghi chú hiện trạng
   audited_at?: string | null;
   created_at?: string;
@@ -426,6 +435,7 @@ export interface InventoryAudit {
   total_found: number;
   total_missing: number;
   total_misplaced: number;
+  total_surplus?: number;
   created_at?: string;
   updated_at?: string;
   warehouse?: Warehouse;
@@ -465,6 +475,7 @@ export interface PlannedLandLot {
   project_id: string;
   parent_master_asset_id?: string | null;
   asset_code?: string | null;
+  asset_type?: string | null;
   legal_lot_code: string;
   land_lot_no?: string | null;
   map_sheet_no?: string | null;
@@ -528,6 +539,7 @@ export interface ProjectReportRow {
 export interface ProjectReportStats {
   totalLots: number;
   totalArea: number;
+  totalHighRiseArea?: number;
   cdtCount: number;
   cdtArea: number;
   investorCount: number;
@@ -542,6 +554,7 @@ export interface ProjectReportStats {
 
 export interface PlannedLandLotImportRow {
   legal_lot_code: string;
+  asset_type?: string;
   land_lot_no?: string;
   map_sheet_no?: string;
   planned_area: string | number;

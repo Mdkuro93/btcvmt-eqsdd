@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Asset, Warehouse, Profile } from '../types';
 import { bulkUpdateAssets } from '../api/assets';
+import { logActivity } from '../api/activityLogs';
 import { sendNotification } from '../services/notificationService';
 import { X, Loader2, Warehouse as WarehouseIcon, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -53,6 +54,23 @@ export const BulkWarehouseModal: React.FC<BulkWarehouseModalProps> = ({
         currentUser,
         noteText
       );
+
+      // Ghi nhận nhật ký biến động (activity_logs) cho từng tài sản được điều chuyển
+      for (const asset of selectedAssets) {
+        try {
+          await logActivity({
+            assetId: asset.id,
+            actionType: 'Điều chuyển kho',
+            documentNo: asset.asset_code || asset.certificate_no,
+            description: `Điều chuyển kho GCN ${asset.certificate_no || ''} từ "${asset.warehouses?.name || 'Chưa gán kho'}" sang "${targetWh?.name || 'Kho mới'}". Ghi chú: ${noteText}`,
+            warehouseId: targetWarehouseId,
+            notes: noteText,
+            performedBy: currentUser?.id,
+          });
+        } catch (logErr) {
+          console.warn('Không thể ghi log activity cho tài sản:', asset.id, logErr);
+        }
+      }
 
       toast.success(`Đã chuyển thành công ${res.count} GCN sang kho "${targetWh?.name || 'mới'}"!`);
 

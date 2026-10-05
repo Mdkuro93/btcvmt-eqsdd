@@ -3,11 +3,9 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Settings, MapPin, Building2, Warehouse as WarehouseIcon, FolderGit2, 
-  Shield, Users, RotateCcw, Building
+  Shield, Users, Building
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
-import { ConfirmModal } from '../components/ConfirmModal';
-import { mockStore } from '../lib/mockStore';
 
 // Sub-components
 import { AdminAreas } from '../components/admin/AdminAreas';
@@ -38,31 +36,13 @@ export const Admin: React.FC = () => {
     return 'regions';
   });
 
-  // Reset standard data modal
-  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  // Key to force refresh sub-components after standard data reset
-  const [refreshKey, setRefreshKey] = useState(0);
+  // Key to force refresh sub-components
+  const [refreshKey] = useState(0);
 
   // Quản trị viên vào toàn bộ trang; PTDA/BTC Manager chỉ vào để quản lý lô quy hoạch (tab "Dự án").
   if (profile && !isFullAdmin && !isProjectScoped) {
     return <Navigate to="/" replace />;
   }
-
-  // Reset standard corporate dataset
-  const handleResetToStandardData = () => {
-    setIsResetting(true);
-    try {
-      mockStore.resetToStandardData();
-      toast.success('Đã khôi phục thành công bộ Dữ liệu chuẩn Doanh nghiệp Tập đoàn VMT!');
-      setIsResetModalOpen(false);
-      setRefreshKey(prev => prev + 1);
-    } catch (err) {
-      toast.error('Lỗi khôi phục dữ liệu');
-    } finally {
-      setIsResetting(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -82,16 +62,7 @@ export const Admin: React.FC = () => {
           </p>
         </div>
 
-        {isFullAdmin && (
-          <button
-            type="button"
-            onClick={() => setIsResetModalOpen(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-[#1E3A8A] border border-blue-200 hover:bg-blue-100 transition-colors shadow-xs cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Khôi phục Dữ liệu chuẩn VMT
-          </button>
-        )}
+        {/* Nút Khôi phục dữ liệu chuẩn mock đã bị ẩn/vô hiệu hóa để đảm bảo toàn vẹn CSDL Supabase */}
       </div>
 
       {/* Tabs */}
@@ -164,18 +135,6 @@ export const Admin: React.FC = () => {
         {activeTab === 'investor_entities' && <AdminInvestorEntities />}
         {activeTab === 'users' && <AdminInternalUsers />}
       </div>
-
-      {/* Confirm Reset Standard Data Modal */}
-      <ConfirmModal
-        isOpen={isResetModalOpen}
-        onClose={() => setIsResetModalOpen(false)}
-        onConfirm={handleResetToStandardData}
-        title="Khôi phục Dữ liệu chuẩn Tập đoàn VMT"
-        message="Hành động này sẽ thiết lập lại toàn bộ Danh mục Vùng (3 vùng), Địa bàn (18 tỉnh thành), Kho lưu trữ (8 kho), Dự án BĐS (8 dự án), cùng bộ hồ sơ Giấy Chứng Nhận QSDĐ & Phiếu Đề Xuất chuẩn để kiểm thử. Bạn có chắc chắn muốn thực hiện?"
-        confirmText="Xác nhận khôi phục"
-        confirmVariant="primary"
-        loading={isResetting}
-      />
     </div>
   );
 };

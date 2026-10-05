@@ -6,7 +6,7 @@ import {
 } from '../types';
 
 const SELECT_COLUMNS = `
-  id, project_id, parent_master_asset_id, asset_code, legal_lot_code, land_lot_no, map_sheet_no,
+  id, project_id, parent_master_asset_id, asset_code, asset_type, legal_lot_code, land_lot_no, map_sheet_no,
   business_project_name, business_plot_code, planned_area, status, resulting_asset_id,
   notes, created_by, created_at, updated_at,
   parent_master_asset:assets!parent_master_asset_id(id, certificate_no, asset_code, area, land_lot_no, map_sheet_no),
@@ -32,7 +32,10 @@ export async function fetchPlannedLandLotsByProject(projectId: string): Promise<
     DEFAULT_READ_TIMEOUT
   );
   if (error) throw new Error('Không tải được danh sách lô quy hoạch: ' + error.message);
-  return (data || []) as unknown as PlannedLandLot[];
+  return (data || []).map((lot: any) => ({
+    ...lot,
+    asset_type: lot.asset_type || 'Đất nền',
+  })) as unknown as PlannedLandLot[];
 }
 
 /** Lô quy hoạch chưa cấp GCN của Dự án (dùng cho ô chọn khi Khai báo / Cấp thẳng GCN mới). */
@@ -48,7 +51,10 @@ export async function fetchOpenPlannedLandLotsByProject(projectId: string): Prom
     DEFAULT_READ_TIMEOUT
   );
   if (error) throw new Error('Không tải được danh sách lô quy hoạch của dự án: ' + error.message);
-  return (data || []) as unknown as PlannedLandLot[];
+  return (data || []).map((lot: any) => ({
+    ...lot,
+    asset_type: lot.asset_type || 'Đất nền',
+  })) as unknown as PlannedLandLot[];
 }
 
 /** Các lô CHƯA cấp GCN thuộc một sổ lớn cụ thể — dùng cho ô chọn khi Tách sổ. */
@@ -64,7 +70,10 @@ export async function fetchOpenPlannedLandLotsByParentAsset(parentAssetId: strin
     DEFAULT_READ_TIMEOUT
   );
   if (error) throw new Error('Không tải được danh sách lô quy hoạch của sổ gốc: ' + error.message);
-  return (data || []) as unknown as PlannedLandLot[];
+  return (data || []).map((lot: any) => ({
+    ...lot,
+    asset_type: lot.asset_type || 'Đất nền',
+  })) as unknown as PlannedLandLot[];
 }
 
 export interface PlannedLotsStageCounts {
@@ -119,6 +128,7 @@ export interface CreatePlannedLandLotInput {
   project_id?: string;
   parent_master_asset_id?: string | null;
   asset_code?: string | null;
+  asset_type?: string | null;
   legal_lot_code: string;
   land_lot_no?: string | null;
   map_sheet_no?: string | null;
@@ -131,16 +141,24 @@ export interface CreatePlannedLandLotInput {
 /** Thêm 1 lô quy hoạch (nhập tay). Nếu có parent_master_asset_id, project_id do trigger DB tự gắn từ sổ lớn. */
 export async function createPlannedLandLot(input: CreatePlannedLandLotInput): Promise<PlannedLandLot> {
   ensureConfigured();
+  const payload = {
+    ...input,
+    asset_type: input.asset_type || 'Đất nền',
+  };
   const { data, error } = await withTimeout(
-    supabase.from('planned_land_lots').insert(input).select(SELECT_COLUMNS).single(),
+    supabase.from('planned_land_lots').insert(payload).select(SELECT_COLUMNS).single(),
     DEFAULT_WRITE_TIMEOUT
   );
   if (error) throw new Error('Không thêm được lô quy hoạch: ' + error.message);
-  return data as unknown as PlannedLandLot;
+  return {
+    ...(data as any),
+    asset_type: (data as any)?.asset_type || 'Đất nền',
+  } as unknown as PlannedLandLot;
 }
 
 export interface UpdatePlannedLandLotInput {
   parent_master_asset_id?: string | null;
+  asset_type?: string | null;
   legal_lot_code?: string;
   land_lot_no?: string | null;
   map_sheet_no?: string | null;
@@ -153,12 +171,19 @@ export interface UpdatePlannedLandLotInput {
 /** Sửa 1 lô quy hoạch. */
 export async function updatePlannedLandLot(id: string, input: UpdatePlannedLandLotInput): Promise<PlannedLandLot> {
   ensureConfigured();
+  const payload = {
+    ...input,
+    ...(input.asset_type !== undefined ? { asset_type: input.asset_type || 'Đất nền' } : {}),
+  };
   const { data, error } = await withTimeout(
-    supabase.from('planned_land_lots').update(input).eq('id', id).select(SELECT_COLUMNS).single(),
+    supabase.from('planned_land_lots').update(payload).eq('id', id).select(SELECT_COLUMNS).single(),
     DEFAULT_WRITE_TIMEOUT
   );
   if (error) throw new Error('Không cập nhật được lô quy hoạch: ' + error.message);
-  return data as unknown as PlannedLandLot;
+  return {
+    ...(data as any),
+    asset_type: (data as any)?.asset_type || 'Đất nền',
+  } as unknown as PlannedLandLot;
 }
 
 /** Gán các lô quy hoạch chưa có sổ lớn vào một sổ lớn (Giai đoạn 1 -> 2). */

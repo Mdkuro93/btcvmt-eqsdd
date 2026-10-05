@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
-import { InventoryAudit, InventoryAuditItem, Profile } from '../types';
+import { InventoryAudit, InventoryAuditItem, InventoryAuditFindingStatus, Profile } from '../types';
 import { mockStore } from '../lib/mockStore';
 import { logActivity } from './activityLogs';
 
@@ -174,84 +174,27 @@ export async function createInventoryAudit(
   }
 
   try {
-    // 1. Lấy danh sách toàn bộ asset in_stock tại kho
-    const { data: assets, error: assetErr } = await withTimeout(
-      supabase
-        .from('assets')
-        .select('id, legal_lot_code, land_lot_no, certificate_no, custody_status')
-        .eq('warehouse_id', warehouseId)
-        .eq('custody_status', 'in_stock'),
-      DEFAULT_READ_TIMEOUT
-    );
+    // Thay thế bước 1-3 bằng RPC create_inventory_audit nguyên tử
+    const { data: auditId, error } = await supabase.rpc('create_inventory_audit', {
+      p_warehouse_id: warehouseId,
+      p_notes: notes ?? null,
+    });
 
-    if (assetErr) {
-      console.error('Lỗi khi kiểm tra danh sách GCN trong kho để kiểm kê:', assetErr);
-      throw new Error(`Không thể tải danh sách GCN trong kho: ${assetErr.message || 'Lỗi cơ sở dữ liệu'}.`);
-    }
-    const assetList = assets || [];
-    if (assetList.length === 0) {
-      throw new Error('Kho này hiện không có tài sản ở trạng thái "Trong kho" (in_stock). Không thể tạo đợt kiểm kê rỗng.');
+    if (error) {
+      throw new Error(error.message);
     }
 
-    // 2. Tạo bản ghi inventory_audits
-    const { data: audit, error: createAuditErr } = await withTimeout(
-      supabase
-        .from('inventory_audits')
-        .insert({
-          warehouse_id: warehouseId,
-          performed_by: profile.id,
-          started_at: new Date().toISOString(),
-          status: 'in_progress',
-          notes: notes || null,
-          total_expected: assetList.length,
-          total_found: 0,
-          total_missing: 0,
-          total_misplaced: 0,
-        })
-        .select(`
-          *,
-          warehouses:warehouses(id, name, code, is_central, region_code),
-          performer:profiles!inventory_audits_performed_by_fkey(id, full_name, email)
-        `)
-        .single(),
-      DEFAULT_WRITE_TIMEOUT
-    );
-
-    if (createAuditErr) {
-      console.error('Lỗi khi tạo đợt kiểm kê mới trên Supabase:', createAuditErr);
-      throw new Error(`Không thể khởi tạo đợt kiểm kê: ${createAuditErr.message || 'Lỗi cơ sở dữ liệu'}.`);
+    const detail = await getInventoryAuditDetail(auditId);
+    if (!detail) {
+      throw new Error('Không thể tải chi tiết đợt kiểm kê vừa tạo.');
     }
 
-    // 3. Tạo các dòng inventory_audit_items
-    if (assetList.length > 0) {
-      const itemsToInsert = assetList.map((a: any) => ({
-        audit_id: audit.id,
-        asset_id: a.id,
-        expected_status: 'in_stock',
-        expected_location: a.legal_lot_code || 'Vị trí kho tiêu chuẩn',
-        actual_found: false,
-        actual_location: null,
-        finding_status: 'pending',
-        note: null,
-      }));
-
-      const { error: insertItemsErr } = await withTimeout(
-        supabase.from('inventory_audit_items').insert(itemsToInsert),
-        DEFAULT_WRITE_TIMEOUT
-      );
-
-      if (insertItemsErr) {
-        console.error('Lỗi khi chèn danh sách chi tiết kiểm kê:', insertItemsErr);
-        throw new Error(`Không thể tạo danh sách GCN cần kiểm kê: ${insertItemsErr.message || 'Lỗi cơ sở dữ liệu'}.`);
-      }
-    }
-
-    // 4. Ghi log activity
+    // Ghi log activity
     try {
       await logActivity({
         actionType: 'Bắt đầu kiểm kê kho',
         warehouseId,
-        description: `Bắt đầu đợt kiểm kê tại kho ${audit.warehouses?.name || warehouseId} với ${assetList.length} GCN dự kiến.`,
+        description: `Bắt đầu đợt kiểm kê tại kho ${detail.warehouses?.name || warehouseId} với ${detail.total_expected} GCN dự kiến.`,
         notes,
         performedBy: profile.id,
       });
@@ -259,10 +202,6 @@ export async function createInventoryAudit(
       console.warn('Log activity error:', e);
     }
 
-    const detail = await getInventoryAuditDetail(audit.id);
-    if (!detail) {
-      throw new Error('Không thể tải chi tiết đợt kiểm kê vừa tạo.');
-    }
     return detail;
   } catch (err: any) {
     console.error('Lỗi trong hàm createInventoryAudit:', err);
@@ -276,7 +215,7 @@ export async function createInventoryAudit(
 export async function updateInventoryAuditItem(
   itemId: string,
   data: {
-    finding_status: 'pending' | 'matched' | 'missing' | 'misplaced';
+    finding_status: InventoryAuditFindingStatus;
     actual_found: boolean;
     actual_location?: string | null;
     note?: string | null;
@@ -365,6 +304,52 @@ export async function batchUpdateAuditItems(
 }
 
 /**
+ * Thêm một GCN phát sinh thừa vào đợt kiểm kê hiện tại
+ */
+export async function addSurplusAuditItem(
+  auditId: string,
+  assetId: string,
+  actualLocation?: string,
+  note?: string
+): Promise<InventoryAuditItem> {
+  if (!isSupabaseConfigured) {
+    return mockStore.addSurplusAuditItem(auditId, assetId, actualLocation, note);
+  }
+
+  try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('inventory_audit_items')
+        .insert({
+          audit_id: auditId,
+          asset_id: assetId,
+          expected_status: 'other_warehouse',
+          expected_location: 'Ngoài danh sách kho',
+          actual_found: true,
+          actual_location: actualLocation || 'Tại kho đang kiểm',
+          finding_status: 'surplus',
+          note: note || 'Hồ sơ phát sinh thừa thực tế',
+          audited_at: new Date().toISOString(),
+        })
+        .select('*')
+        .single(),
+      DEFAULT_WRITE_TIMEOUT
+    );
+
+    if (error) {
+      console.error('Lỗi khi thêm GCN thừa vào đợt kiểm kê:', error);
+      throw new Error(`Không thể thêm GCN thừa: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+
+    await recalculateAuditStats(auditId);
+    return data;
+  } catch (err: any) {
+    console.error('Lỗi trong hàm addSurplusAuditItem:', err);
+    throw new Error(err.message || 'Không thể thêm hồ sơ thừa vào đợt kiểm kê.');
+  }
+}
+
+/**
  * Tính toán lại thống kê của đợt kiểm kê
  */
 export async function recalculateAuditStats(auditId: string): Promise<void> {
@@ -389,9 +374,10 @@ export async function recalculateAuditStats(auditId: string): Promise<void> {
     if (!items) return;
 
     const total_expected = items.length;
-    const total_found = items.filter(i => i.actual_found).length;
+    const total_found = items.filter(i => i.actual_found || i.finding_status === 'matched' || i.finding_status === 'misplaced' || i.finding_status === 'surplus').length;
     const total_missing = items.filter(i => i.finding_status === 'missing').length;
     const total_misplaced = items.filter(i => i.finding_status === 'misplaced').length;
+    const total_surplus = items.filter(i => i.finding_status === 'surplus').length;
 
     const { error: updateErr } = await withTimeout(
       supabase
@@ -401,6 +387,7 @@ export async function recalculateAuditStats(auditId: string): Promise<void> {
           total_found,
           total_missing,
           total_misplaced,
+          total_surplus,
           updated_at: new Date().toISOString(),
         })
         .eq('id', auditId),
@@ -413,7 +400,7 @@ export async function recalculateAuditStats(auditId: string): Promise<void> {
 }
 
 /**
- * Hoàn tất đợt kiểm kê kho
+ * Hoàn tất đợt kiểm kê kho & đồng bộ dữ liệu vào bảng assets
  */
 export async function completeInventoryAudit(
   auditId: string,
@@ -426,7 +413,7 @@ export async function completeInventoryAudit(
       await logActivity({
         actionType: 'Hoàn tất kiểm kê kho',
         warehouseId: completed?.warehouse_id,
-        description: `Hoàn tất đợt kiểm kê kho ${completed?.warehouses?.name || auditId}. Tìm thấy ${completed?.total_found}/${completed?.total_expected} GCN (Khuyết thiếu: ${completed?.total_missing}, Sai vị trí: ${completed?.total_misplaced}).`,
+        description: `Hoàn tất đợt kiểm kê kho ${completed?.warehouses?.name || auditId}. Tìm thấy ${completed?.total_found}/${completed?.total_expected} GCN (Khuyết thiếu: ${completed?.total_missing}, Sai vị trí: ${completed?.total_misplaced}, Thừa: ${completed?.total_surplus || 0}).`,
         notes,
         performedBy: profile.id,
       });
@@ -437,48 +424,25 @@ export async function completeInventoryAudit(
   }
 
   try {
-    await recalculateAuditStats(auditId);
-
-    const { data: completed, error } = await withTimeout(
-      supabase
-        .from('inventory_audits')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-          notes: notes || undefined,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', auditId)
-        .select(`
-          *,
-          warehouses:warehouses(id, name, code, is_central, region_code),
-          performer:profiles!inventory_audits_performed_by_fkey(id, full_name, email)
-        `)
-        .single(),
+    const { data, error } = await withTimeout(
+      supabase.rpc('complete_inventory_audit', { p_audit_id: auditId, p_notes: notes || null }),
       DEFAULT_WRITE_TIMEOUT
     );
 
     if (error) {
-      console.error('Lỗi khi hoàn tất đợt kiểm kê trên Supabase:', error);
-      throw new Error(`Không thể chốt đợt kiểm kê: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+      throw new Error(error.message || 'Không thể hoàn tất đợt kiểm kê.');
     }
 
-    try {
-      await logActivity({
-        actionType: 'Hoàn tất kiểm kê kho',
-        warehouseId: completed?.warehouse_id,
-        description: `Hoàn tất đợt kiểm kê kho ${completed?.warehouses?.name || auditId}. Tìm thấy ${completed?.total_found}/${completed?.total_expected} GCN (Khuyết thiếu: ${completed?.total_missing}, Sai vị trí: ${completed?.total_misplaced}).`,
-        notes,
-        performedBy: profile.id,
-      });
-    } catch (e) {
-      console.warn('Log activity error:', e);
+    if (data && (data.assets_missing_skipped > 0 || data.total_pending > 0)) {
+      console.info(
+        `Hoàn tất kiểm kê với lưu ý: ${data.assets_missing_skipped || 0} GCN khuyết thiếu bị bỏ qua (đã xuất trong lúc kiểm kê), ${data.total_pending || 0} GCN chưa kiểm.`
+      );
     }
 
     return await getInventoryAuditDetail(auditId);
   } catch (err: any) {
     console.error('Lỗi trong hàm completeInventoryAudit:', err);
-    throw new Error(err.message || 'Không thể hoàn tất đợt kiểm kê, vui lòng thử lại.');
+    throw err instanceof Error ? err : new Error(err.message || 'Không thể hoàn tất đợt kiểm kê, vui lòng thử lại.');
   }
 }
 

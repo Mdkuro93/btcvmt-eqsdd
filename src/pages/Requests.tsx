@@ -18,7 +18,6 @@ import { Warehouse } from '../types';
 import { getResponsibleWarehouseId } from '../lib/warehouseRouting';
 
 import { LoadingFallback } from '../components/LoadingFallback';
-import { mockStore } from '../lib/mockStore';
 
 const TYPE_LABEL: Record<string, string> = {
   checkout: 'Mượn/Xuất sổ',
@@ -113,10 +112,42 @@ export const Requests: React.FC = () => {
 
   const userRole = effectiveRole || profile?.role || user?.role || '';
   const origRole = originalRole || (profile as any)?.originalRole || '';
-  const canVoidTicket = ['admin', 'super_admin', 'btc_manager'].includes(userRole) || ['admin', 'super_admin', 'btc_manager'].includes(origRole);
 
   const isWarehouseManager = profile?.role === 'warehouse_manager';
   const managedWarehouseIds = profile?.managed_warehouse_ids || [];
+
+  const canVoidItem = (item: any): boolean => {
+    if (!profile) return false;
+    const currentRole = effectiveRole || profile.role || user?.role || '';
+    const initialRole = originalRole || (profile as any)?.originalRole || '';
+
+    // admin, super_admin, btc_manager luôn được
+    if (
+      ['admin', 'super_admin', 'btc_manager'].includes(currentRole) ||
+      ['admin', 'super_admin', 'btc_manager'].includes(initialRole)
+    ) {
+      return true;
+    }
+
+    // warehouse_manager chỉ được thấy nút với phiếu mà GCN thuộc kho họ quản lý
+    if (
+      currentRole === 'warehouse_manager' ||
+      initialRole === 'warehouse_manager' ||
+      profile.role === 'warehouse_manager'
+    ) {
+      const managed = profile.managed_warehouse_ids || [];
+      const assetWhId =
+        item?.asset?.warehouse_id ||
+        item?.confirmed_asset?.warehouse_id ||
+        item?.details?.warehouse_id ||
+        item?.warehouse_id;
+      if (assetWhId && Array.isArray(managed) && managed.includes(assetWhId)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   useEffect(() => {
     loadTransactions();
@@ -266,20 +297,29 @@ export const Requests: React.FC = () => {
   const handleConfirmVoid = async () => {
     if (!voidModalData?.item?.id) return;
     const reason = voidReason.trim();
-    if (!reason) {
-      toast.error('Vui lòng nhập lý do hủy phiếu');
+    if (reason.length < 5) {
+      toast.error('Vui lòng nhập lý do hủy phiếu (tối thiểu 5 ký tự)');
       return;
     }
 
     setIsVoiding(true);
     try {
-      await voidTransactionItem(voidModalData.item.id, reason);
+      const result = await voidTransactionItem(voidModalData.item.id, reason);
       toast.success('Hủy phiếu thành công. Trạng thái tài sản đã được hoàn trả về kho.');
+      
+      // Nếu kết quả RPC có asset_restored = false thì hiện thêm toast cảnh báo "GCN không bị thay đổi vì đã có phiếu mới hơn"
+      if (result && result.asset_restored === false) {
+        toast('GCN không bị thay đổi vì đã có phiếu mới hơn', {
+          icon: '⚠️',
+          duration: 5000,
+        });
+      }
+
       setVoidModalData(null);
       setVoidReason('');
       await loadTransactions();
     } catch (err: any) {
-      toast.error(err.message || 'Lỗi khi hủy phiếu');
+      toast.error(err?.message || 'Lỗi khi hủy phiếu');
     } finally {
       setIsVoiding(false);
     }
@@ -554,15 +594,6 @@ export const Requests: React.FC = () => {
           <LoadingFallback
             message="Đang tải danh sách phiếu yêu cầu..."
             onRetry={() => loadTransactions()}
-            onForceLocal={() => {
-              const data = mockStore.getTransactions();
-              setTransactions(data || []);
-              if (data && data.length > 0) {
-                setExpanded(new Set(data.slice(0, 3).map((t: any) => t.id)));
-              }
-              setLoading(false);
-              toast.success('Đã tải dữ liệu phiếu cục bộ');
-            }}
           />
         ) : loadError ? (
           <div className="p-8 text-center bg-red-50/50 dark:bg-red-950/30">
@@ -705,13 +736,13 @@ export const Requests: React.FC = () => {
                                     </div>
                                   </td>
                                   <td className="py-2.5 pr-4">
-                                    <div className="text-gray-800 dark:text-slate-200 font-medium">{effectiveAsset?.projects?.name || 'VMT'}</div>
+                                    <div className="text-gray-800 dark:text-slate-200 font-medium">{effectiveAsset?.projects?.name || '---'}</div>
                                     <div className="text-gray-500 dark:text-slate-400 text-[11px]">{effectiveAsset?.legal_lot_code || '-'}</div>
                                   </td>
                                   <td className="py-2.5 pr-4">
                                     <span className="inline-flex items-center gap-1 text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[11px]">
                                       <Store className="w-3 h-3 text-gray-500 dark:text-slate-400" />
-                                      {warehouseObj?.name || 'Kho Trung tâm'}
+                                      {warehouseObj?.name || 'Chưa gán kho'}
                                     </span>
                                   </td>
                                   <td className="py-2.5 pr-4">
@@ -741,7 +772,7 @@ export const Requests: React.FC = () => {
                                       )}
 
                                       {/* Void Button */}
-                                      {canVoidTicket && (item.status === 'approved' || item.status === 'checked_out') && (
+                                      {canVoidItem(item) && ['approved', 'confirmed', 'checked_out', 'completed'].includes(item.status) && (
                                         <button
                                           type="button"
                                           onClick={() => {
@@ -938,7 +969,7 @@ export const Requests: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-slate-800">
               <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
                 <AlertTriangle className="w-5 h-5" />
-                <h3 className="text-base font-bold">Hủy phiếu xuất mượn</h3>
+                <h3 className="text-base font-bold">Hủy phiếu giao dịch</h3>
               </div>
               <button
                 type="button"
@@ -983,16 +1014,21 @@ export const Requests: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
-                Lý do hủy phiếu <span className="text-rose-500">*</span>
+                Lý do hủy phiếu (bắt buộc, tối thiểu 5 ký tự): <span className="text-rose-500">*</span>
               </label>
               <textarea
                 rows={3}
                 value={voidReason}
                 onChange={(e) => setVoidReason(e.target.value)}
-                placeholder="Nhập lý do hủy phiếu xuất mượn (bắt buộc)..."
+                placeholder="Nhập lý do hủy phiếu (tối thiểu 5 ký tự)..."
                 className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500 dark:bg-slate-800 dark:text-slate-100"
                 disabled={isVoiding}
               />
+              {voidReason.trim().length > 0 && voidReason.trim().length < 5 && (
+                <p className="text-[11px] text-red-500 mt-1">
+                  Lý do hủy phải có tối thiểu 5 ký tự (hiện có {voidReason.trim().length} ký tự).
+                </p>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-slate-800">
@@ -1010,7 +1046,7 @@ export const Requests: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmVoid}
-                disabled={!voidReason.trim() || isVoiding}
+                disabled={voidReason.trim().length < 5 || isVoiding}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm cursor-pointer transition-colors"
               >
                 {isVoiding ? (

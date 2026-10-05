@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFA
 import { ReportSnapshot, DenormalizedReportAsset, Asset, ProjectReportRow } from '../types';
 import { mockStore } from '../lib/mockStore';
 import { formatPlotCode } from '../lib/assetIdentifier';
+import { fetchReportStatistics, ReportStatistics } from './reports';
 
 /**
  * Hàm biến đổi denormalize: Chuyển đổi toàn bộ danh sách tài sản thành dữ liệu tĩnh
@@ -72,7 +73,7 @@ export function denormalizeAssetsForSnapshot(
       project_name: projectName,
       business_project_name: businessProjectName,
       area_name: asset.projects?.areas?.name || 'Toàn vùng',
-      region_name: asset.projects?.areas?.regions?.name || 'Vùng Miền Trung',
+      region_name: asset.projects?.areas?.regions?.name || 'Chưa phân vùng',
       warehouse_name: warehouseName,
       department_name: departmentName,
       current_holder_dept: currentHolderDept,
@@ -124,17 +125,11 @@ export async function fetchReportSnapshots(): Promise<ReportSnapshot[]> {
     );
 
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng report_snapshots chưa có trong Supabase, dùng mockStore:', error.message);
-        return mockStore.getReportSnapshots();
-      }
-      console.warn('Lỗi khi tải danh sách snapshot báo cáo từ Supabase, dùng mockStore:', error);
-      return mockStore.getReportSnapshots();
+      throw new Error(`Lỗi khi tải danh sách snapshot báo cáo từ Supabase: ${error.message}`);
     }
     return (data as ReportSnapshot[]) || [];
   } catch (error: any) {
-    console.warn('Lỗi trong hàm fetchReportSnapshots, fallback sang mockStore:', error);
-    return mockStore.getReportSnapshots();
+    throw error instanceof Error ? error : new Error('Không thể tải danh sách snapshot báo cáo: ' + String(error));
   }
 }
 
@@ -153,8 +148,6 @@ export async function createReportSnapshot(params: {
   submitted_by_name?: string | null;
   period_status?: 'open' | 'locked';
   notes?: string;
-  assets: Asset[];
-  project_report_data?: ProjectReportRow[];
 }): Promise<ReportSnapshot> {
   const {
     report_code,
@@ -168,21 +161,36 @@ export async function createReportSnapshot(params: {
     submitted_by_name = 'Chuyên viên BTC',
     period_status = 'open',
     notes = '',
-    assets,
-    project_report_data = [],
   } = params;
 
-  // 1. Thực hiện Denormalization toàn bộ danh sách tài sản thành chuỗi văn bản tĩnh
-  const denormalizedData = denormalizeAssetsForSnapshot(assets, warehouse_name || undefined, department_name || undefined);
+  // Luôn gọi fetchReportStatistics (RPC get_report_statistics) bên trong hàm này với đúng vùng và kho của bản chốt
+  const stats = await fetchReportStatistics({
+    selectedRegion: region,
+    warehouseId: warehouse_id || undefined,
+  });
 
-  // 2. Tính toán tổng hợp số liệu
-  const total_assets = denormalizedData.length;
-  const total_area = denormalizedData.reduce((sum, item) => sum + (item.area || 0), 0);
-  const total_valuation = denormalizedData.reduce((sum, item) => sum + (item.mortgage_valuation || 0), 0);
-  const total_collateral_value = denormalizedData.reduce((sum, item) => sum + (item.collateral_value || 0), 0);
+  const total_assets = Number(stats.total_count) || 0;
+  const total_area = Number(stats.total_area) || 0;
+  const total_valuation = Number(stats.total_mortgage_valuation) || 0;
+  const total_collateral_value = (stats.by_mortgage_bank || []).reduce(
+    (sum, b) => sum + (Number(b.total_collateral_value) || 0),
+    0
+  );
 
   const isLocked = period_status === 'locked';
   const now = new Date().toISOString();
+
+  // (c) CHỈ lưu số liệu tổng hợp (từ get_report_statistics), không lưu toàn bộ danh sách GCN vào report_data
+  const summaryReportData: any[] = [
+    {
+      type: 'summary_statistics',
+      report_statistics: stats,
+      by_warehouse: stats.by_warehouse || [],
+      by_project: stats.by_project || [],
+      by_mortgage_bank: stats.by_mortgage_bank || [],
+      created_at: now,
+    }
+  ];
 
   const newSnapshotPayload: Omit<ReportSnapshot, 'id' | 'created_at' | 'updated_at'> = {
     report_code,
@@ -203,13 +211,18 @@ export async function createReportSnapshot(params: {
     total_area,
     total_valuation,
     total_collateral_value,
-    report_data: denormalizedData,
-    project_report_data,
+    report_data: summaryReportData as any,
+    project_report_data: (stats.by_project || []) as any,
     summary_stats: {
-      mortgaged_count: denormalizedData.filter(d => d.mortgage_status_label === 'Đã thế chấp').length,
-      unmortgaged_count: denormalizedData.filter(d => d.mortgage_status_label === 'Chưa thế chấp').length,
-      borrowed_count: denormalizedData.filter(d => d.custody_status_label.includes('Đang xuất mượn')).length,
-      project_rows_count: project_report_data.length,
+      total_count: total_assets,
+      total_area,
+      mortgaged_count: stats.mortgaged_count || 0,
+      total_mortgage_valuation: total_valuation,
+      in_stock_count: stats.in_stock_count || 0,
+      project_rows_count: (stats.by_project || []).length,
+      by_warehouse: stats.by_warehouse || [],
+      by_project: stats.by_project || [],
+      by_mortgage_bank: stats.by_mortgage_bank || [],
     },
     notes,
   };
@@ -232,10 +245,6 @@ export async function createReportSnapshot(params: {
       console.error('Lỗi khi tạo snapshot báo cáo trên Supabase:', error);
       throw new Error(`Không thể lưu snapshot báo cáo: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
-
-    try {
-      mockStore.addReportSnapshot(data);
-    } catch {}
 
     return data as ReportSnapshot;
   } catch (error: any) {
@@ -278,9 +287,6 @@ export async function reopenReportingPeriod(
     }
 
     if (data && data.success) {
-      try {
-        mockStore.reopenReportingPeriod(snapshotId, reason.trim(), user?.id, user?.full_name || user?.email);
-      } catch {}
       return {
         success: true,
         message: data.message || 'Mở khóa kỳ báo cáo thành công',
@@ -324,9 +330,6 @@ export async function lockReportingPeriod(
     }
 
     if (data?.success) {
-      try {
-        mockStore.lockReportingPeriod(snapshotId, notes, user?.id, user?.full_name || user?.email);
-      } catch {}
       return { success: true, message: data.message };
     }
 
@@ -368,10 +371,6 @@ export async function updateReportSnapshot(
       throw new Error(`Không thể cập nhật snapshot: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
 
-    try {
-      mockStore.updateReportSnapshot(snapshotId, updates);
-    } catch {}
-
     return data as ReportSnapshot;
   } catch (error: any) {
     console.error('Lỗi trong hàm updateReportSnapshot:', error);
@@ -404,10 +403,6 @@ export async function deleteReportSnapshot(snapshotId: string): Promise<boolean>
       console.error('Lỗi khi xóa snapshot báo cáo trên Supabase:', error);
       throw new Error(`Không thể xóa snapshot báo cáo: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
-
-    try {
-      mockStore.deleteReportSnapshot(snapshotId);
-    } catch {}
 
     return true;
   } catch (error: any) {

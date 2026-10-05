@@ -41,6 +41,7 @@ export const Dashboard: React.FC = () => {
   const [summaryData, setSummaryData] = useState<DashboardSummaryData>({
     totalAssets: 0,
     totalArea: 0,
+    totalHighRiseArea: 0,
     activeProjectsCount: 0,
     pendingRequests: 0,
     overdueRequests: 0,
@@ -147,6 +148,7 @@ export const Dashboard: React.FC = () => {
       setSummaryData({
         totalAssets: assetStats.total,
         totalArea: assetStats.totalArea || 0,
+        totalHighRiseArea: assetStats.totalHighRiseArea || 0,
         activeProjectsCount: assetStats.activeProjectsCount || 0,
         pendingRequests: pendingTotal,
         overdueRequests: overdueCount,

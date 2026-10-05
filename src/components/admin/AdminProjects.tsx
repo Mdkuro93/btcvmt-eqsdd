@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Project, Area, InvestorEntity } from '../../types';
 import { fetchProjects, createProject, updateProject, deleteProject, fetchAreas } from '../../api/assets';
 import { fetchInvestorEntities } from '../../api/investorEntities';
-import { mockStore } from '../../lib/mockStore';
 import { FolderGit2, Plus, Edit2, Trash2, Search, X, LandPlot } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../ConfirmModal';
@@ -39,16 +38,16 @@ export const AdminProjects: React.FC = () => {
     setLoading(true);
     try {
       const [p, a, e] = await Promise.all([
-        fetchProjects().catch(() => mockStore.getProjects()),
-        fetchAreas().catch(() => mockStore.getAreas()),
-        fetchInvestorEntities().catch(() => mockStore.getInvestorEntities()),
+        fetchProjects(),
+        fetchAreas(),
+        fetchInvestorEntities(),
       ]);
       setProjects(p || []);
       setAreas(a || []);
       setEntities(e || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi tải dữ liệu dự án BĐS');
+      toast.error('Lỗi tải dữ liệu dự án BĐS: ' + (err.message || 'Lỗi CSDL'));
     } finally {
       setLoading(false);
     }
@@ -130,12 +129,6 @@ export const AdminProjects: React.FC = () => {
       <LoadingFallback
         message="Đang tải danh sách dự án bất động sản..."
         onRetry={loadData}
-        onForceLocal={() => {
-          setProjects(mockStore.getProjects());
-          setAreas(mockStore.getAreas());
-          setEntities(mockStore.getInvestorEntities());
-          setLoading(false);
-        }}
       />
     );
   }

@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, Save, AlertTriangle, Building2, MapPin, ShieldCheck, FileText, CheckCircle2, ArrowLeftRight } from 'lucide-react';
 import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { updateAsset, fetchAssets } from '../api/assets';
+import { updateAsset, checkAssetDuplicateServer } from '../api/assets';
 import { fetchInvestorEntities } from '../api/investorEntities';
 import { logActivity } from '../api/activityLogs';
-import { COLLATERAL_TYPES, PROPERTY_TYPES, checkAssetDuplicate, resolveRegionCode } from '../lib/assetIdentifier';
+import { COLLATERAL_TYPES, resolveRegionCode } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { AssetTransferModal } from './AssetTransferModal';
 import { canTransferAsset } from '../lib/permissions';
+import { validateScanLink } from '../lib/scanLink';
+import { HIGH_RISE_ASSET_TYPES, LOW_RISE_ASSET_TYPES } from '../constants/assetTypes';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -31,7 +33,6 @@ export const EditAssetModal: React.FC<Props> = ({
 }) => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [allAssets, setAllAssets] = useState<Asset[]>([]);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
   // Form State
@@ -75,13 +76,14 @@ export const EditAssetModal: React.FC<Props> = ({
   const [mortgageReleaseDate, setMortgageReleaseDate] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Duplicate error state
+  // Duplicate error & confirmation state
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [isDuplicate, setIsDuplicate] = useState(false);
+  const [duplicateAckConfirmed, setDuplicateAckConfirmed] = useState(false);
+  const [duplicateAckReason, setDuplicateAckReason] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      // Load all assets to perform live duplicate checks
-      fetchAssets({}, 1, 5000).then(res => setAllAssets(res.data)).catch(() => {});
       fetchInvestorEntities().then(setInvestorEntities).catch(() => {});
     }
   }, [isOpen]);
@@ -112,7 +114,7 @@ export const EditAssetModal: React.FC<Props> = ({
 
       setMapSheetNo(asset.map_sheet_no || '');
       setLandLotNo(asset.land_lot_no || '');
-            setUsagePurpose(asset.usage_purpose || 'Đất ở tại đô thị (ODT)');
+      setUsagePurpose(asset.usage_purpose || 'Đất ở tại đô thị (ODT)');
       setAssetType(asset.asset_type || 'Đất nền');
       setRegistryNo(asset.registry_no || '');
       setRegistryDate(asset.registry_date || '');
@@ -125,39 +127,55 @@ export const EditAssetModal: React.FC<Props> = ({
       setIsMortgaged(isMort);
       setMortgageBank(asset.mortgage_bank || '');
       setMortgageUnit(asset.mortgage_unit || '');
-                        setMortgageValuation(asset.mortgage_valuation ? String(asset.mortgage_valuation) : '');
+      setMortgageValuation(asset.mortgage_valuation ? String(asset.mortgage_valuation) : '');
       setCollateralRatio(asset.collateral_ratio ? String(asset.collateral_ratio) : '');
       setCollateralValue(asset.collateral_value ? String(asset.collateral_value) : '');
       setMortgageReleaseDate(asset.mortgage_expected_release_date || '');
       setNotes(asset.notes || '');
 
+      setDuplicateAckReason(asset.duplicate_ack_reason || '');
+      setDuplicateAckConfirmed(Boolean(asset.duplicate_ack_reason));
+      setIsDuplicate(false);
       setDuplicateWarning(null);
     }
   }, [asset]);
 
-  // Live duplicate warning check
+  // Live duplicate warning check (debounce 500ms, loại trừ chính GCN đang sửa qua excludeAssetId)
   useEffect(() => {
     if (!asset || !isOpen) return;
 
-    const dupResult = checkAssetDuplicate(
-      {
-        certificate_no: certificateNo,
-        project_id: projectId || null,
-        legal_lot_code: legalLotCode || null,
-        map_sheet_no: mapSheetNo || null,
-        land_lot_no: landLotNo || null,
-      },
-      allAssets,
-      asset.id,
-      projects.find(p => p.id === projectId)?.name
-    );
-
-    if (dupResult.isDuplicate) {
-      setDuplicateWarning(dupResult.reason || 'Phát hiện dữ liệu trùng lặp trong dự án!');
-    } else {
+    if (!certificateNo && !legalLotCode && (!mapSheetNo || !landLotNo)) {
       setDuplicateWarning(null);
+      setIsDuplicate(false);
+      return;
     }
-  }, [certificateNo, projectId, legalLotCode, mapSheetNo, landLotNo, allAssets, asset, isOpen]);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await checkAssetDuplicateServer({
+          certificateNo,
+          projectId: projectId || null,
+          legalLotCode: legalLotCode || null,
+          mapSheetNo: mapSheetNo || null,
+          landLotNo: landLotNo || null,
+          excludeAssetId: asset.id,
+        });
+        if (res.is_duplicate) {
+          setIsDuplicate(true);
+          setDuplicateWarning(res.reason || 'Phát hiện dữ liệu trùng lặp trong dự án!');
+        } else {
+          setIsDuplicate(false);
+          setDuplicateWarning(null);
+          setDuplicateAckConfirmed(false);
+          setDuplicateAckReason('');
+        }
+      } catch (err) {
+        console.error('Lỗi khi kiểm tra trùng GCN:', err);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [certificateNo, projectId, legalLotCode, mapSheetNo, landLotNo, asset?.id, isOpen]);
 
   const handleValuationChange = (val: string) => {
     setMortgageValuation(val);
@@ -182,18 +200,46 @@ export const EditAssetModal: React.FC<Props> = ({
       return;
     }
 
-    if (duplicateWarning) {
-      toast.error(duplicateWarning);
+    if (isDuplicate && (!duplicateAckConfirmed || duplicateAckReason.trim().length < 10)) {
+      toast.error('Vui lòng xác nhận và nhập lý do tối thiểu 10 ký tự cho trường hợp trùng số GCN.');
+      return;
+    }
+
+    const scanValidation = validateScanLink(scanFileUrl);
+    if (!scanValidation.ok) {
+      toast.error(scanValidation.error || 'Link bản scan không hợp lệ.');
       return;
     }
 
     setLoading(true);
     try {
+      // 1. Kiểm tra trùng GCN trên server qua RPC check_asset_duplicate
+      const dupCheck = await checkAssetDuplicateServer({
+        certificateNo: certificateNo.trim(),
+        projectId: projectId || null,
+        legalLotCode: legalLotCode.trim() || null,
+        mapSheetNo: mapSheetNo.trim() || null,
+        landLotNo: landLotNo.trim() || null,
+        excludeAssetId: asset.id,
+      });
+
+      if (dupCheck.is_duplicate) {
+        setIsDuplicate(true);
+        setDuplicateWarning(dupCheck.reason || 'Phát hiện dữ liệu trùng lặp trong dự án!');
+        if (!duplicateAckConfirmed || duplicateAckReason.trim().length < 10) {
+          toast.error(dupCheck.reason || 'Số GCN đã tồn tại. Vui lòng xác nhận trường hợp trùng kèm lý do.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      const isDup = isDuplicate || dupCheck.is_duplicate;
       const updates: Partial<Asset> = {
         asset_code: assetCode || asset.asset_code,
         collateral_type: collateralType,
         certificate_no: certificateNo.trim(),
         certificate_group: certificateGroup,
+        ...(isDup ? { duplicate_ack_reason: duplicateAckReason.trim() } : {}),
         project_id: projectId || null,
         business_project_name: businessProjectName.trim() || null,
         legal_lot_code: legalLotCode.trim() || null,
@@ -211,7 +257,7 @@ export const EditAssetModal: React.FC<Props> = ({
         managing_unit: managingUnit.trim() || null,
         usage_term_type: usageTermType,
         usage_term_date: usageTermType === 'fixed_date' ? (usageTermDate || null) : null,
-        scan_file_url: scanFileUrl.trim() || null,
+        scan_file_url: scanValidation.url || null,
 
         mortgage_status: isMortgaged ? 'mortgaged' : 'none',
         mortgage_bank: isMortgaged ? mortgageBank.trim() : null,
@@ -283,13 +329,45 @@ export const EditAssetModal: React.FC<Props> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
-          {duplicateWarning && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2 text-red-800 text-xs animate-pulse">
-              <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">Cảnh báo trùng lặp: </span>
-                {duplicateWarning}
+          {isDuplicate && duplicateWarning && (
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+              <div className="flex items-start space-x-2 text-amber-900 text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-900">Cảnh báo trùng lặp: </span>
+                  <span className="text-amber-800">{duplicateWarning}</span>
+                </div>
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-amber-900 mb-1">
+                  Lý do xác nhận đây là trường hợp trùng thật (bắt buộc, tối thiểu 10 ký tự) <span className="text-red-500">*</span>:
+                </label>
+                <textarea
+                  rows={2}
+                  value={duplicateAckReason}
+                  onChange={(e) => setDuplicateAckReason(e.target.value)}
+                  placeholder="Ví dụ: Đã đối chiếu bản gốc, cơ quan cấp cấp trùng số cho 2 chủ sở hữu khác nhau..."
+                  className="w-full px-3 py-2 text-xs border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white placeholder:text-gray-400"
+                />
+                {duplicateAckReason.trim().length > 0 && duplicateAckReason.trim().length < 10 && (
+                  <p className="text-[11px] text-red-600 mt-1">
+                    Lý do xác nhận cần tối thiểu 10 ký tự (hiện có {duplicateAckReason.trim().length}/10).
+                  </p>
+                )}
+              </div>
+
+              <label className="flex items-start gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={duplicateAckConfirmed}
+                  onChange={(e) => setDuplicateAckConfirmed(e.target.checked)}
+                  className="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                />
+                <span className="text-xs font-medium text-amber-950">
+                  Tôi xác nhận đã đối chiếu bản gốc và đây là trường hợp trùng thật
+                </span>
+              </label>
             </div>
           )}
 
@@ -558,13 +636,18 @@ export const EditAssetModal: React.FC<Props> = ({
                 <select
                   value={assetType}
                   onChange={e => setAssetType(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 focus:ring-1 focus:ring-blue-500 font-medium"
                 >
-                  {PROPERTY_TYPES.map(pt => (
-                    <option key={pt} value={pt}>
-                      {pt}
-                    </option>
-                  ))}
+                  <optgroup label="🏢 Cao tầng / Căn hộ / Sàn 3D">
+                    {HIGH_RISE_ASSET_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🏡 Thấp tầng / Đất nền">
+                    {LOW_RISE_ASSET_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 
@@ -791,7 +874,7 @@ export const EditAssetModal: React.FC<Props> = ({
               </button>
               <button
                 type="submit"
-                disabled={loading || !!duplicateWarning}
+                disabled={loading || (isDuplicate && (!duplicateAckConfirmed || duplicateAckReason.trim().length < 10))}
                 className="px-5 py-2 text-xs font-bold text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg flex items-center space-x-1.5 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

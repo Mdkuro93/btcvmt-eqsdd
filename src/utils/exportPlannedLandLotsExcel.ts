@@ -31,6 +31,7 @@ export function exportPlannedLandLotsExcel(projectName: string, lots: PlannedLan
 
     return {
       'Mã Lô Pháp Lý': lot.legal_lot_code,
+      'Loại tài sản': lot.asset_type || 'Đất nền',
       'Trạng Thái': lot.status,
       'Số thửa': landLotNo + landLotNote,
       'Số tờ bản đồ': mapSheetNo + landLotNote,

@@ -803,6 +803,64 @@ async function createTransferReceiptStep(params: {
   transactionParent: any;
   performerId?: string;
 }) {
+  if (isSupabaseConfigured) {
+    let sourceWhName = 'kho xuất';
+    let targetWhName = 'kho đích';
+    let certNo = '';
+
+    const [whRes, assetRes] = await Promise.all([
+      supabase.from('warehouses').select('id, name').in('id', [params.sourceWarehouseId, params.targetWarehouseId]),
+      supabase.from('assets').select('id, certificate_no').eq('id', params.assetId).single()
+    ]);
+
+    if (whRes.data) {
+      const sWh = whRes.data.find(w => w.id === params.sourceWarehouseId);
+      const tWh = whRes.data.find(w => w.id === params.targetWarehouseId);
+      if (sWh) sourceWhName = sWh.name;
+      if (tWh) targetWhName = tWh.name;
+    }
+    if (assetRes.data) {
+      certNo = assetRes.data.certificate_no || '';
+    }
+
+    const step2ItemDetails = {
+      ...params.details,
+      sourceWarehouseId: params.sourceWarehouseId,
+      targetWarehouseId: params.targetWarehouseId,
+      transferVoucherCode: params.voucherCode,
+      isTransferReceipt: true,
+      reason: `[Bước 2 - Xác nhận nhập kho luân chuyển] Tiếp nhận GCN ${certNo} từ ${sourceWhName} sang ${targetWhName} (Theo ${params.voucherCode})`,
+    };
+
+    const notes = `[Bước 2 - Chờ xác nhận nhập kho luân chuyển] Bàn giao GCN ${certNo} từ ${sourceWhName} đến ${targetWhName} (PX: ${params.voucherCode})`;
+
+    const { data: txData, error: txErr } = await supabase.from('transactions').insert([{
+      type: 'checkin',
+      requester_id: params.transactionParent?.requester_id || '00000000-0000-0000-0000-000000000001',
+      details: { notes, isTransferReceipt: true },
+    }]).select().single();
+
+    if (txErr) {
+      throw new Error('Lỗi khi tạo phiếu bước 2 luân chuyển kho: ' + txErr.message);
+    }
+
+    if (txData) {
+      const { error: itemErr } = await supabase.from('transaction_items').insert([{
+        transaction_id: txData.id,
+        asset_id: params.assetId,
+        type: 'checkin',
+        reason: 'luân chuyển',
+        status: 'pending',
+        details: step2ItemDetails,
+      }]);
+      if (itemErr) {
+        throw new Error('Lỗi khi tạo chi tiết phiếu bước 2 luân chuyển: ' + itemErr.message);
+      }
+    }
+    return;
+  }
+
+  // Fallback chỉ khi hoàn toàn không cấu hình Supabase
   const warehouses = mockStore.getWarehouses();
   const sourceWh = warehouses.find(w => w.id === params.sourceWarehouseId);
   const targetWh = warehouses.find(w => w.id === params.targetWarehouseId);
@@ -842,29 +900,6 @@ async function createTransferReceiptStep(params: {
       },
     ],
   };
-
-  if (isSupabaseConfigured) {
-    try {
-      const { data: txData, error: txErr } = await supabase.from('transactions').insert([{
-        type: 'checkin',
-        requester_id: params.transactionParent?.requester_id || '00000000-0000-0000-0000-000000000001',
-        details: { notes: newTx.notes, isTransferReceipt: true },
-      }]).select().single();
-
-      if (!txErr && txData) {
-        await supabase.from('transaction_items').insert([{
-          transaction_id: txData.id,
-          asset_id: params.assetId,
-          type: 'checkin',
-          reason: 'luân chuyển',
-          status: 'pending',
-          details: step2ItemDetails,
-        }]);
-      }
-    } catch (e) {
-      console.warn('Supabase createTransferReceiptStep error, using mock:', e);
-    }
-  }
 
   const txs = mockStore.getTransactions();
   mockStore.saveTransactions([newTx, ...txs]);
@@ -1071,6 +1106,10 @@ export async function voidTransactionItem(itemId: string, reason: string): Promi
     if (error) {
       throw new Error('Lỗi khi hủy phiếu: ' + (error.message || 'Không thể hủy phiếu'));
     }
+
+    // Nhật ký 'Hủy phiếu' do RPC void_transaction_item ghi trực tiếp trong DB (migration 0058/0063).
+    // KHÔNG gọi logActivity ở đây để tránh ghi trùng.
+
     return data;
   } else {
     // Demo/offline mode
@@ -1094,6 +1133,16 @@ export async function voidTransactionItem(itemId: string, reason: string): Promi
         a.borrow_purpose = null;
         a.current_holder_dept = null;
       }
+      try {
+        logActivity({
+          assetId: foundItem.asset_id,
+          actionType: 'Hủy phiếu',
+          documentNo: foundItem.voucher_code || 'Chưa có số',
+          description: `HỦY PHIẾU ${foundItem.voucher_code || ''} - Lý do: ${cleanReason}`,
+          warehouseId: a?.warehouse_id,
+          notes: cleanReason,
+        });
+      } catch {}
     }
     return { success: true };
   }

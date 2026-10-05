@@ -29,21 +29,17 @@ export const VoucherPrintModal: React.FC<Props> = ({
 
   // Helper to extract legal owner of the land asset
   const getAssetOwner = (ast: any, itm: any): string => {
-    const astOwnerName = ast?.current_owner_entity?.name || ast?.investor_entities?.name;
-    if (astOwnerName && typeof astOwnerName === 'string' && !astOwnerName.toLowerCase().includes('ban nguồn vốn')) {
+    const astOwnerName =
+      ast?.current_owner_entity?.name ||
+      ast?.default_owner_entity?.name ||
+      ast?.investor_entities?.name;
+    if (astOwnerName && typeof astOwnerName === 'string') {
       return astOwnerName;
     }
-    if (itm?.details?.owner_name && typeof itm.details.owner_name === 'string' && !itm.details.owner_name.toLowerCase().includes('ban nguồn vốn')) {
+    if (itm?.details?.owner_name && typeof itm.details.owner_name === 'string') {
       return itm.details.owner_name;
     }
-    // Check project company / owner
-    if (ast?.projects?.name) {
-      if (ast.projects.name.includes('Heritage')) return 'Công ty CP VMT Heritage Miền Trung';
-      if (ast.projects.name.includes('Grand Marina')) return 'Công ty TNHH PT Đô Thị VMT Đồng Nai';
-      if (ast.projects.name.includes('Spana')) return 'Công ty CP Đầu tư BĐS VMT Sài Gòn';
-      if (ast.projects.name.includes('Sunset')) return 'Công ty CP Đầu tư Du lịch Sunset Horizon';
-    }
-    return astOwnerName || 'Công ty Cổ phần Tập đoàn VMT';
+    return '-';
   };
 
   // Helper to extract Mã Lô Pháp Lý (gộp Phân khu + Số lô cũ)
@@ -101,9 +97,9 @@ export const VoucherPrintModal: React.FC<Props> = ({
   const defaultDateStr = item.decided_at || transaction?.created_at || new Date().toISOString();
   const createdDate = new Date(defaultDateStr);
 
-  const defaultReceiverName = item.details?.receiverName || item.details?.department || transaction?.created_by?.full_name || 'Trần Thị Như Anh';
-  const defaultReceiverDept = item.details?.department || (transaction?.created_by?.email?.includes('ptda') ? 'Ban PTDA' : item.details?.department || 'Ban Phát triển Dự án (PTDA)');
-  const defaultReceiverAddress = item.details?.targetWarehouseName || warehouse?.name || 'Novotel';
+  const defaultReceiverName = item.details?.receiverName || item.details?.department || transaction?.created_by?.full_name || '';
+  const defaultReceiverDept = item.details?.department || (transaction?.created_by?.email?.includes('ptda') ? 'Ban PTDA' : item.details?.department || '');
+  const defaultReceiverAddress = item.details?.targetWarehouseName || warehouse?.name || '';
 
   // Build specific, clear reason for V/v
   const buildSpecificReason = (): string => {
@@ -133,9 +129,9 @@ export const VoucherPrintModal: React.FC<Props> = ({
 
   const defaultReason = buildSpecificReason();
 
-  const defaultSenderName = item.decided_by?.full_name || transaction?.created_by?.full_name || 'Nguyễn Quốc Hùng';
-  const defaultSenderDept = 'Ban Tài chính (BTC VMT)';
-  const defaultSenderAddress = warehouse?.name || 'Novotel';
+  const defaultSenderName = item.decided_by?.full_name || transaction?.created_by?.full_name || '';
+  const defaultSenderDept = item.decided_by?.department || 'Ban Tài chính (BTC VMT)';
+  const defaultSenderAddress = warehouse?.name || '';
 
   // Editable Form State for Print Form
   const [docHeader, setDocHeader] = useState({

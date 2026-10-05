@@ -1,4 +1,5 @@
 import { Asset } from '../types';
+import { isHighRiseAsset } from '../constants/assetTypes';
 
 export interface ReportFilters {
   selectedRegion: string;
@@ -14,6 +15,7 @@ export interface ReportSummary {
   stats: {
     totalCount: number;
     totalArea: number;
+    totalHighRiseArea?: number;
     mortgagedCount: number;
     totalMortgageValuation: number;
     inStockCount: number;
@@ -71,7 +73,8 @@ export function computeReportSummary(assets: Asset[], filters: ReportFilters): R
 
   const stats = {
     totalCount: filteredAssets.length,
-    totalArea: filteredAssets.reduce((sum, a) => sum + (a.area || 0), 0),
+    totalArea: filteredAssets.filter(a => !isHighRiseAsset(a.asset_type)).reduce((sum, a) => sum + (a.area || 0), 0),
+    totalHighRiseArea: filteredAssets.filter(a => isHighRiseAsset(a.asset_type)).reduce((sum, a) => sum + (a.area || 0), 0),
     mortgagedCount: filteredAssets.filter(a => a.mortgage_status === 'mortgaged').length,
     totalMortgageValuation: filteredAssets
       .filter(a => a.mortgage_status === 'mortgaged')

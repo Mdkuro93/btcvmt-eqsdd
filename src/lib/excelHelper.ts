@@ -339,9 +339,9 @@ export function exportInventoryAuditToExcel(
   const startedDateStr = audit.started_at ? format(new Date(audit.started_at), 'dd/MM/yyyy HH:mm') : '-';
   const completedDateStr = audit.completed_at ? format(new Date(audit.completed_at), 'dd/MM/yyyy HH:mm') : 'Chưa hoàn tất';
 
-  // 1. Data for Discrepancy Sheet (Chênh lệch: Thiếu hoặc Sai vị trí)
+  // 1. Data for Discrepancy Sheet (Chênh lệch: Thiếu, Sai vị trí hoặc Thừa)
   const discrepancyItems = items.filter(
-    (i: any) => i.finding_status === 'missing' || i.finding_status === 'misplaced'
+    (i: any) => i.finding_status === 'missing' || i.finding_status === 'misplaced' || i.finding_status === 'surplus'
   );
 
   const discrepancyRows = discrepancyItems.length > 0
@@ -350,6 +350,7 @@ export function exportInventoryAuditToExcel(
         let statusText = 'Khớp';
         if (i.finding_status === 'missing') statusText = '❌ KHÔNG TÌM THẤY (THIẾU)';
         if (i.finding_status === 'misplaced') statusText = '⚠️ SAI VỊ TRÍ';
+        if (i.finding_status === 'surplus') statusText = '➕ THỪA / SAI KHO';
 
         return {
           'STT': index + 1,

@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT } from '../lib/supabase';
 import { ProjectReportRow, ProjectReportStats } from '../types';
+import { isHighRiseAsset } from '../constants/assetTypes';
 
 export type { ProjectReportStats };
 
@@ -85,7 +86,7 @@ export async function fetchProjectReportData(
   // a) Query planned_land_lots (không join lồng nhau để tránh lỗi schema cache / relationship ambiguity)
   const lotsQuery = supabase
     .from('planned_land_lots')
-    .select('id, project_id, parent_master_asset_id, asset_code, legal_lot_code, land_lot_no, map_sheet_no, business_project_name, business_plot_code, planned_area, status, resulting_asset_id, notes')
+    .select('id, project_id, parent_master_asset_id, asset_code, asset_type, legal_lot_code, land_lot_no, map_sheet_no, business_project_name, business_plot_code, planned_area, status, resulting_asset_id, notes')
     .limit(10000);
 
   // b) Query assets (lấy các trường cần thiết phục vụ báo cáo)
@@ -411,7 +412,7 @@ export async function fetchProjectReportData(
       // phòng cho các lô cũ tạo trước khi có cột asset_code (cần chạy backfill, xem ghi chú cuối file).
       col_a_system_id: resAsset?.asset_code || lot.asset_code || (lot.legal_lot_code ? `LOT-${lot.legal_lot_code}` : `LOT-${lot.id ? lot.id.slice(0, 8) : '000'}`),
       col_c_project_name: effectiveProject?.name || lot.business_project_name || '-',
-      col_d_asset_type: resAsset?.asset_type || parentMaster?.asset_type || 'Đất nền',
+      col_d_asset_type: resAsset?.asset_type || lot.asset_type || parentMaster?.asset_type || 'Đất nền',
       col_e_cert_group: hasSmallCert ? 'Sổ nhỏ' : (inMasterUnsplit ? 'Sổ lớn' : 'Chưa cấp'),
       col_f_lot_code: lot.legal_lot_code || '-',
       col_g_area: plannedArea || effectiveArea,
@@ -560,10 +561,13 @@ export async function fetchProjectReportData(
     );
   }
 
-  // Tính toán số liệu thống kê (KPI Summary)
+  // Tính toán số liệu thống kê (KPI Summary) - Phân tách Diện tích Đất vs Diện tích Thông thủy
   const stats: ProjectReportStats = {
     totalLots: resultRows.length,
-    totalArea: resultRows.reduce((sum, r) => sum + (Number(r.col_g_area) || 0), 0),
+    // Chỉ tính tổng SUM(area) của các tài sản KHÔNG THUỘC HIGH_RISE_ASSET_TYPES (Bảo toàn số liệu diện tích đất chuẩn)
+    totalArea: resultRows.filter(r => !isHighRiseAsset(r.col_d_asset_type)).reduce((sum, r) => sum + (Number(r.col_g_area) || 0), 0),
+    // Tổng diện tích thông thủy (Căn hộ / Sàn 3D)
+    totalHighRiseArea: resultRows.filter(r => isHighRiseAsset(r.col_d_asset_type)).reduce((sum, r) => sum + (Number(r.col_g_area) || 0), 0),
     cdtCount: resultRows.reduce((sum, r) => sum + r.col_k_cdt_count, 0),
     cdtArea: resultRows.reduce((sum, r) => sum + r.col_l_cdt_area, 0),
     investorCount: resultRows.reduce((sum, r) => sum + r.col_n_investor_count, 0),

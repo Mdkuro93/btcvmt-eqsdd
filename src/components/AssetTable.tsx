@@ -3,6 +3,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Asset, Warehouse, Project, Profile } from '../types';
 import { StatusBadges } from './StatusBadges';
 import { formatPlotCode } from '../lib/assetIdentifier';
+import { getAreaSubLabel } from '../constants/assetTypes';
 import { BulkWarehouseModal } from './BulkWarehouseModal';
 import { BulkDeleteConfirmModal } from './BulkDeleteConfirmModal';
 import {
@@ -254,6 +255,15 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                           Phân lô
                         </span>
                       )}
+                      {asset.duplicate_ack_reason && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap cursor-help dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
+                          title={`Trùng số GCN (đã xác nhận)\nLý do: ${asset.duplicate_ack_reason}\nNgười xác nhận: ${asset.duplicate_acknowledger?.full_name || asset.duplicate_ack_by || 'Chưa rõ'}\nThời điểm: ${asset.duplicate_ack_at ? new Date(asset.duplicate_ack_at).toLocaleString('vi-VN') : '-'}`}
+                        >
+                          <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                          Trùng số GCN (đã xác nhận)
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -330,7 +340,12 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
                   {/* Diện tích */}
                   <td className={`${rowPadding} min-w-[100px] text-right font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap`}>
-                    {asset.area ? `${Number(asset.area).toLocaleString('vi-VN')} m²` : '-'}
+                    <div>{asset.area ? `${Number(asset.area).toLocaleString('vi-VN')} m²` : '-'}</div>
+                    {asset.area && asset.asset_type && (
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                        {getAreaSubLabel(asset.asset_type)}
+                      </div>
+                    )}
                   </td>
 
                   {/* Chủ Sở Hữu */}

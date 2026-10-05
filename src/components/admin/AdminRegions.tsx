@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Region, Area } from '../../types';
 import { fetchRegions, createRegion, updateRegion, deleteRegion, fetchAreas } from '../../api/assets';
-import { mockStore } from '../../lib/mockStore';
 import { Building2, Plus, Edit2, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../ConfirmModal';
@@ -24,14 +23,14 @@ export const AdminRegions: React.FC = () => {
     setLoading(true);
     try {
       const [r, a] = await Promise.all([
-        fetchRegions().catch(() => mockStore.getRegions()),
-        fetchAreas().catch(() => mockStore.getAreas()),
+        fetchRegions(),
+        fetchAreas(),
       ]);
       setRegions(r || []);
       setAreas(a || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi tải dữ liệu vùng hoạt động');
+      toast.error('Lỗi tải dữ liệu vùng hoạt động: ' + (err.message || 'Lỗi CSDL'));
     } finally {
       setLoading(false);
     }
@@ -90,11 +89,6 @@ export const AdminRegions: React.FC = () => {
       <LoadingFallback
         message="Đang tải danh sách vùng hoạt động..."
         onRetry={loadData}
-        onForceLocal={() => {
-          setRegions(mockStore.getRegions());
-          setAreas(mockStore.getAreas());
-          setLoading(false);
-        }}
       />
     );
   }

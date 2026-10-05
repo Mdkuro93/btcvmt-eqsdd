@@ -17,6 +17,14 @@ import {
 import { exportPlannedLandLotsExcel } from '../../utils/exportPlannedLandLotsExcel';
 import { ConfirmModal } from '../ConfirmModal';
 import { ImportPlannedLotsModal } from './ImportPlannedLotsModal';
+import {
+  HIGH_RISE_ASSET_TYPES,
+  LOW_RISE_ASSET_TYPES,
+  isHighRiseAsset,
+  isLowRiseAsset,
+  getAreaLabel,
+  getAreaSubLabel,
+} from '../../constants/assetTypes';
 
 interface Props {
   project: Project;
@@ -25,6 +33,7 @@ interface Props {
 
 const emptyForm: Omit<CreatePlannedLandLotInput, 'parent_master_asset_id'> = {
   legal_lot_code: '',
+  asset_type: 'Đất nền',
   land_lot_no: '',
   map_sheet_no: '',
   planned_area: 0,
@@ -119,6 +128,7 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
     setParentAssetId(lot.parent_master_asset_id || '');
     setForm({
       legal_lot_code: lot.legal_lot_code,
+      asset_type: lot.asset_type || 'Đất nền',
       land_lot_no: lot.land_lot_no || '',
       map_sheet_no: lot.map_sheet_no || '',
       planned_area: lot.planned_area,
@@ -412,15 +422,30 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                   </div>
                 ) : masterCandidates.map(master => {
                   const rows = lotsByParent.get(master.id) || [];
+                  const lowRiseRows = rows.filter(l => !isHighRiseAsset(l.asset_type));
+                  const highRiseRows = rows.filter(l => isHighRiseAsset(l.asset_type));
+                  const totalLowRiseArea = lowRiseRows.reduce((sum, l) => sum + (Number(l.planned_area) || 0), 0);
+                  const totalHighRiseArea = highRiseRows.reduce((sum, l) => sum + (Number(l.planned_area) || 0), 0);
+                  const remainingLandArea = master.area ? Math.max(0, master.area - totalLowRiseArea) : null;
+
                   return (
                     <div key={master.id} className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="p-3 bg-slate-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
                         <div className="text-sm">
                           <span className="text-gray-500">Sổ lớn gốc:</span>{' '}
                           <span className="font-mono font-semibold text-gray-900">{master.certificate_no}</span>
-                          {master.area ? <span className="text-xs text-gray-500 ml-2">({master.area} m²)</span> : null}
+                          {master.area ? (
+                            <span className="text-xs text-gray-600 ml-2 font-medium">
+                              (Tổng đất: {master.area} m² · Đã quy hoạch đất: {totalLowRiseArea.toFixed(1)} m² · Còn lại: <strong className="text-blue-700">{remainingLandArea?.toFixed(1)} m²</strong>)
+                            </span>
+                          ) : null}
+                          {highRiseRows.length > 0 && (
+                            <span className="text-xs text-purple-700 ml-2 font-medium bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                              🏢 {highRiseRows.length} căn cao tầng ({totalHighRiseArea.toFixed(1)} m² thông thủy, bảo toàn đất)
+                            </span>
+                          )}
                         </div>
-                        <span className="text-xs text-gray-400">{rows.length} lô</span>
+                        <span className="text-xs text-gray-400">{rows.length} lô quy hoạch</span>
                       </div>
 
                       {rows.length === 0 ? (
@@ -432,6 +457,15 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-mono font-semibold text-gray-900">{lot.legal_lot_code}</span>
+                                  {lot.asset_type && (
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                      isHighRiseAsset(lot.asset_type)
+                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                        : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                    }`}>
+                                      {lot.asset_type}
+                                    </span>
+                                  )}
                                   {lot.status === 'đã cấp GCN' ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
                                       <CheckCircle2 className="w-3 h-3" /> Đã cấp GCN
@@ -444,15 +478,17 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                                   )}
                                 </div>
                                 <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
-                                  <span>{lot.planned_area} m²</span>
+                                  <span>
+                                    {lot.planned_area} m² <strong className="font-normal text-gray-400">{getAreaSubLabel(lot.asset_type)}</strong>
+                                  </span>
                                   {lot.land_lot_no ? (
                                     <span>Thửa {lot.land_lot_no}</span>
-                                  ) : lot.status !== 'đã cấp GCN' && master.land_lot_no ? (
+                                  ) : lot.status !== 'đã cấp GCN' && master.land_lot_no && !isHighRiseAsset(lot.asset_type) ? (
                                     <span className="italic text-gray-400">Thửa {master.land_lot_no} (theo sổ lớn)</span>
                                   ) : null}
                                   {lot.map_sheet_no ? (
                                     <span>Tờ BĐ {lot.map_sheet_no}</span>
-                                  ) : lot.status !== 'đã cấp GCN' && master.map_sheet_no ? (
+                                  ) : lot.status !== 'đã cấp GCN' && master.map_sheet_no && !isHighRiseAsset(lot.asset_type) ? (
                                     <span className="italic text-gray-400">Tờ BĐ {master.map_sheet_no} (theo sổ lớn)</span>
                                   ) : null}
                                   {lot.business_plot_code && <span>KD: {lot.business_plot_code}</span>}
@@ -517,6 +553,40 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                   </select>
                 </div>
               )}
+
+              {/* LOẠI TÀI SẢN QUY HOẠCH */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Loại tài sản quy hoạch *</label>
+                <select
+                  value={form.asset_type || 'Đất nền'}
+                  onChange={e => setForm({ ...form, asset_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium text-gray-900"
+                  required
+                >
+                  <optgroup label="🏢 Cao tầng / Căn hộ / Sàn 3D">
+                    {HIGH_RISE_ASSET_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🏡 Thấp tầng / Đất nền">
+                    {LOW_RISE_ASSET_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* THÔNG BÁO HƯỚNG DẪN LOẠI HÌNH */}
+              {isHighRiseAsset(form.asset_type) ? (
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900 leading-relaxed">
+                  🏢 <strong>Quy hoạch Căn hộ / Sàn cao tầng 3D:</strong> Diện tích thông thủy không trừ lùi vào diện tích đất Sổ lớn gốc. Số thửa/Số tờ bản đồ không bắt buộc.
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 leading-relaxed">
+                  🏡 <strong>Quy hoạch Thấp tầng / Đất nền:</strong> Diện tích đất quy hoạch sẽ được tính trừ lùi vào diện tích đất của Sổ lớn gốc khi gắn kết.
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Lô Pháp Lý *</label>
@@ -527,39 +597,47 @@ export const ProjectPlannedLotsModal: React.FC<Props> = ({ project, onClose }) =
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Diện tích dự kiến (m²) *</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    {getAreaLabel(form.asset_type, true)} *
+                  </label>
                   <input
                     type="number" step="0.01" required value={form.planned_area || ''}
                     onChange={e => setForm({ ...form, planned_area: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-semibold"
                   />
                 </div>
                 <div className="col-span-2">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Số thửa</label>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Số thửa {!isHighRiseAsset(form.asset_type) && !selectedMaster && <span className="text-red-500">*</span>}
+                      </label>
                       <input
                         type="text"
-                        value={selectedMaster ? (selectedMaster.land_lot_no || '') : (form.land_lot_no || '')}
+                        value={isHighRiseAsset(form.asset_type) ? '' : (selectedMaster ? (selectedMaster.land_lot_no || '') : (form.land_lot_no || ''))}
                         onChange={e => setForm({ ...form, land_lot_no: e.target.value })}
-                        disabled={!!selectedMaster}
-                        placeholder={selectedMaster ? '' : 'Chưa có (giai đoạn pháp lý)'}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm ${selectedMaster ? 'bg-gray-100 text-gray-500' : ''}`}
+                        disabled={!!selectedMaster || isHighRiseAsset(form.asset_type)}
+                        placeholder={isHighRiseAsset(form.asset_type) ? 'Không áp dụng (Căn hộ/Sàn 3D)' : (selectedMaster ? '' : 'VD: 125')}
+                        required={!isHighRiseAsset(form.asset_type) && !selectedMaster}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm ${(selectedMaster || isHighRiseAsset(form.asset_type)) ? 'bg-gray-100 text-gray-500' : ''}`}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Số tờ bản đồ</label>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Số tờ bản đồ {!isHighRiseAsset(form.asset_type) && !selectedMaster && <span className="text-red-500">*</span>}
+                      </label>
                       <input
                         type="text"
-                        value={selectedMaster ? (selectedMaster.map_sheet_no || '') : (form.map_sheet_no || '')}
+                        value={isHighRiseAsset(form.asset_type) ? '' : (selectedMaster ? (selectedMaster.map_sheet_no || '') : (form.map_sheet_no || ''))}
                         onChange={e => setForm({ ...form, map_sheet_no: e.target.value })}
-                        disabled={!!selectedMaster}
-                        placeholder={selectedMaster ? '' : 'Chưa có (giai đoạn pháp lý)'}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm ${selectedMaster ? 'bg-gray-100 text-gray-500' : ''}`}
+                        disabled={!!selectedMaster || isHighRiseAsset(form.asset_type)}
+                        placeholder={isHighRiseAsset(form.asset_type) ? 'Không áp dụng (Căn hộ/Sàn 3D)' : (selectedMaster ? '' : 'VD: 45')}
+                        required={!isHighRiseAsset(form.asset_type) && !selectedMaster}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm ${(selectedMaster || isHighRiseAsset(form.asset_type)) ? 'bg-gray-100 text-gray-500' : ''}`}
                       />
                     </div>
                   </div>
-                  {selectedMaster && (
+                  {selectedMaster && !isHighRiseAsset(form.asset_type) && (
                     <p className="text-[11px] text-gray-400 mt-1">
                       Theo sổ lớn (chưa tách) — lô này sẽ có số thửa/tờ riêng sau khi được tách sổ.
                     </p>

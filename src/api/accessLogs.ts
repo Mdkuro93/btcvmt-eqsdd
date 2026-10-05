@@ -39,15 +39,12 @@ export async function logAccessEvent(payload: LogAccessEventPayload): Promise<an
       DEFAULT_WRITE_TIMEOUT
     );
     if (error) {
-      if (isSchemaMissingError(error)) {
-        return mockStore.addAccessLog(row);
-      }
-      console.warn('Lỗi ghi nhật ký truy cập vào Supabase:', error);
-      return mockStore.addAccessLog(row);
+      console.warn('Lỗi ghi nhật ký truy cập vào Supabase:', error.message);
+      throw new Error('Lỗi ghi nhật ký truy cập vào Supabase: ' + error.message);
     }
     return data;
-  } catch (err) {
-    return mockStore.addAccessLog(row);
+  } catch (err: any) {
+    throw err instanceof Error ? err : new Error('Không thể ghi nhật ký truy cập: ' + String(err));
   }
 }
 
@@ -81,16 +78,10 @@ export async function fetchAccessLogs(filters?: {
 
     const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng access_logs chưa có trong Supabase, dùng mockStore:', error.message);
-        return mockStore.getAccessLogs(filters) as AccessLog[];
-      }
-      console.warn('Lỗi khi tải nhật ký truy cập từ Supabase, dùng mockStore:', error);
-      return mockStore.getAccessLogs(filters) as AccessLog[];
+      throw new Error('Lỗi khi tải nhật ký truy cập từ Supabase: ' + error.message);
     }
     return (data || []) as AccessLog[];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchAccessLogs, fallback sang mockStore:', err);
-    return mockStore.getAccessLogs(filters) as AccessLog[];
+    throw err instanceof Error ? err : new Error('Không thể tải nhật ký truy cập: ' + String(err));
   }
 }

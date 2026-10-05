@@ -67,7 +67,7 @@ export const CreateAuditModal: React.FC<Props> = ({
     const checkStockCount = async () => {
       setLoadingCounts(true);
       try {
-        const res = await fetchAssets({ warehouse_id: selectedWarehouseId, custody_status: 'in_stock' });
+        const res = await fetchAssets({ warehouseId: selectedWarehouseId, custodyStatus: 'in_stock' });
         setStockCount(res.totalCount ?? (res.data ? res.data.length : 0));
       } catch (err) {
         console.warn('Error checking asset count:', err);

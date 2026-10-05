@@ -4,9 +4,11 @@ import { X, UploadCloud, Download, Loader2, AlertCircle, CheckCircle2, FileSprea
 import toast from 'react-hot-toast';
 import { Asset, Project, PlannedLandLotImportRow, PlannedLandLotImportResult } from '../../types';
 import { importPlannedLandLots } from '../../api/plannedLandLots';
+import { HIGH_RISE_ASSET_TYPES, LOW_RISE_ASSET_TYPES } from '../../constants/assetTypes';
 
 const TEMPLATE_HEADERS = [
   'Mã Lô Pháp Lý',
+  'Loại tài sản',
   'Số thửa',
   'Số tờ bản đồ',
   'Diện tích dự kiến',
@@ -24,9 +26,10 @@ interface Props {
   parentAsset?: Asset | null;
 }
 
-function toImportRow(raw: any): PlannedLandLotImportRow {
+function toImportRow(raw: any, defaultType: string = 'Đất nền'): PlannedLandLotImportRow {
   return {
     legal_lot_code: String(raw['Mã Lô Pháp Lý'] ?? '').trim(),
+    asset_type: raw['Loại tài sản'] ? String(raw['Loại tài sản']).trim() : defaultType,
     land_lot_no: raw['Số thửa'] != null ? String(raw['Số thửa']).trim() : undefined,
     map_sheet_no: raw['Số tờ bản đồ'] != null ? String(raw['Số tờ bản đồ']).trim() : undefined,
     planned_area: raw['Diện tích dự kiến'] ?? '',
@@ -38,6 +41,7 @@ function toImportRow(raw: any): PlannedLandLotImportRow {
 
 export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuccess, project, parentAsset }) => {
   const [rows, setRows] = useState<PlannedLandLotImportRow[]>([]);
+  const [defaultAssetType, setDefaultAssetType] = useState<string>('Đất nền');
   const [fileName, setFileName] = useState('');
   const [checking, setChecking] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -68,6 +72,7 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
     const ws = XLSX.utils.json_to_sheet([
       {
         'Mã Lô Pháp Lý': 'LK02-15',
+        'Loại tài sản': defaultAssetType,
         'Số thửa': parentAsset ? '' : '123',
         'Số tờ bản đồ': parentAsset ? '' : '5',
         'Diện tích dự kiến': 105.5,
@@ -99,7 +104,7 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
         toast.error('Chỉ hỗ trợ tối đa 1000 dòng mỗi lần nhập.');
         return;
       }
-      const parsed = jsonRows.map(toImportRow);
+      const parsed = jsonRows.map(r => toImportRow(r, defaultAssetType));
       setRows(parsed);
       setChecking(true);
       const result = await importPlannedLandLots(importTarget, parsed, true);
@@ -171,6 +176,29 @@ export const ImportPlannedLotsModal: React.FC<Props> = ({ isOpen, onClose, onSuc
               theo thông tin của sổ lớn.
             </div>
           )}
+
+          {/* Chọn Loại tài sản mặc định */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Loại tài sản mặc định (áp dụng khi dòng Excel để trống cột "Loại tài sản"):
+            </label>
+            <select
+              value={defaultAssetType}
+              onChange={e => setDefaultAssetType(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white font-medium text-gray-900"
+            >
+              <optgroup label="🏢 Cao tầng / Căn hộ / Sàn 3D">
+                {HIGH_RISE_ASSET_TYPES.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </optgroup>
+              <optgroup label="🏡 Thấp tầng / Đất nền">
+                {LOW_RISE_ASSET_TYPES.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
 
           <button
             type="button"

@@ -17,7 +17,8 @@ import {
   Loader2,
   Database,
   Building2,
-  Layers
+  Layers,
+  Warehouse as WarehouseIcon
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
@@ -32,12 +33,15 @@ import {
 import { fetchAuditLogs } from '../api/auditLogs';
 import { AuditLog } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { ReportStatistics, fetchReportStatistics } from '../api/reports';
 
 interface ReportSnapshotsManagerProps {
   currentAssets: Asset[];
   currentProjectRows?: ProjectReportRow[];
   currentRegion: string;
   currentWarehouseName?: string;
+  selectedWarehouseId?: string;
+  reportStats?: ReportStatistics;
   onRefreshParent?: () => void;
 }
 
@@ -46,6 +50,8 @@ export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
   currentProjectRows,
   currentRegion,
   currentWarehouseName,
+  selectedWarehouseId,
+  reportStats,
   onRefreshParent,
 }) => {
   const { profile } = useAuth();
@@ -196,31 +202,58 @@ export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
       return;
     }
 
-    if (currentAssets.length === 0) {
-      toast.error('Không có tài sản nào trong bộ lọc hiện tại để nộp báo cáo!');
+    const totalCount = reportStats?.total_count ?? currentAssets.length;
+    if (totalCount === 0) {
+      toast.error('Không có dữ liệu tài sản nào trong bộ lọc hiện tại để nộp báo cáo!');
       return;
     }
 
     setIsSubmittingCreate(true);
     try {
+      // (2) Lấy số liệu tính toán thực tế tại thời điểm chốt
+      const freshStats = await fetchReportStatistics({
+        selectedRegion: currentRegion,
+        warehouseId: selectedWarehouseId || undefined,
+      });
+
+      const currentCount = Number(reportStats?.total_count) || 0;
+      const freshCount = Number(freshStats.total_count) || 0;
+      const currentArea = Number(reportStats?.total_area) || 0;
+      const freshArea = Number(freshStats.total_area) || 0;
+
+      // Nếu số liệu đang hiển thị trên trang Báo cáo (reportStats) khác với số vừa tính khi chốt, hiện cảnh báo
+      const isCountDiff = reportStats !== undefined && currentCount !== freshCount;
+      const isAreaDiff = reportStats !== undefined && Math.abs(currentArea - freshArea) > 0.001;
+
+      if (isCountDiff || isAreaDiff) {
+        const confirmMsg = 
+          `CẢNH BÁO CHÊNH LỆCH SỐ LIỆU:\n` +
+          `- Số liệu đang hiển thị trên trang Báo cáo: ${currentCount.toLocaleString('vi-VN')} GCN, diện tích ${currentArea.toLocaleString('vi-VN')} m².\n` +
+          `- Số liệu thực tế trong hệ thống khi chốt: ${freshCount.toLocaleString('vi-VN')} GCN, diện tích ${freshArea.toLocaleString('vi-VN')} m².\n\n` +
+          `Dữ liệu kho có thể đã thay đổi. Bạn có đồng ý tiếp tục lưu bản chốt theo số liệu thực tế mới nhất (${freshCount} GCN) không?`;
+        if (!window.confirm(confirmMsg)) {
+          setIsSubmittingCreate(false);
+          return;
+        }
+      }
+
       const snapshot = await createReportSnapshot({
         report_code: newCode.trim(),
         report_period: newPeriod.trim(),
         title: newTitle.trim(),
         region: currentRegion,
+        warehouse_id: selectedWarehouseId || null,
         warehouse_name: currentWarehouseName || 'Kho Tổng Trung Tâm Tập Đoàn VMT',
         department_name: newDept.trim() || 'Ban Tài Chính VMT',
         submitted_by: profile?.id || null,
         submitted_by_name: profile?.full_name || profile?.email || 'Quản trị viên',
         period_status: newStatus,
         notes: newNotes.trim(),
-        assets: currentAssets,
-        project_report_data: currentProjectRows || [],
       });
 
       toast.success(
         newStatus === 'locked' 
-          ? 'Đã nộp và CHỐT KHÓA kỳ báo cáo thành công! Dữ liệu tĩnh đã được niêm phong.'
+          ? 'Đã nộp và CHỐT KHÓA kỳ báo cáo thành công! Số liệu tổng hợp đã được niêm phong.'
           : 'Đã lưu kỳ báo cáo ở trạng thái MỞ (Open).'
       );
 
@@ -261,108 +294,180 @@ export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
   // Export Frozen Snapshot to Excel
   const exportFrozenExcel = (snapshot: ReportSnapshot) => {
     try {
-      const wsData: any[][] = [];
-      wsData.push(['TẬP ĐOÀN SUN GROUP / TẬP ĐOÀN VMT', '', '', 'BAN TÀI CHÍNH TẬP ĐOÀN']);
-      wsData.push([snapshot.title.toUpperCase()]);
-      wsData.push([`Mã báo cáo: ${snapshot.report_code} | Kỳ báo cáo: ${snapshot.report_period} | Trạng thái: ${snapshot.period_status === 'locked' ? 'ĐÃ KHÓA (LOCKED)' : 'ĐANG MỞ (OPEN)'}`]);
-      wsData.push([`Ngày nộp: ${new Date(snapshot.submitted_at).toLocaleDateString('vi-VN')} | Đơn vị nộp: ${snapshot.department_name || 'Ban Tài Chính'} | Kho: ${snapshot.warehouse_name || 'Tất cả'}`]);
-      if (snapshot.locked_at) {
-        wsData.push([`Thời điểm khóa: ${new Date(snapshot.locked_at).toLocaleString('vi-VN')} bởi ${snapshot.locked_by_name || 'Admin'}`]);
-      }
-      wsData.push([]); // blank
+      const isLegacy = Array.isArray(snapshot.report_data) && 
+        snapshot.report_data.length > 0 && 
+        Boolean((snapshot.report_data[0] as any)?.certificate_no);
 
-      // Headers
-      wsData.push([
-        'STT',
-        'Mã Tài Sản',
-        'Số GCN',
-        'Dự Án (Tĩnh)',
-        'Dự Án KD (Tĩnh)',
-        'Vùng / Miền (Tĩnh)',
-        'Kho Lưu Trữ (Tĩnh)',
-        'Đơn Vị Quản Lý (Tĩnh)',
-        'Bộ Phận Đang Mượn (Tĩnh)',
-        'Loại Tài Sản (Tĩnh)',
-        'Loại Đất (Tĩnh)',
-        'Mục Đích Sử Dụng (Tĩnh)',
-        'Thời Hạn (Tĩnh)',
-        'Chủ Sở Hữu (Tĩnh)',
-        'Nhóm Sổ',
-        'Mã Lô Pháp Lý (Tĩnh)',
-        'Thửa Đất Số',
-        'Tờ Bản Đồ',
-        'Mã Lô Kinh Doanh',
-        'Diện Tích (m²)',
-        'Trạng Thái Thế Chấp',
-        'Ngân Hàng Thế Chấp (Tĩnh)',
-        'Đơn Vị Vay (Tĩnh)',
-        'Giá Trị Định Giá (VNĐ)',
-        'Tỷ Lệ Đảm Bảo (%)',
-        'Giá Trị Đảm Bảo (VNĐ)',
-        'Trạng Thái Lưu Kho',
-        'Tình Trạng Pháp Lý',
-        'Ghi Chú'
-      ]);
-
-      snapshot.report_data.forEach((item, index) => {
-        wsData.push([
-          index + 1,
-          item.asset_code,
-          item.certificate_no,
-          item.project_name,
-          item.business_project_name || '-',
-          item.region_name || '-',
-          item.warehouse_name,
-          item.department_name || '-',
-          item.current_holder_dept || '-',
-          item.asset_type_name,
-          item.land_use_type_name,
-          item.usage_purpose || '-',
-          item.usage_term_label || '-',
-          item.owner_name,
-          item.certificate_group_label || 'Sổ chính',
-          item.plot_code,
-          item.land_lot_no || '-',
-          item.map_sheet_no || '-',
-          item.business_plot_code || '-',
-          item.area || 0,
-          item.mortgage_status_label,
-          item.mortgage_bank_name || 'Không',
-          item.mortgage_unit_name || 'Không',
-          item.mortgage_valuation || 0,
-          item.collateral_ratio ? `${item.collateral_ratio}%` : '-',
-          item.collateral_value || 0,
-          item.custody_status_label,
-          item.lifecycle_status_label,
-          item.notes || ''
-        ]);
-      });
-
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Dữ Liệu Tĩnh Đã Chốt');
-      XLSX.writeFile(wb, `${snapshot.report_code}-${snapshot.report_period.replace(/[\/\s]/g, '-')}-Du-Lieu-Tinh.xlsx`);
-      toast.success('Xuất file Excel dữ liệu tĩnh thành công!');
+
+      if (isLegacy) {
+        const wsData: any[][] = [];
+        wsData.push(['TẬP ĐOÀN SUN GROUP / TẬP ĐOÀN VMT', '', '', 'BAN TÀI CHÍNH TẬP ĐOÀN']);
+        wsData.push([snapshot.title.toUpperCase()]);
+        wsData.push([`Mã báo cáo: ${snapshot.report_code} | Kỳ báo cáo: ${snapshot.report_period} | Trạng thái: ${snapshot.period_status === 'locked' ? 'ĐÃ KHÓA (LOCKED)' : 'ĐANG MỞ (OPEN)'}`]);
+        wsData.push([`Ngày nộp: ${new Date(snapshot.submitted_at).toLocaleDateString('vi-VN')} | Đơn vị nộp: ${snapshot.department_name || 'Ban Tài Chính'} | Kho: ${snapshot.warehouse_name || 'Tất cả'}`]);
+        if (snapshot.locked_at) {
+          wsData.push([`Thời điểm khóa: ${new Date(snapshot.locked_at).toLocaleString('vi-VN')} bởi ${snapshot.locked_by_name || 'Admin'}`]);
+        }
+        wsData.push([]); // blank
+
+        // Headers
+        wsData.push([
+          'STT',
+          'Mã Tài Sản',
+          'Số GCN',
+          'Dự Án (Tĩnh)',
+          'Dự Án KD (Tĩnh)',
+          'Vùng / Miền (Tĩnh)',
+          'Kho Lưu Trữ (Tĩnh)',
+          'Đơn Vị Quản Lý (Tĩnh)',
+          'Bộ Phận Đang Mượn (Tĩnh)',
+          'Loại Tài Sản (Tĩnh)',
+          'Loại Đất (Tĩnh)',
+          'Mục Đích Sử Dụng (Tĩnh)',
+          'Thời Hạn (Tĩnh)',
+          'Chủ Sở Hữu (Tĩnh)',
+          'Nhóm Sổ',
+          'Mã Lô Pháp Lý (Tĩnh)',
+          'Thửa Đất Số',
+          'Tờ Bản Đồ',
+          'Mã Lô Kinh Doanh',
+          'Diện Tích (m²)',
+          'Trạng Thái Thế Chấp',
+          'Ngân Hàng Thế Chấp (Tĩnh)',
+          'Đơn Vị Vay (Tĩnh)',
+          'Giá Trị Định Giá (VNĐ)',
+          'Tỷ Lệ Đảm Bảo (%)',
+          'Giá Trị Đảm Bảo (VNĐ)',
+          'Trạng Thái Lưu Kho',
+          'Tình Trạng Pháp Lý',
+          'Ghi Chú'
+        ]);
+
+        snapshot.report_data.forEach((item, index) => {
+          wsData.push([
+            index + 1,
+            item.asset_code,
+            item.certificate_no,
+            item.project_name,
+            item.business_project_name || '-',
+            item.region_name || '-',
+            item.warehouse_name,
+            item.department_name || '-',
+            item.current_holder_dept || '-',
+            item.asset_type_name,
+            item.land_use_type_name,
+            item.usage_purpose || '-',
+            item.usage_term_label || '-',
+            item.owner_name,
+            item.certificate_group_label || 'Sổ chính',
+            item.plot_code,
+            item.land_lot_no || '-',
+            item.map_sheet_no || '-',
+            item.business_plot_code || '-',
+            item.area || 0,
+            item.mortgage_status_label,
+            item.mortgage_bank_name || 'Không',
+            item.mortgage_unit_name || 'Không',
+            item.mortgage_valuation || 0,
+            item.collateral_ratio ? `${item.collateral_ratio}%` : '-',
+            item.collateral_value || 0,
+            item.custody_status_label,
+            item.lifecycle_status_label,
+            item.notes || ''
+          ]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Dữ Liệu Tĩnh Đã Chốt');
+      } else {
+        // Xuất số liệu tổng hợp từ get_report_statistics
+        const stats = (snapshot.summary_stats as any) || (snapshot.report_data?.[0] as any)?.report_statistics || {};
+        const wsData: any[][] = [];
+        wsData.push(['TẬP ĐOÀN SUN GROUP / TẬP ĐOÀN VMT', '', '', 'BAN TÀI CHÍNH TẬP ĐOÀN']);
+        wsData.push([`BÁO CÁO TỔNG HỢP SỐ LIỆU ĐÃ CHỐT — ${snapshot.title.toUpperCase()}`]);
+        wsData.push([`Mã báo cáo: ${snapshot.report_code} | Kỳ báo cáo: ${snapshot.report_period} | Trạng thái: ${snapshot.period_status === 'locked' ? 'ĐÃ KHÓA (LOCKED)' : 'ĐANG MỞ (OPEN)'}`]);
+        wsData.push([`Vùng: ${snapshot.region || 'Tất cả vùng'} | Kho: ${snapshot.warehouse_name || 'Tất cả'} | Người nộp: ${snapshot.submitted_by_name || '-'}`]);
+        if (snapshot.locked_at) {
+          wsData.push([`Thời điểm khóa: ${new Date(snapshot.locked_at).toLocaleString('vi-VN')} bởi ${snapshot.locked_by_name || 'Admin'}`]);
+        }
+        wsData.push([]);
+
+        // 1. Chỉ tiêu toàn kỳ
+        wsData.push(['1. TỔNG HỢP CHỈ TIÊU TOÀN KỲ']);
+        wsData.push(['Chỉ tiêu', 'Giá trị']);
+        wsData.push(['Tổng số GCN / Tài sản', snapshot.total_assets]);
+        wsData.push(['Tổng diện tích (m²)', snapshot.total_area]);
+        wsData.push(['Tổng định giá thế chấp (VNĐ)', snapshot.total_valuation]);
+        wsData.push(['Tổng giá trị bảo đảm (VNĐ)', snapshot.total_collateral_value]);
+        wsData.push(['Số GCN đã thế chấp', stats.mortgaged_count || 0]);
+        wsData.push(['Số GCN tồn kho an toàn', stats.in_stock_count || 0]);
+        wsData.push([]);
+
+        // 2. Thống kê theo kho
+        const byWh = stats.by_warehouse || [];
+        if (byWh.length > 0) {
+          wsData.push(['2. THỐNG KÊ THEO KHO LƯU TRỮ']);
+          wsData.push(['STT', 'Kho Lưu Trữ', 'Tổng Số GCN', 'Tổng Diện Tích (m²)', 'Số GCN Thế Chấp', 'Tổng Định Giá (VNĐ)', 'Tồn Kho']);
+          byWh.forEach((w: any, i: number) => {
+            wsData.push([i + 1, w.warehouse_name, w.total_count, w.total_area, w.mortgaged_count, w.total_mortgage_valuation, w.in_stock_count]);
+          });
+          wsData.push([]);
+        }
+
+        // 3. Thống kê theo dự án
+        const byProj = stats.by_project || [];
+        if (byProj.length > 0) {
+          wsData.push(['3. THỐNG KÊ THEO DỰ ÁN']);
+          wsData.push(['STT', 'Dự Án', 'Tổng Số GCN', 'Tổng Diện Tích (m²)', 'Số GCN Thế Chấp', 'Tổng Định Giá (VNĐ)']);
+          byProj.forEach((p: any, i: number) => {
+            wsData.push([i + 1, p.project_name, p.total_count, p.total_area, p.mortgaged_count, p.total_mortgage_valuation]);
+          });
+          wsData.push([]);
+        }
+
+        // 4. Thống kê theo ngân hàng
+        const byBank = stats.by_mortgage_bank || [];
+        if (byBank.length > 0) {
+          wsData.push(['4. THỐNG KÊ THEO NGÂN HÀNG THẾ CHẤP']);
+          wsData.push(['STT', 'Ngân Hàng', 'Số Lượng GCN', 'Tổng Định Giá (VNĐ)', 'Tổng Giá Trị Bảo Đảm (VNĐ)']);
+          byBank.forEach((b: any, i: number) => {
+            wsData.push([i + 1, b.mortgage_bank, b.mortgaged_count, b.total_valuation, b.total_collateral_value]);
+          });
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, 'Số Liệu Tổng Hợp');
+      }
+
+      XLSX.writeFile(wb, `${snapshot.report_code}-${snapshot.report_period.replace(/[\/\s]/g, '-')}-Chot-So.xlsx`);
+      toast.success('Xuất file Excel thành công!');
     } catch (err: any) {
       console.error(err);
       toast.error('Lỗi xuất Excel: ' + err.message);
     }
   };
 
-  // Filtered frozen assets
-  const filteredFrozenAssets = viewingSnapshot?.report_data.filter(item => {
+  const isLegacyAssets = Boolean(
+    Array.isArray(viewingSnapshot?.report_data) &&
+    viewingSnapshot.report_data.length > 0 &&
+    (viewingSnapshot.report_data[0] as any)?.certificate_no
+  );
+
+  // Filtered frozen assets (dành cho snapshot phiên bản cũ có danh sách GCN)
+  const filteredFrozenAssets = (isLegacyAssets ? (viewingSnapshot?.report_data as any[]) : []).filter(item => {
     if (!frozenSearchTerm.trim()) return true;
     const term = frozenSearchTerm.toLowerCase();
     return (
-      item.certificate_no.toLowerCase().includes(term) ||
+      item.certificate_no?.toLowerCase().includes(term) ||
       (item.asset_code && item.asset_code.toLowerCase().includes(term)) ||
-      item.project_name.toLowerCase().includes(term) ||
-      item.plot_code.toLowerCase().includes(term) ||
+      item.project_name?.toLowerCase().includes(term) ||
+      item.plot_code?.toLowerCase().includes(term) ||
       (item.department_name && item.department_name.toLowerCase().includes(term)) ||
       (item.mortgage_bank_name && item.mortgage_bank_name.toLowerCase().includes(term)) ||
       (item.owner_name && item.owner_name.toLowerCase().includes(term))
     );
-  }) || [];
+  });
 
   return (
     <>
@@ -427,10 +532,10 @@ export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
                 <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
                 <div>
                   <strong className="font-semibold block mb-0.5 text-amber-950">
-                    Cơ chế Lưu Dữ Liệu Tĩnh (Denormalization) Bảo Vệ Lịch Sử:
+                    Cơ chế Chốt Khóa Kỳ Báo Cáo (Niêm phong số liệu tổng hợp):
                   </strong>
-                  Toàn bộ tên phòng ban, tên loại đất, tên tài sản và tên dự án của{' '}
-                  <span className="font-bold text-amber-950">{currentAssets.length} tài sản</span> sẽ được lưu dưới dạng chuỗi văn bản tĩnh vào trường <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-900">report_data (JSONB)</code>. Nếu sau này có thay đổi tên danh mục hay dự án, số liệu của kỳ báo cáo này sẽ không bao giờ bị biến động sai lệch.
+                  Toàn bộ số liệu thống kê tổng hợp (tổng cộng{' '}
+                  <span className="font-bold text-amber-950">{reportStats?.total_count ?? currentAssets.length} tài sản</span>, diện tích, thế chấp, phân bổ theo kho, dự án và ngân hàng từ RPC PostgreSQL) sẽ được lưu trữ tĩnh vào trường <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-900">report_data (JSONB)</code>.
                 </div>
               </div>
 
@@ -710,7 +815,7 @@ export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
                               className="inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer"
                             >
                               <Eye className="w-3.5 h-3.5 mr-1" />
-                              Xem Dữ Liệu Tĩnh ({snap.report_data?.length || 0})
+                              Xem Dữ Liệu Đã Chốt ({snap.total_assets || snap.report_data?.length || 0} GCN)
                             </button>
 
                             {/* Export Excel */}
@@ -1021,94 +1126,225 @@ export const ReportSnapshotsManager: React.FC<ReportSnapshotsManagerProps> = ({
               </div>
             </div>
 
-            {/* Table with static text values */}
-            <div className="flex-1 overflow-auto">
-              <table className="w-full text-xs text-left text-gray-700 border-collapse">
-                <thead className="bg-gray-100 text-gray-800 font-bold uppercase tracking-wider text-[11px] sticky top-0 z-10 border-b border-gray-300">
-                  <tr>
-                    <th className="py-2.5 px-3 border-r border-gray-200 text-center w-12">STT</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Số GCN</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Mã Lô Đất</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Dự Án (Tĩnh)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Kho Lưu Trữ (Tĩnh)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Đơn Vị Quản Lý (Tĩnh)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Loại Đất / Mục Đích (Tĩnh)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap text-right">Diện Tích (m²)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Chủ Sở Hữu (Tĩnh)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Thế Chấp</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Ngân Hàng (Tĩnh)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap text-right">Định Giá (VNĐ)</th>
-                    <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Tình Trạng Kho</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredFrozenAssets.length === 0 ? (
+            {/* Table with static text values or summary statistics */}
+            <div className="flex-1 overflow-auto p-4">
+              {isLegacyAssets ? (
+                <table className="w-full text-xs text-left text-gray-700 border-collapse">
+                  <thead className="bg-gray-100 text-gray-800 font-bold uppercase tracking-wider text-[11px] sticky top-0 z-10 border-b border-gray-300">
                     <tr>
-                      <td colSpan={13} className="py-12 text-center text-gray-400">
-                        Không tìm thấy tài sản tĩnh nào phù hợp bộ lọc tìm kiếm
-                      </td>
+                      <th className="py-2.5 px-3 border-r border-gray-200 text-center w-12">STT</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Số GCN</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Mã Lô Đất</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Dự Án (Tĩnh)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Kho Lưu Trữ (Tĩnh)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Đơn Vị Quản Lý (Tĩnh)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Loại Đất / Mục Đích (Tĩnh)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap text-right">Diện Tích (m²)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Chủ Sở Hữu (Tĩnh)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Thế Chấp</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Ngân Hàng (Tĩnh)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap text-right">Định Giá (VNĐ)</th>
+                      <th className="py-2.5 px-3 border-r border-gray-200 whitespace-nowrap">Tình Trạng Kho</th>
                     </tr>
-                  ) : (
-                    filteredFrozenAssets.map((asset, idx) => (
-                      <tr key={asset.asset_id || idx} className="hover:bg-blue-50/40 transition">
-                        <td className="py-2 px-3 border-r border-gray-200 text-center text-gray-500 font-mono">
-                          {idx + 1}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 font-mono font-bold text-red-700 whitespace-nowrap">
-                          {asset.certificate_no}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 font-mono text-gray-900 whitespace-nowrap">
-                          {asset.plot_code}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap font-medium text-gray-900">
-                          {asset.project_name}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-600">
-                          {asset.warehouse_name}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-700 font-medium">
-                          {asset.department_name || '-'}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-600">
-                          {asset.land_use_type_name}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 text-right font-mono font-semibold text-gray-900 whitespace-nowrap">
-                          {asset.area ? asset.area.toLocaleString('vi-VN') : 0}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 text-gray-700 whitespace-nowrap">
-                          {asset.owner_name}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap">
-                          {asset.mortgage_status_label === 'Đã thế chấp' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                              Đã thế chấp
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">
-                              Chưa thế chấp
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 text-gray-600 whitespace-nowrap">
-                          {asset.mortgage_bank_name || '-'}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
-                          {asset.mortgage_valuation ? asset.mortgage_valuation.toLocaleString('vi-VN') : '-'}
-                        </td>
-                        <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-600">
-                          {asset.custody_status_label}
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredFrozenAssets.length === 0 ? (
+                      <tr>
+                        <td colSpan={13} className="py-12 text-center text-gray-400">
+                          Không tìm thấy tài sản tĩnh nào phù hợp bộ lọc tìm kiếm
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredFrozenAssets.map((asset, idx) => (
+                        <tr key={asset.asset_id || idx} className="hover:bg-blue-50/40 transition">
+                          <td className="py-2 px-3 border-r border-gray-200 text-center text-gray-500 font-mono">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 font-mono font-bold text-red-700 whitespace-nowrap">
+                            {asset.certificate_no}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 font-mono text-gray-900 whitespace-nowrap">
+                            {asset.plot_code}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap font-medium text-gray-900">
+                            {asset.project_name}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-600">
+                            {asset.warehouse_name}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-700 font-medium">
+                            {asset.department_name || '-'}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-600">
+                            {asset.land_use_type_name}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 text-right font-mono font-semibold text-gray-900 whitespace-nowrap">
+                            {asset.area ? asset.area.toLocaleString('vi-VN') : 0}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 text-gray-700 whitespace-nowrap">
+                            {asset.owner_name}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap">
+                            {asset.mortgage_status_label === 'Đã thế chấp' ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                Đã thế chấp
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">
+                                Chưa thế chấp
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 text-gray-600 whitespace-nowrap">
+                            {asset.mortgage_bank_name || '-'}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
+                            {asset.mortgage_valuation ? asset.mortgage_valuation.toLocaleString('vi-VN') : '-'}
+                          </td>
+                          <td className="py-2 px-3 border-r border-gray-200 whitespace-nowrap text-gray-600">
+                            {asset.custody_status_label}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                (() => {
+                  const snapStats = (viewingSnapshot.summary_stats as any) || (viewingSnapshot.report_data?.[0] as any)?.report_statistics || {};
+                  const byWh = (snapStats.by_warehouse || []).filter((w: any) => !frozenSearchTerm || w.warehouse_name?.toLowerCase().includes(frozenSearchTerm.toLowerCase()));
+                  const byProj = (snapStats.by_project || []).filter((p: any) => !frozenSearchTerm || p.project_name?.toLowerCase().includes(frozenSearchTerm.toLowerCase()));
+                  const byBank = (snapStats.by_mortgage_bank || []).filter((b: any) => !frozenSearchTerm || b.mortgage_bank?.toLowerCase().includes(frozenSearchTerm.toLowerCase()));
+
+                  return (
+                    <div className="space-y-6">
+                      {/* Section 1: Thống kê theo Kho */}
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
+                        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <WarehouseIcon className="w-4 h-4 text-[#1E3A8A]" />
+                            1. Thống Kê Theo Kho Lưu Trữ ({byWh.length})
+                          </h4>
+                        </div>
+                        <table className="w-full text-xs text-left text-gray-700">
+                          <thead className="bg-gray-100 text-gray-800 font-bold border-b border-gray-200 text-[11px]">
+                            <tr>
+                              <th className="py-2 px-3 text-center w-12">STT</th>
+                              <th className="py-2 px-3">Kho Lưu Trữ</th>
+                              <th className="py-2 px-3 text-right">Tổng Số GCN</th>
+                              <th className="py-2 px-3 text-right">Tổng Diện Tích (m²)</th>
+                              <th className="py-2 px-3 text-right">Thế Chấp</th>
+                              <th className="py-2 px-3 text-right">Tổng Định Giá (VNĐ)</th>
+                              <th className="py-2 px-3 text-right">Tồn Kho</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {byWh.length === 0 ? (
+                              <tr><td colSpan={7} className="py-4 text-center text-gray-400">Không có dữ liệu kho</td></tr>
+                            ) : (
+                              byWh.map((w: any, idx: number) => (
+                                <tr key={w.warehouse_id || idx} className="hover:bg-blue-50/30">
+                                  <td className="py-2 px-3 text-center text-gray-500 font-mono">{idx + 1}</td>
+                                  <td className="py-2 px-3 font-semibold text-gray-900">{w.warehouse_name}</td>
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">{w.total_count}</td>
+                                  <td className="py-2 px-3 text-right font-mono">{Number(w.total_area || 0).toLocaleString('vi-VN')}</td>
+                                  <td className="py-2 px-3 text-right font-mono text-amber-700">{w.mortgaged_count}</td>
+                                  <td className="py-2 px-3 text-right font-mono text-blue-700">{Number(w.total_mortgage_valuation || 0).toLocaleString('vi-VN')}</td>
+                                  <td className="py-2 px-3 text-right font-mono">{w.in_stock_count}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Section 2: Thống kê theo Dự Án */}
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
+                        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Building2 className="w-4 h-4 text-[#1E3A8A]" />
+                            2. Thống Kê Theo Dự Án ({byProj.length})
+                          </h4>
+                        </div>
+                        <table className="w-full text-xs text-left text-gray-700">
+                          <thead className="bg-gray-100 text-gray-800 font-bold border-b border-gray-200 text-[11px]">
+                            <tr>
+                              <th className="py-2 px-3 text-center w-12">STT</th>
+                              <th className="py-2 px-3">Dự Án</th>
+                              <th className="py-2 px-3 text-right">Tổng Số GCN</th>
+                              <th className="py-2 px-3 text-right">Tổng Diện Tích (m²)</th>
+                              <th className="py-2 px-3 text-right">Thế Chấp</th>
+                              <th className="py-2 px-3 text-right">Tổng Định Giá (VNĐ)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {byProj.length === 0 ? (
+                              <tr><td colSpan={6} className="py-4 text-center text-gray-400">Không có dữ liệu dự án</td></tr>
+                            ) : (
+                              byProj.map((p: any, idx: number) => (
+                                <tr key={p.project_id || idx} className="hover:bg-blue-50/30">
+                                  <td className="py-2 px-3 text-center text-gray-500 font-mono">{idx + 1}</td>
+                                  <td className="py-2 px-3 font-semibold text-gray-900">{p.project_name}</td>
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">{p.total_count}</td>
+                                  <td className="py-2 px-3 text-right font-mono">{Number(p.total_area || 0).toLocaleString('vi-VN')}</td>
+                                  <td className="py-2 px-3 text-right font-mono text-amber-700">{p.mortgaged_count}</td>
+                                  <td className="py-2 px-3 text-right font-mono text-blue-700">{Number(p.total_mortgage_valuation || 0).toLocaleString('vi-VN')}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Section 3: Thống kê theo Ngân hàng */}
+                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
+                        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Layers className="w-4 h-4 text-[#1E3A8A]" />
+                            3. Thống Kê Theo Ngân Hàng Thế Chấp ({byBank.length})
+                          </h4>
+                        </div>
+                        <table className="w-full text-xs text-left text-gray-700">
+                          <thead className="bg-gray-100 text-gray-800 font-bold border-b border-gray-200 text-[11px]">
+                            <tr>
+                              <th className="py-2 px-3 text-center w-12">STT</th>
+                              <th className="py-2 px-3">Ngân Hàng</th>
+                              <th className="py-2 px-3 text-right">Số Lượng GCN</th>
+                              <th className="py-2 px-3 text-right">Tổng Định Giá (VNĐ)</th>
+                              <th className="py-2 px-3 text-right">Tổng Giá Trị Bảo Đảm (VNĐ)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {byBank.length === 0 ? (
+                              <tr><td colSpan={5} className="py-4 text-center text-gray-400">Không có dữ liệu ngân hàng</td></tr>
+                            ) : (
+                              byBank.map((b: any, idx: number) => (
+                                <tr key={b.mortgage_bank || idx} className="hover:bg-blue-50/30">
+                                  <td className="py-2 px-3 text-center text-gray-500 font-mono">{idx + 1}</td>
+                                  <td className="py-2 px-3 font-semibold text-gray-900">{b.mortgage_bank}</td>
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-amber-700">{b.mortgaged_count}</td>
+                                  <td className="py-2 px-3 text-right font-mono text-blue-700">{Number(b.total_valuation || 0).toLocaleString('vi-VN')}</td>
+                                  <td className="py-2 px-3 text-right font-mono text-emerald-700">{Number(b.total_collateral_value || 0).toLocaleString('vi-VN')}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
             </div>
 
             {/* Footer */}
             <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex items-center justify-between text-xs text-gray-600 shrink-0">
               <div>
-                Đang hiển thị <strong>{filteredFrozenAssets.length}</strong> / <strong>{viewingSnapshot.report_data?.length || 0}</strong> tài sản tĩnh đã chốt
+                {isLegacyAssets ? (
+                  <>Đang hiển thị <strong>{filteredFrozenAssets.length}</strong> / <strong>{viewingSnapshot.report_data?.length || 0}</strong> tài sản tĩnh đã chốt</>
+                ) : (
+                  <>Số liệu tổng hợp đã chốt: <strong>{viewingSnapshot.total_assets || 0}</strong> tài sản</>
+                )}
               </div>
               <button
                 type="button"

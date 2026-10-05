@@ -6,7 +6,6 @@ import {
   updateInvestorEntity, 
   deleteInvestorEntity 
 } from '../../api/investorEntities';
-import { mockStore } from '../../lib/mockStore';
 import { 
   Building, Plus, Edit2, Trash2, Search, X, 
   RotateCcw, CheckCheck, HelpCircle 
@@ -39,11 +38,11 @@ export const AdminInvestorEntities: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const invs = await fetchInvestorEntities().catch(() => mockStore.getInvestorEntities());
+      const invs = await fetchInvestorEntities();
       setInvestorEntities(invs || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi tải dữ liệu pháp nhân CĐT/NĐT');
+      toast.error('Lỗi tải dữ liệu pháp nhân CĐT/NĐT: ' + (err.message || 'Lỗi CSDL'));
     } finally {
       setLoading(false);
     }
@@ -195,10 +194,6 @@ export const AdminInvestorEntities: React.FC = () => {
       <LoadingFallback
         message="Đang tải danh sách pháp nhân CĐT/NĐT..."
         onRetry={loadData}
-        onForceLocal={() => {
-          setInvestorEntities(mockStore.getInvestorEntities());
-          setLoading(false);
-        }}
       />
     );
   }

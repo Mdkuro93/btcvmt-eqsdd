@@ -19,6 +19,7 @@ import {
 export interface DashboardSummaryData {
   totalAssets: number;
   totalArea: number;
+  totalHighRiseArea?: number;
   activeProjectsCount: number;
   
   pendingRequests: number;
@@ -130,12 +131,22 @@ export const DashboardSummaryCard: React.FC<DashboardSummaryCardProps> = ({
             <div className="mt-3.5 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
               <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                  <Layers className="w-3.5 h-3.5 text-slate-400" /> Tổng diện tích quỹ đất:
+                  <Layers className="w-3.5 h-3.5 text-slate-400" /> Tổng DT quỹ đất (thấp tầng):
                 </span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">
                   {loading ? '...' : `${data.totalArea.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m²`}
                 </span>
               </div>
+              {data.totalHighRiseArea !== undefined && data.totalHighRiseArea > 0 && (
+                <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-purple-500" /> Tổng DT thông thủy (căn hộ/3D):
+                  </span>
+                  <span className="font-semibold text-purple-700 dark:text-purple-300">
+                    {loading ? '...' : `${data.totalHighRiseArea.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m²`}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                 <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" /> Số dự án ghi nhận:

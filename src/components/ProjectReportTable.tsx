@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProjectReportRow, ProjectReportStats } from '../types';
 import { Building2, AlertCircle } from 'lucide-react';
+import { isHighRiseAsset, getAreaSubLabel } from '../constants/assetTypes';
 
 interface ProjectReportTableProps {
   rows: ProjectReportRow[];
@@ -34,7 +35,9 @@ export const ProjectReportTable: React.FC<ProjectReportTableProps> = ({
   // Dynamic KPI calculation directly from current rows to guarantee 100% synchronization
   const displayStats: ProjectReportStats = {
     totalLots: rows.length,
-    totalArea: rows.reduce((sum, r) => sum + (Number(r.col_g_area) || 0), 0),
+    // Chỉ tính tổng SUM(area) của các tài sản KHÔNG THUỘC HIGH_RISE_ASSET_TYPES (Bảo toàn số liệu diện tích đất chuẩn)
+    totalArea: rows.filter(r => !isHighRiseAsset(r.col_d_asset_type)).reduce((sum, r) => sum + (Number(r.col_g_area) || 0), 0),
+    totalHighRiseArea: rows.filter(r => isHighRiseAsset(r.col_d_asset_type)).reduce((sum, r) => sum + (Number(r.col_g_area) || 0), 0),
     cdtCount: rows.reduce((sum, r) => sum + (Number(r.col_k_cdt_count) || 0), 0),
     cdtArea: rows.reduce((sum, r) => sum + (Number(r.col_l_cdt_area) || 0), 0),
     investorCount: rows.reduce((sum, r) => sum + (Number(r.col_n_investor_count) || 0), 0),
@@ -56,7 +59,10 @@ export const ProjectReportTable: React.FC<ProjectReportTableProps> = ({
           <div className="text-lg font-bold text-gray-900 dark:text-slate-100 mt-0.5">
             {displayStats.totalLots} <span className="text-xs font-normal text-gray-500">lô</span>
           </div>
-          <div className="text-[10px] text-gray-400 dark:text-slate-500">{displayStats.totalArea.toLocaleString('vi-VN')} m²</div>
+          <div className="text-[10px] text-gray-600 dark:text-slate-400 font-medium">{displayStats.totalArea.toLocaleString('vi-VN')} m² (Đất)</div>
+          {displayStats.totalHighRiseArea !== undefined && displayStats.totalHighRiseArea > 0 && (
+            <div className="text-[9px] text-purple-600 dark:text-purple-400 mt-0.5 font-medium">+{displayStats.totalHighRiseArea.toLocaleString('vi-VN')} m² (3D)</div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/60 shadow-xs transition-colors">
@@ -371,7 +377,12 @@ export const ProjectReportTable: React.FC<ProjectReportTableProps> = ({
                         {r.col_f_lot_code}
                       </td>
                       <td className={`${cellPadding} text-right font-semibold text-gray-900 dark:text-slate-100 border-r border-gray-200 dark:border-slate-800`}>
-                        {r.col_g_area ? r.col_g_area.toLocaleString('vi-VN') : '-'}
+                        <div>{r.col_g_area ? r.col_g_area.toLocaleString('vi-VN') : '-'}</div>
+                        {r.col_g_area > 0 && r.col_d_asset_type && (
+                          <div className="text-[10px] text-gray-400 dark:text-slate-500 font-normal">
+                            {getAreaSubLabel(r.col_d_asset_type)}
+                          </div>
+                        )}
                       </td>
 
                       {/* Cột I: Số nhỏ */}

@@ -1,10 +1,12 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Asset, Region, Area, Warehouse, Project } from '../types';
-import { generateNextAssetCode, resolveRegionCode } from '../lib/assetIdentifier';
+import { generateNextAssetCode, resolveRegionCode, checkAssetDuplicate } from '../lib/assetIdentifier';
 import { createAuditLog } from './auditLogs';
 import { logActivity } from './activityLogs';
 import { fetchInvestorEntities } from './investorEntities';
+import { isHighRiseAsset } from '../constants/assetTypes';
+import { validateScanLink } from '../lib/scanLink';
 
 function getDifferences(oldData: Record<string, any>, newData: Record<string, any>): { oldDiff: Record<string, any>; newDiff: Record<string, any> } {
   const oldDiff: Record<string, any> = {};
@@ -70,6 +72,7 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     expected_return_date, borrow_purpose, scan_file_url, project_id, warehouse_id,
     current_holder_dept, notes, asset_type, registry_no, registry_date, managing_unit,
     certificate_group, usage_term_type, usage_term_date, parent_asset_id, created_at,
+    duplicate_rule, duplicate_ack_reason, duplicate_ack_by, duplicate_ack_at,
     relationship_type, invalidation_type, remaining_area, original_area, is_in_warehouse, status,
     updated_at, updated_by,
     updater:profiles!updated_by(id, full_name, email),
@@ -86,7 +89,13 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
     if (filters.projectId) query = query.eq('project_id', filters.projectId);
     
     const custody = filters.custodyStatus || filters.custody_status;
-    if (custody) query = query.eq('custody_status', custody);
+    if (custody) {
+      if (custody === 'in_stock') {
+        query = query.or('custody_status.eq.in_stock,custody_status.is.null');
+      } else {
+        query = query.eq('custody_status', custody);
+      }
+    }
     
     const lifecycle = filters.lifecycleStatus || filters.lifecycle_status;
     if (lifecycle) query = query.eq('lifecycle_status', lifecycle);
@@ -101,12 +110,57 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
       query = query.or(`status.eq.${filters.status},status.eq.${filters.status.toUpperCase()},status.eq.${filters.status.toLowerCase()}`);
     }
     
-    if (filters.warehouseId) query = query.eq('warehouse_id', filters.warehouseId);
+    const whId = filters.warehouseId || filters.warehouse_id;
+    if (whId) query = query.eq('warehouse_id', whId);
     if (filters.legal_lot_code) query = query.ilike('legal_lot_code', `%${filters.legal_lot_code.trim()}%`);
+
+    // Phân quyền kho: allowedWarehouseIds (chạy phía server)
+    if (filters.allowedWarehouseIds && Array.isArray(filters.allowedWarehouseIds)) {
+      if (filters.allowedWarehouseIds.length === 0) {
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+      } else if (!whId) {
+        query = query.in('warehouse_id', filters.allowedWarehouseIds);
+      }
+    }
+
+    // Lọc theo vùng: chuyển thành điều kiện truy vấn phía server (warehouse_id / project_id)
+    const rawRegion = filters.selectedRegion || filters.region;
+    if (rawRegion && rawRegion !== 'Tất cả vùng') {
+      const cleanReg = rawRegion.replace('Vùng ', '').trim();
+      if (cleanReg) {
+        const { data: regRows } = await supabase.from('regions').select('id').ilike('name', `%${cleanReg}%`);
+        const regIds = (regRows || []).map(r => r.id);
+        if (regIds.length === 0) {
+          query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+        } else {
+          const [{ data: whRows }, { data: areaRows }] = await Promise.all([
+            supabase.from('warehouses').select('id').in('region_id', regIds),
+            supabase.from('areas').select('id').in('region_id', regIds),
+          ]);
+          const whIds = (whRows || []).map(w => w.id);
+          const areaIds = (areaRows || []).map(a => a.id);
+          let projIds: string[] = [];
+          if (areaIds.length > 0) {
+            const { data: pRows } = await supabase.from('projects').select('id').in('area_id', areaIds);
+            projIds = (pRows || []).map(p => p.id);
+          }
+
+          if (whIds.length === 0 && projIds.length === 0) {
+            query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+          } else if (whIds.length > 0 && projIds.length === 0) {
+            query = query.in('warehouse_id', whIds);
+          } else if (whIds.length === 0 && projIds.length > 0) {
+            query = query.in('project_id', projIds);
+          } else {
+            query = query.or(`warehouse_id.in.(${whIds.join(',')}),project_id.in.(${projIds.join(',')})`);
+          }
+        }
+      }
+    }
   }
 
   // Apply Server-side Sort & Range Pagination
-  query = query.order('created_at', { ascending: false }).range(from, to);
+  query = query.order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, to);
 
   try {
     const { data, count, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
@@ -124,35 +178,130 @@ export async function fetchAssets(filters?: any, page = 1, pageSize = 25): Promi
   }
 }
 
+export interface CheckAssetDuplicateParams {
+  certificateNo?: string | null;
+  projectId?: string | null;
+  legalLotCode?: string | null;
+  mapSheetNo?: string | null;
+  landLotNo?: string | null;
+  excludeAssetId?: string | null;
+}
+
+export interface CheckAssetDuplicateResult {
+  is_duplicate: boolean;
+  requires_confirmation?: boolean;
+  rule?: string;
+  reason?: string;
+  same_project?: boolean;
+  is_invalidated?: boolean;
+}
+
 /**
- * Ultra-lightweight query for checking duplicate records and generating sequential asset codes
+ * Kiểm tra trùng GCN trên toàn bộ cơ sở dữ liệu qua RPC máy chủ (check_asset_duplicate)
  */
-export async function fetchAssetIdentifierCandidates(projectId?: string): Promise<Asset[]> {
+export async function checkAssetDuplicateServer(
+  params: CheckAssetDuplicateParams
+): Promise<CheckAssetDuplicateResult> {
   if (!isSupabaseConfigured) {
-    return mockStore.getAssets();
+    const assets = mockStore.getAssets();
+    const dup = checkAssetDuplicate(
+      {
+        certificate_no: params.certificateNo || '',
+        project_id: params.projectId || undefined,
+        legal_lot_code: params.legalLotCode || undefined,
+        map_sheet_no: params.mapSheetNo || undefined,
+        land_lot_no: params.landLotNo || undefined,
+      },
+      assets,
+      params.excludeAssetId || undefined
+    );
+    return {
+      is_duplicate: dup.isDuplicate,
+      requires_confirmation: dup.isDuplicate,
+      reason: dup.reason
+    };
   }
 
-  let query = supabase.from('assets').select(`
-    id, asset_code, collateral_type, certificate_no, project_id,
-    legal_lot_code, map_sheet_no, land_lot_no, lifecycle_status,
-    custody_status, is_in_warehouse, area, original_area, remaining_area,
-    relationship_type, invalidation_type, status,
-    business_project_name, business_plot_code,
-    warehouse_id, created_at, projects(name), warehouses(name)
-  `).order('created_at', { ascending: false }).limit(2000);
+  const { data, error } = await withTimeout(
+    supabase.rpc('check_asset_duplicate', {
+      p_certificate_no: params.certificateNo ? params.certificateNo.trim() : null,
+      p_project_id: params.projectId || null,
+      p_legal_lot_code: params.legalLotCode ? params.legalLotCode.trim() : null,
+      p_map_sheet_no: params.mapSheetNo ? params.mapSheetNo.trim() : null,
+      p_land_lot_no: params.landLotNo ? params.landLotNo.trim() : null,
+      p_exclude_asset_id: params.excludeAssetId || null,
+    }),
+    DEFAULT_READ_TIMEOUT
+  );
 
-  if (projectId) {
-    query = query.eq('project_id', projectId);
+  if (error) {
+    throw new Error('Lỗi kiểm tra trùng GCN: ' + (error.message || 'Lỗi RPC'));
   }
 
-  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-  if (error) throw error;
-  return (data || []).map((a: any) => ({
-    ...a,
-    is_in_warehouse: (a.is_in_warehouse !== undefined && a.is_in_warehouse !== null)
-      ? Boolean(a.is_in_warehouse)
-      : (a.custody_status === 'in_stock')
-  })) as unknown as Asset[];
+  return {
+    is_duplicate: Boolean(data?.is_duplicate),
+    requires_confirmation: Boolean(data?.requires_confirmation),
+    rule: data?.rule,
+    reason: data?.reason,
+    same_project: data?.same_project,
+    is_invalidated: data?.is_invalidated
+  };
+}
+
+/**
+ * Xem trước mã tài sản kế tiếp qua RPC máy chủ (peek_next_asset_code, không tăng bộ đếm)
+ */
+export async function peekNextAssetCode(
+  region: string = 'VMT',
+  province: string = 'DNG',
+  type: string = 'BDS'
+): Promise<string> {
+  if (!isSupabaseConfigured) {
+    return generateNextAssetCode(region, province, type, mockStore.getAssets());
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('peek_next_asset_code', {
+      p_region: region,
+      p_province: province,
+      p_type: type,
+    }),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) {
+    throw new Error('Lỗi xem trước mã tài sản: ' + (error.message || 'Lỗi RPC'));
+  }
+
+  return data as string;
+}
+
+/**
+ * Cấp mã tài sản kế tiếp nguyên tử khi lưu qua RPC máy chủ (allocate_asset_code)
+ */
+export async function allocateAssetCode(
+  region: string = 'VMT',
+  province: string = 'DNG',
+  type: string = 'BDS'
+): Promise<string> {
+  if (!isSupabaseConfigured) {
+    return generateNextAssetCode(region, province, type, mockStore.getAssets());
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('allocate_asset_code', {
+      p_region: region,
+      p_province: province,
+      p_type: type,
+    }),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) {
+    throw new Error('Lỗi cấp mã tài sản: ' + (error.message || 'Lỗi RPC'));
+  }
+
+  return data as string;
 }
 
 /**
@@ -245,12 +394,14 @@ export async function fetchDashboardAssetStats(): Promise<{
   mortgaged: number;
   sold: number;
   totalArea: number;
+  totalHighRiseArea: number;
   activeProjectsCount: number;
 }> {
   if (!isSupabaseConfigured) {
     const assets = mockStore.getAssets();
     const projSet = new Set(assets.map(a => a.project_id || a.business_project_name).filter(Boolean));
-    const totalArea = assets.reduce((sum, a) => sum + (Number(a.area) || 0), 0);
+    const totalArea = assets.filter(a => !isHighRiseAsset(a.asset_type)).reduce((sum, a) => sum + (Number(a.area) || 0), 0);
+    const totalHighRiseArea = assets.filter(a => isHighRiseAsset(a.asset_type)).reduce((sum, a) => sum + (Number(a.area) || 0), 0);
     return {
       total: assets.length,
       inStock: assets.filter(a => a.custody_status === 'in_stock').length,
@@ -258,6 +409,7 @@ export async function fetchDashboardAssetStats(): Promise<{
       mortgaged: assets.filter(a => a.mortgage_status === 'mortgaged').length,
       sold: assets.filter(a => a.sale_status === 'sold').length,
       totalArea,
+      totalHighRiseArea,
       activeProjectsCount: projSet.size || 1,
     };
   }
@@ -270,16 +422,22 @@ export async function fetchDashboardAssetStats(): Promise<{
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('custody_status', 'checked_out'),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('mortgage_status', 'mortgaged'),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('sale_status', 'sold'),
-      supabase.from('assets').select('area, project_id, business_project_name'),
+      supabase.from('assets').select('area, project_id, business_project_name, asset_type'),
     ]),
     DEFAULT_READ_TIMEOUT
   );
 
   let totalArea = 0;
+  let totalHighRiseArea = 0;
   const projSet = new Set<string>();
   if (areaRes.data) {
     for (const r of areaRes.data) {
-      if (r.area) totalArea += Number(r.area) || 0;
+      const areaVal = Number(r.area) || 0;
+      if (isHighRiseAsset(r.asset_type)) {
+        totalHighRiseArea += areaVal;
+      } else {
+        totalArea += areaVal;
+      }
       if (r.project_id) projSet.add(r.project_id);
       else if (r.business_project_name) projSet.add(r.business_project_name);
     }
@@ -292,6 +450,7 @@ export async function fetchDashboardAssetStats(): Promise<{
     mortgaged: mortgagedRes.count || 0,
     sold: soldRes.count || 0,
     totalArea,
+    totalHighRiseArea,
     activeProjectsCount: projSet.size || (areaRes.data && areaRes.data.length > 0 ? 1 : 0),
   };
 }
@@ -424,6 +583,7 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     mortgage_status: assetData.mortgage_status || 'none',
     warehouse_id: sanitizeUuid(assetData.warehouse_id),
     current_holder_dept: assetData.current_holder_dept || null,
+    duplicate_ack_reason: assetData.duplicate_ack_reason ? assetData.duplicate_ack_reason.trim() : null,
   };
 
   // TUYỆT ĐỐI không gửi trường id lên Supabase khi tạo mới: PostgreSQL/Supabase tự sinh UUID mặc định
@@ -436,6 +596,16 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
       created_at: new Date().toISOString(),
     };
     mockStore.saveAssets([fullAsset, ...current]);
+    try {
+      logActivity({
+        assetId: fullAsset.id,
+        actionType: 'Nhập sổ (Tạo mới)',
+        documentNo: fullAsset.asset_code || fullAsset.certificate_no,
+        description: `Khai báo tạo mới GCN: ${fullAsset.certificate_no || ''} (Mã: ${fullAsset.asset_code || ''})`,
+        warehouseId: fullAsset.warehouse_id,
+        notes: fullAsset.notes || 'Tạo mới trực tiếp trên hệ thống',
+      });
+    } catch {}
     return mockStore.getAssets().find(a => a.id === fullAsset.id)!;
   }
 
@@ -448,11 +618,29 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
     DEFAULT_WRITE_TIMEOUT
   );
 
-  if (error) throw error;
+  if (error) {
+    if (error.message && error.message.includes('DUPLICATE_UNCONFIRMED')) {
+      throw new Error('Số GCN đã tồn tại. Vui lòng xác nhận trường hợp trùng kèm lý do.');
+    }
+    throw error;
+  }
 
   try {
     mockStore.saveAssets([data, ...current]);
   } catch {}
+
+  try {
+    await logActivity({
+      assetId: data.id,
+      actionType: 'Nhập sổ (Tạo mới)',
+      documentNo: data.asset_code || data.certificate_no,
+      description: `Khai báo tạo mới GCN: ${data.certificate_no || ''} (Mã: ${data.asset_code || ''})`,
+      warehouseId: data.warehouse_id,
+      notes: data.notes || 'Tạo mới trực tiếp trên hệ thống',
+    });
+  } catch (logErr) {
+    console.warn('Không thể ghi log activity khi tạo GCN:', logErr);
+  }
 
   return data;
 }
@@ -492,6 +680,7 @@ export async function updateAsset(
   if ('warehouse_id' in updates) payload.warehouse_id = sanitizeUuid(updates.warehouse_id);
   if ('parent_asset_id' in updates) payload.parent_asset_id = sanitizeUuid(updates.parent_asset_id);
   if ('current_owner_entity_id' in updates) payload.current_owner_entity_id = sanitizeUuid(updates.current_owner_entity_id);
+  if ('duplicate_ack_reason' in updates) payload.duplicate_ack_reason = updates.duplicate_ack_reason ? updates.duplicate_ack_reason.trim() : null;
 
   const { oldDiff, newDiff } = getDifferences(currentAsset, payload);
 
@@ -515,6 +704,9 @@ export async function updateAsset(
 
     if (error) {
       console.error('Lỗi khi cập nhật GCN:', error);
+      if (error.message && error.message.includes('DUPLICATE_UNCONFIRMED')) {
+        throw new Error('Số GCN đã tồn tại. Vui lòng xác nhận trường hợp trùng kèm lý do.');
+      }
       throw new Error(`Không thể cập nhật GCN: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
     updatedAsset = data;
@@ -727,6 +919,18 @@ export async function importExcelAndUpdateAssets(
       const rawRole = (row.role || row['Phân loại'] || '').toString().trim().toLowerCase();
       const rawTransferDate = row.transfer_date || row['Ngày chuyển nhượng'] || row['Ngày Chuyển Nhượng'];
 
+      // Validate link bản scan từ Excel
+      const rawScan = row.scan_file_url || row['Link bản scan'] || row['Link scan'] || row['Đường dẫn scan'] || row['scan_url'];
+      let validatedScanUrl: string | null | undefined = undefined;
+      if (rawScan !== undefined && rawScan !== null && String(rawScan).trim() !== '') {
+        const scanVal = validateScanLink(String(rawScan));
+        if (!scanVal.ok) {
+          errors.push(`Dòng "${matchCertNo || matchId || 'N/A'}": ${scanVal.error || 'Link bản scan không hợp lệ'}`);
+          continue;
+        }
+        validatedScanUrl = scanVal.url || null;
+      }
+
       let targetEntityId: string | null = null;
       let targetRole: 'cdt' | 'ndt' | null = null;
 
@@ -786,6 +990,7 @@ export async function importExcelAndUpdateAssets(
         if (registryNo !== undefined && registryNo !== '') updates.registry_no = String(registryNo).trim();
         if (managingUnit !== undefined && managingUnit !== '') updates.managing_unit = String(managingUnit).trim();
         if (notes !== undefined && notes !== '') updates.notes = String(notes).trim();
+        if (validatedScanUrl !== undefined) updates.scan_file_url = validatedScanUrl;
         if (mortgageBank || mortgageUnit) {
           updates.mortgage_status = 'mortgaged';
         }
@@ -867,6 +1072,7 @@ export async function importExcelAndUpdateAssets(
           registry_no: registryNo ? String(registryNo).trim() : null,
           managing_unit: managingUnit ? String(managingUnit).trim() : null,
           notes: notes ? String(notes).trim() : null,
+          scan_file_url: validatedScanUrl || null,
           current_owner_entity_id: targetEntityId,
           current_owner_role: targetRole,
           // GCN đã thế chấp: bản gốc thường đang giữ tại ngân hàng, không nằm tại kho công ty
@@ -994,6 +1200,7 @@ export async function importAssets(assetsData: any[]) {
       current_holder_dept: a.current_holder_dept || null,
       current_owner_entity_id: sanitizeUuid(a.current_owner_entity_id),
       current_owner_role: a.current_owner_role || null,
+      scan_file_url: a.scan_file_url || null,
       notes: a.notes || null,
       created_at: new Date().toISOString(),
     };
@@ -1004,6 +1211,18 @@ export async function importAssets(assetsData: any[]) {
 
   if (!isSupabaseConfigured) {
     mockStore.saveAssets([...newAssets, ...current]);
+    try {
+      for (const ast of newAssets) {
+        logActivity({
+          assetId: ast.id,
+          actionType: 'Nhập sổ (Import Excel)',
+          documentNo: ast.asset_code || ast.certificate_no,
+          description: `Import Excel GCN: ${ast.certificate_no || ''} (Mã: ${ast.asset_code || ''})`,
+          warehouseId: ast.warehouse_id,
+          notes: 'Nhập hàng loạt qua file Excel',
+        });
+      }
+    } catch {}
     return newAssets;
   }
   try {
@@ -1035,6 +1254,22 @@ export async function importAssets(assetsData: any[]) {
     try {
       mockStore.saveAssets([...(data || []), ...current]);
     } catch {}
+
+    const insertedAssets = data || [];
+    try {
+      for (const ast of insertedAssets) {
+        await logActivity({
+          assetId: ast.id,
+          actionType: 'Nhập sổ (Import Excel)',
+          documentNo: ast.asset_code || ast.certificate_no,
+          description: `Import Excel GCN: ${ast.certificate_no || ''} (Mã: ${ast.asset_code || ''})`,
+          warehouseId: ast.warehouse_id,
+          notes: 'Nhập hàng loạt qua file Excel',
+        });
+      }
+    } catch (logErr) {
+      console.warn('Không thể ghi log activity khi import Excel:', logErr);
+    }
 
     return data || [];
   } catch (err: any) {

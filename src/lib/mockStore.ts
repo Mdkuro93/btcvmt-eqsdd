@@ -1535,6 +1535,17 @@ export const mockStore = {
       if (filters.warehouseId) {
         assets = assets.filter(a => a.warehouse_id === filters.warehouseId);
       }
+      if (filters.allowedWarehouseIds && Array.isArray(filters.allowedWarehouseIds)) {
+        assets = assets.filter(a => a.warehouse_id && filters.allowedWarehouseIds.includes(a.warehouse_id));
+      }
+      const rawReg = filters.selectedRegion || filters.region;
+      if (rawReg && rawReg !== 'Tất cả vùng') {
+        const cleanReg = rawReg.replace('Vùng ', '').toLowerCase();
+        assets = assets.filter(a => {
+          const rName = a.projects?.areas?.regions?.name || (a.warehouses as any)?.regions?.name || '';
+          return rName.toLowerCase().includes(cleanReg);
+        });
+      }
       if (filters.legal_lot_code) {
         const sub = filters.legal_lot_code.toLowerCase();
         assets = assets.filter(a => a.legal_lot_code?.toLowerCase().includes(sub));
@@ -2113,9 +2124,9 @@ export const mockStore = {
     const allItems = getStored<InventoryAuditItem[]>(STORAGE_KEYS.INVENTORY_AUDIT_ITEMS, MOCK_INVENTORY_AUDIT_ITEMS);
     const allAssets = mockStore.getAssets();
 
-    // Lọc toàn bộ assets có custody_status = 'in_stock' tại kho này
+    // Lọc toàn bộ assets có custody_status = 'in_stock' hoặc chưa set tại kho này
     const warehouseAssets = allAssets.filter(
-      a => a.warehouse_id === warehouseId && a.custody_status === 'in_stock'
+      a => a.warehouse_id === warehouseId && (a.custody_status === 'in_stock' || !a.custody_status)
     );
 
     const auditId = `aud-${Date.now()}`;
@@ -2124,8 +2135,8 @@ export const mockStore = {
         id: `audi-${Date.now()}-${idx}`,
         audit_id: auditId,
         asset_id: asset.id,
-        expected_status: 'in_stock',
-        expected_location: asset.legal_lot_code ? `${asset.legal_lot_code}` : `Vị trí kho tiêu chuẩn`,
+        expected_status: asset.custody_status || 'in_stock',
+        expected_location: 'Vị trí kho tiêu chuẩn',
         actual_found: false,
         actual_location: null,
         finding_status: 'pending',
@@ -2148,6 +2159,7 @@ export const mockStore = {
       total_found: 0,
       total_missing: 0,
       total_misplaced: 0,
+      total_surplus: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -2162,6 +2174,32 @@ export const mockStore = {
         asset: allAssets.find(a => a.id === i.asset_id),
       })),
     };
+  },
+
+  addSurplusAuditItem: (auditId: string, assetId: string, actualLocation?: string, note?: string): InventoryAuditItem => {
+    const allItems = getStored<InventoryAuditItem[]>(STORAGE_KEYS.INVENTORY_AUDIT_ITEMS, MOCK_INVENTORY_AUDIT_ITEMS);
+    const allAssets = mockStore.getAssets();
+    const asset = allAssets.find(a => a.id === assetId);
+
+    const newItem: InventoryAuditItem = {
+      id: `audi-surplus-${Date.now()}`,
+      audit_id: auditId,
+      asset_id: assetId,
+      expected_status: asset?.custody_status || 'other_warehouse',
+      expected_location: 'Ngoài danh sách kho',
+      actual_found: true,
+      actual_location: actualLocation || 'Tại kho đang kiểm',
+      finding_status: 'surplus',
+      note: note || (asset?.warehouse_id ? 'Phát hiện tài sản thuộc kho khác' : 'GCN phát sinh thừa'),
+      audited_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      asset,
+    };
+
+    setStored(STORAGE_KEYS.INVENTORY_AUDIT_ITEMS, [...allItems, newItem]);
+    mockStore.recalculateAuditStats(auditId);
+    return newItem;
   },
 
   updateInventoryAuditItem: (itemId: string, data: Partial<InventoryAuditItem>): InventoryAuditItem | null => {
@@ -2214,9 +2252,10 @@ export const mockStore = {
     const auditItems = allItems.filter(i => i.audit_id === auditId);
 
     const total_expected = auditItems.length;
-    const total_found = auditItems.filter(i => i.actual_found).length;
+    const total_found = auditItems.filter(i => i.actual_found || i.finding_status === 'matched' || i.finding_status === 'misplaced' || i.finding_status === 'surplus').length;
     const total_missing = auditItems.filter(i => i.finding_status === 'missing').length;
     const total_misplaced = auditItems.filter(i => i.finding_status === 'misplaced').length;
+    const total_surplus = auditItems.filter(i => i.finding_status === 'surplus').length;
 
     audits[auditIdx] = {
       ...audits[auditIdx],
@@ -2224,6 +2263,7 @@ export const mockStore = {
       total_found,
       total_missing,
       total_misplaced,
+      total_surplus,
       updated_at: new Date().toISOString(),
     };
     setStored(STORAGE_KEYS.INVENTORY_AUDITS, audits);
@@ -2237,6 +2277,23 @@ export const mockStore = {
     mockStore.recalculateAuditStats(auditId);
     const updatedAudits = getStored<InventoryAudit[]>(STORAGE_KEYS.INVENTORY_AUDITS, MOCK_INVENTORY_AUDITS);
     const target = updatedAudits[auditIdx];
+
+    // Cập nhật trạng thái các assets trong mock storage
+    const allItems = getStored<InventoryAuditItem[]>(STORAGE_KEYS.INVENTORY_AUDIT_ITEMS, MOCK_INVENTORY_AUDIT_ITEMS);
+    const auditItems = allItems.filter(i => i.audit_id === auditId);
+    const allAssets = mockStore.getAssets();
+
+    for (const it of auditItems) {
+      const ast = allAssets.find(a => a.id === it.asset_id);
+      if (ast) {
+        if (it.finding_status === 'missing') {
+          ast.custody_status = 'missing';
+        } else if (it.finding_status === 'misplaced' && it.actual_location) {
+          ast.notes = (ast.notes ? ast.notes + ' | ' : '') + `[Vị trí kho thực tế: ${it.actual_location}]`;
+        }
+      }
+    }
+    setStored(STORAGE_KEYS.ASSETS, allAssets);
 
     const completed: InventoryAudit = {
       ...target,

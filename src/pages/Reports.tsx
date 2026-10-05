@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { fetchAssets, fetchProjects, fetchWarehouses } from '../api/assets';
+import { fetchAssets, fetchProjects, fetchWarehouses, fetchRegions } from '../api/assets';
 import { fetchReportStatistics, fetchReportDetailedAssets, ReportStatistics } from '../api/reports';
-import { Asset, Project, Warehouse, ProjectReportRow } from '../types';
+import { Asset, Project, Warehouse, Region, ProjectReportRow } from '../types';
 import { formatPlotCode } from '../lib/assetIdentifier';
 import { Loader2, Download, LandPlot, Building2, ShieldCheck, FileSpreadsheet, AlertCircle, Warehouse as WarehouseIcon, ShieldAlert, SlidersHorizontal, ArrowLeftRight, RotateCcw } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -24,6 +24,7 @@ export const Reports: React.FC = () => {
   const [mortgagedAssetsForReview, setMortgagedAssetsForReview] = useState<Asset[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
 
   // Project Report Data (A -> AD)
   const [projectReportRows, setProjectReportRows] = useState<ProjectReportRow[]>([]);
@@ -94,12 +95,14 @@ export const Reports: React.FC = () => {
   useEffect(() => {
     const loadCatalogs = async () => {
       try {
-        const [allProjects, allWarehouses] = await Promise.all([
+        const [allProjects, allWarehouses, allRegions] = await Promise.all([
           fetchProjects(),
-          fetchWarehouses()
+          fetchWarehouses(),
+          fetchRegions()
         ]);
         setProjects(allProjects);
         setWarehouses(allWarehouses);
+        setRegions(allRegions);
       } catch (err) {
         console.error('Lỗi tải danh mục dự án & kho:', err);
       }
@@ -136,7 +139,9 @@ export const Reports: React.FC = () => {
           search: searchTerm,
           projectId: selectedProjectId,
           mortgageStatus: selectedMortgageStatus,
-          warehouseId: selectedWarehouseId
+          warehouseId: selectedWarehouseId,
+          selectedRegion,
+          allowedWarehouseIds: managedWarehouseIds,
         }, page, pageSize),
         fetchProjectReportData({
           projectId: selectedProjectId || undefined,
@@ -160,17 +165,7 @@ export const Reports: React.FC = () => {
       setProjectReportRows(projectResult.rows);
       setProjectReportStats(projectResult.stats);
       setLoadingProjectReport(false);
-
-      // Filter table rows by region if region filter is active
-      let filteredPageRows = tableResult.data || [];
-      if (selectedRegion && selectedRegion !== 'Tất cả vùng') {
-        const searchReg = selectedRegion.replace('Vùng ', '').trim().toLowerCase();
-        filteredPageRows = filteredPageRows.filter(asset => {
-          const regionName = asset.projects?.areas?.regions?.name || (asset.warehouses as any)?.regions?.name || '';
-          return regionName.toLowerCase().includes(searchReg);
-        });
-      }
-      setTableAssets(filteredPageRows);
+      setTableAssets(tableResult.data || []);
 
       // If mortgaged review tab is active or clicked, load mortgaged assets for that tab
       if (activeTab === 'mortgaged_review') {
@@ -249,16 +244,22 @@ export const Reports: React.FC = () => {
         return;
       }
 
-      const toastId = toast.loading('Đang trích xuất dữ liệu chi tiết cho file Excel...');
+      const toastId = toast.loading('Đang chuẩn bị tải dữ liệu chi tiết cho file Excel...');
       
-      const detailedAssets = await fetchReportDetailedAssets({
-        selectedRegion,
-        warehouseId: selectedWarehouseId,
-        projectId: selectedProjectId,
-        mortgageStatus: selectedMortgageStatus,
-        searchTerm,
-        allowedWarehouseIds: managedWarehouseIds
-      });
+      const detailedAssets = await fetchReportDetailedAssets(
+        {
+          selectedRegion,
+          warehouseId: selectedWarehouseId,
+          projectId: selectedProjectId,
+          mortgageStatus: selectedMortgageStatus,
+          searchTerm,
+          allowedWarehouseIds: managedWarehouseIds
+        },
+        (loaded, total) => {
+          const percent = total > 0 ? Math.round((loaded / total) * 100) : 100;
+          toast.loading(`Đang tải dữ liệu: ${loaded.toLocaleString('vi-VN')} / ${total.toLocaleString('vi-VN')} tài sản (${percent}%)...`, { id: toastId });
+        }
+      );
 
       if (detailedAssets.length === 0) {
         toast.dismiss(toastId);
@@ -518,6 +519,8 @@ export const Reports: React.FC = () => {
               currentProjectRows={projectReportRows}
               currentRegion={selectedRegion}
               currentWarehouseName={currentWarehouseName}
+              selectedWarehouseId={selectedWarehouseId}
+              reportStats={reportStats}
               onRefreshParent={loadData}
             />
 
@@ -569,9 +572,9 @@ export const Reports: React.FC = () => {
               className="w-full text-xs font-semibold px-3 py-2 border border-amber-300 dark:border-amber-800 rounded-md bg-amber-50/50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 focus:ring-amber-500 focus:border-amber-500"
             >
               <option value="Tất cả vùng">Tất cả các vùng miền</option>
-              <option value="Vùng Miền Trung">Vùng Miền Trung</option>
-              <option value="Vùng Miền Nam">Vùng Miền Nam</option>
-              <option value="Vùng Miền Bắc">Vùng Miền Bắc</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.name}>{r.name}</option>
+              ))}
             </select>
           </div>
 

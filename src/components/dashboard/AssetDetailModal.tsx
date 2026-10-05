@@ -239,7 +239,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
                           <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
                             <Warehouse className="w-3 h-3 text-slate-400 shrink-0" />
                             <span className="truncate max-w-[150px]" title={asset.warehouses?.name || ''}>
-                              {asset.warehouses?.name || 'Kho trung tâm'}
+                              {asset.warehouses?.name || 'Chưa gán kho'}
                             </span>
                           </div>
                         </td>

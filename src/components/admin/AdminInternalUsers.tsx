@@ -15,7 +15,6 @@ import {
   isCustomizedPermissions
 } from '../../api/users';
 import { fetchWarehouses } from '../../api/assets';
-import { mockStore } from '../../lib/mockStore';
 import { 
   Shield, UserPlus, Trash2, Check, Store, RotateCcw, KeyRound 
 } from 'lucide-react';
@@ -45,14 +44,14 @@ export const AdminInternalUsers: React.FC = () => {
     setLoading(true);
     try {
       const [profs, whs] = await Promise.all([
-        fetchProfiles().catch(() => mockStore.getProfiles()),
-        fetchWarehouses().catch(() => mockStore.getWarehouses()),
+        fetchProfiles(),
+        fetchWarehouses(),
       ]);
       setProfiles(profs || []);
       setWarehouses(whs || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi tải dữ liệu tài khoản hệ thống');
+      toast.error('Lỗi tải dữ liệu tài khoản hệ thống: ' + (err.message || 'Lỗi CSDL'));
     } finally {
       setLoading(false);
     }
@@ -169,11 +168,6 @@ export const AdminInternalUsers: React.FC = () => {
       <LoadingFallback
         message="Đang tải danh sách tài khoản hệ thống..."
         onRetry={loadData}
-        onForceLocal={() => {
-          setProfiles(mockStore.getProfiles());
-          setWarehouses(mockStore.getWarehouses());
-          setLoading(false);
-        }}
       />
     );
   }

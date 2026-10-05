@@ -1,41 +1,57 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { sanitizeUuid } from './assets';
 
-export async function fetchActivityLogs(params?: any): Promise<any[]> {
+export interface FetchActivityLogsParams {
+  assetId?: string;
+  actionType?: string;
+  warehouseId?: string;
+  projectId?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+
+export async function fetchActivityLogs(params?: FetchActivityLogsParams | string): Promise<any[]> {
   if (!isSupabaseConfigured) {
     return mockStore.getLogs(params);
   }
+
   const assetId = typeof params === 'string' ? params : params?.assetId;
   const actionType = typeof params === 'object' ? params?.actionType : undefined;
+  const warehouseId = typeof params === 'object' ? params?.warehouseId : undefined;
+  const projectId = typeof params === 'object' ? params?.projectId : undefined;
+  const fromDate = typeof params === 'object' ? params?.fromDate : undefined;
+  const toDate = typeof params === 'object' ? params?.toDate : undefined;
 
-  try {
-    let query = supabase
-      .from('activity_logs')
-      .select(`
-        *,
-        performer:profiles!activity_logs_performed_by_fkey(full_name, email),
-        warehouse:warehouses(name)
-      `)
-      .order('log_date', { ascending: false });
+  let query = supabase
+    .from('activity_logs')
+    .select(`
+      *,
+      performer:profiles!activity_logs_performed_by_fkey(full_name, email),
+      warehouse:warehouses(name),
+      asset:assets(id, certificate_no, project_id, projects(id, name))
+    `)
+    .order('log_date', { ascending: false });
 
-    if (assetId) query = query.eq('asset_id', assetId);
-    if (actionType) query = query.eq('action_type', actionType);
+  if (assetId) query = query.eq('asset_id', assetId);
+  if (warehouseId) query = query.eq('warehouse_id', warehouseId);
+  if (actionType) query = query.eq('action_type', actionType);
+  if (fromDate) query = query.gte('log_date', fromDate);
+  if (toDate) query = query.lte('log_date', toDate);
+  if (projectId) query = query.eq('asset.project_id', projectId);
 
-    const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
-    if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng activity_logs hoặc quan hệ liên quan chưa có trong Supabase, dùng mockStore:', error.message);
-        return mockStore.getLogs(params);
-      }
-      console.warn('Lỗi fetchActivityLogs từ Supabase:', error);
-      return mockStore.getLogs(params);
-    }
-    return data || [];
-  } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchActivityLogs, fallback mockStore:', err);
-    return mockStore.getLogs(params);
+  const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
+  if (error) {
+    throw new Error('Lỗi tải nhật ký biến động từ CSDL Supabase: ' + error.message);
   }
+
+  let result = data || [];
+  // Đảm bảo lọc chính xác theo projectId ở tầng ứng dụng nếu có quan hệ lồng
+  if (projectId) {
+    result = result.filter(item => item.asset?.project_id === projectId);
+  }
+
+  return result;
 }
 
 export async function logActivity(logData: {
@@ -72,50 +88,38 @@ export async function logActivity(logData: {
     return newLog;
   }
 
-  try {
-    const { data, error } = await withTimeout(
-      supabase
-        .from('activity_logs')
-        .insert([
-          {
-            asset_id: sanitizeUuid(logData.assetId),
-            action_type: logData.actionType,
-            document_no: logData.documentNo || null,
-            description: logData.description || null,
-            used_by: logData.usedBy || null,
-            warehouse_id: sanitizeUuid(logData.warehouseId),
-            notes: logData.notes || null,
-            performed_by: sanitizeUuid(logData.performedBy),
-          },
-        ])
-        .select()
-        .single(),
-      DEFAULT_WRITE_TIMEOUT
-    );
-
-    if (error) {
-      if (isSchemaMissingError(error)) {
-        const logs = mockStore.getLogs();
-        mockStore.saveLogs([newLog, ...logs]);
-        return newLog;
-      }
-      throw error;
-    }
-
+  // Tự động gán người thực hiện nếu chưa có
+  let performedBy = sanitizeUuid(logData.performedBy);
+  if (!performedBy) {
     try {
-      const logs = mockStore.getLogs();
-      mockStore.saveLogs([newLog, ...logs]);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) performedBy = user.id;
     } catch {}
-
-    return data;
-  } catch (err: any) {
-    if (isSchemaMissingError(err)) {
-      const logs = mockStore.getLogs();
-      mockStore.saveLogs([newLog, ...logs]);
-      return newLog;
-    }
-    const logs = mockStore.getLogs();
-    mockStore.saveLogs([newLog, ...logs]);
-    return newLog;
   }
+
+  const { data, error } = await withTimeout(
+    supabase
+      .from('activity_logs')
+      .insert([
+        {
+          asset_id: sanitizeUuid(logData.assetId),
+          action_type: logData.actionType,
+          document_no: logData.documentNo || null,
+          description: logData.description || null,
+          used_by: logData.usedBy || null,
+          warehouse_id: sanitizeUuid(logData.warehouseId),
+          notes: logData.notes || null,
+          performed_by: performedBy,
+        },
+      ])
+      .select()
+      .single(),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) {
+    throw new Error('Lỗi ghi nhật ký biến động (activity_logs): ' + error.message);
+  }
+
+  return data;
 }

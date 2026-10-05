@@ -17,18 +17,12 @@ export async function fetchInvestorEntities(): Promise<InvestorEntity[]> {
     );
 
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng investor_entities chưa có trên Supabase, dùng mockStore:', error.message);
-        return mockStore.getInvestorEntities();
-      }
-      console.warn('Lỗi khi tải investor_entities, dùng mockStore:', error);
-      return mockStore.getInvestorEntities();
+      throw new Error('Lỗi khi tải danh sách pháp nhân từ Supabase: ' + error.message);
     }
 
     return data || [];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchInvestorEntities, fallback sang mockStore:', err);
-    return mockStore.getInvestorEntities();
+    throw err instanceof Error ? err : new Error('Không thể tải danh sách pháp nhân: ' + String(err));
   }
 }
 
@@ -200,18 +194,12 @@ export async function fetchAssetOwnershipTransfers(assetId?: string): Promise<As
 
     const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng asset_ownership_transfers chưa có trong Supabase, dùng mockStore:', error.message);
-        return mockStore.getAssetOwnershipTransfers(assetId);
-      }
-      console.warn('Lỗi fetch asset_ownership_transfers:', error);
-      return mockStore.getAssetOwnershipTransfers(assetId);
+      throw new Error('Lỗi khi tải lịch sử chuyển nhượng sở hữu từ Supabase: ' + error.message);
     }
 
     return (data || []) as AssetOwnershipTransfer[];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchAssetOwnershipTransfers, fallback mockStore:', err);
-    return mockStore.getAssetOwnershipTransfers(assetId);
+    throw err instanceof Error ? err : new Error('Không thể tải lịch sử chuyển nhượng sở hữu: ' + String(err));
   }
 }
 

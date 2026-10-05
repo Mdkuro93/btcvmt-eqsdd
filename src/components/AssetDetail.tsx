@@ -3,6 +3,7 @@ import { Asset } from '../types';
 import { fetchLatestCheckinScanUrl } from '../api/transactions';
 import { StatusBadges } from './StatusBadges';
 import { formatPlotCode } from '../lib/assetIdentifier';
+import { getAreaLabel, getAreaSubLabel } from '../constants/assetTypes';
 import { AssetTransferHistory } from './AssetTransferHistory';
 import { 
   X, 
@@ -14,7 +15,8 @@ import {
   Clock, 
   Layers, 
   Info,
-  ShieldCheck 
+  ShieldCheck,
+  AlertTriangle 
 } from 'lucide-react';
 
 interface AssetDetailProps {
@@ -68,6 +70,15 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
               <h3 className="text-base font-bold text-slate-900">
                 GCN: {asset.certificate_no || 'Chưa có số GCN'}
               </h3>
+              {asset.duplicate_ack_reason && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 cursor-help"
+                  title={`Trùng số GCN (đã xác nhận)\nLý do: ${asset.duplicate_ack_reason}\nNgười xác nhận: ${asset.duplicate_acknowledger?.full_name || asset.duplicate_ack_by || 'Chưa rõ'}\nThời điểm: ${asset.duplicate_ack_at ? new Date(asset.duplicate_ack_at).toLocaleString('vi-VN') : '-'}`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  Trùng số GCN (đã xác nhận)
+                </span>
+              )}
               {effectiveScanUrl && (
                 <a
                   href={effectiveScanUrl}
@@ -126,6 +137,27 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
       <div className="p-6 overflow-y-auto space-y-6 text-sm text-slate-700">
         {activeTab === 'info' ? (
           <>
+            {/* Cảnh báo trùng GCN đã xác nhận */}
+            {asset.duplicate_ack_reason && (
+              <div className="p-3.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Trùng số GCN (đã xác nhận)</span>
+                </div>
+                <p>
+                  <span className="font-semibold text-amber-950">Lý do xác nhận:</span> {asset.duplicate_ack_reason}
+                </p>
+                <div className="flex flex-wrap gap-4 text-amber-800 text-[11px] pt-0.5">
+                  <span>
+                    <span className="font-semibold">Người xác nhận:</span> {asset.duplicate_acknowledger?.full_name || asset.duplicate_ack_by || 'Chưa rõ'}
+                  </span>
+                  <span>
+                    <span className="font-semibold">Thời điểm:</span> {asset.duplicate_ack_at ? new Date(asset.duplicate_ack_at).toLocaleString('vi-VN') : '-'}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Trạng thái vận hành */}
             <div>
               <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Trạng thái vận hành</h4>
@@ -157,8 +189,10 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
                   <span className="font-semibold text-slate-800">{formatPlotCode(asset.legal_lot_code)}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block">Diện tích</span>
-                  <span className="font-semibold text-slate-800">{asset.area ? `${asset.area} m²` : '-'}</span>
+                  <span className="text-slate-400 block">{getAreaLabel(asset.asset_type)}</span>
+                  <span className="font-semibold text-slate-800">
+                    {asset.area ? `${Number(asset.area).toLocaleString('vi-VN')} m²` : '-'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block">Số Thửa / Tờ Bản Đồ</span>

@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, FileText, AlertTriangle, GitFork, LandPlot } from 'lucide-react';
+import { X, Search, FileText, AlertTriangle, GitFork, LandPlot, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchProjects, fetchWarehouses, fetchAssetIdentifierCandidates } from '../api/assets';
+import { fetchProjects, fetchWarehouses, fetchAssets, checkAssetDuplicateServer } from '../api/assets';
 import { createDeclarationRequest } from '../api/assetDeclarationRequests';
 import { fetchInvestorEntities } from '../api/investorEntities';
 import { fetchOpenPlannedLandLotsByParentAsset, fetchOpenPlannedLandLotsByProject } from '../api/plannedLandLots';
 import { PlannedLandLot } from '../types';
+import { 
+  HIGH_RISE_ASSET_TYPES, 
+  LOW_RISE_ASSET_TYPES, 
+  isHighRiseAsset, 
+  isLowRiseAsset, 
+  getAreaLabel 
+} from '../constants/assetTypes';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -19,13 +26,15 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [allAssets, setAllAssets] = useState<any[]>([]);
   const [investorEntities, setInvestorEntities] = useState<any[]>([]);
 
   const [requestType, setRequestType] = useState<'cap_moi' | 'tach_so' | 'cap_doi'>('cap_moi');
   const [splitMode, setSplitMode] = useState<'SPLIT_FULL' | 'SPLIT_PARTIAL'>('SPLIT_FULL');
   const [remainingArea, setRemainingArea] = useState('');
   const [oldAssetId, setOldAssetId] = useState('');
+  const [selectedParentAsset, setSelectedParentAsset] = useState<any>(null);
+  const [parentSearchResults, setParentSearchResults] = useState<any[]>([]);
+  const [isSearchingParent, setIsSearchingParent] = useState(false);
   const [plannedLots, setPlannedLots] = useState<PlannedLandLot[]>([]);
   const [loadingPlannedLots, setLoadingPlannedLots] = useState(false);
   const [selectedPlannedLotId, setSelectedPlannedLotId] = useState('');
@@ -59,6 +68,7 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const [warehouseId, setWarehouseId] = useState('');
   const [notes, setNotes] = useState('');
   const [keepOpen, setKeepOpen] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -66,17 +76,43 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
     }
   }, [isOpen]);
 
+  // Live duplicate check (chỉ cảnh báo cho NĐT, không chặn)
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!certificateNo.trim() && !legalLotCode.trim() && (!mapSheetNo.trim() || !landLotNo.trim())) {
+      setDuplicateWarning(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await checkAssetDuplicateServer({
+          certificateNo: certificateNo.trim(),
+          projectId: projectId || null,
+          legalLotCode: legalLotCode.trim() || null,
+          mapSheetNo: mapSheetNo.trim() || null,
+          landLotNo: landLotNo.trim() || null,
+        });
+        if (res.is_duplicate) {
+          setDuplicateWarning(res.reason || 'Dữ liệu GCN trùng lặp trong hệ thống. Cấp quản lý sẽ thẩm định khi phê duyệt.');
+        } else {
+          setDuplicateWarning(null);
+        }
+      } catch (err) {
+        console.error('Lỗi khi kiểm tra trùng GCN:', err);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [certificateNo, projectId, legalLotCode, mapSheetNo, landLotNo, isOpen]);
+
   const loadData = async () => {
     try {
-      const [p, w, a, e] = await Promise.all([
+      const [p, w, e] = await Promise.all([
         fetchProjects(),
         fetchWarehouses(),
-        fetchAssetIdentifierCandidates(),
         fetchInvestorEntities()
       ]);
       setProjects(p);
       setWarehouses(w);
-      setAllAssets(a);
       setInvestorEntities(e);
 
       if (profile?.role === 'investor' && profile.owner_entity_ids?.length) {
@@ -92,6 +128,32 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
     const s = searchEntityText.toLowerCase();
     return (e.name?.toLowerCase().includes(s) || e.company_code?.toLowerCase().includes(s));
   }).slice(0, 50);
+
+  // Debounced search for old asset (debounce 400ms, minimum 2 characters, max 20 results)
+  useEffect(() => {
+    if (!isOpen || !showDropdown) return;
+    const term = searchOldAsset.trim();
+    if (term.length < 2) {
+      setParentSearchResults([]);
+      setIsSearchingParent(false);
+      return;
+    }
+
+    setIsSearchingParent(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchAssets({ search: term }, 1, 20);
+        setParentSearchResults(res.data ? res.data.slice(0, 20) : []);
+      } catch (err) {
+        console.error('Lỗi tìm kiếm sổ gốc:', err);
+        setParentSearchResults([]);
+      } finally {
+        setIsSearchingParent(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchOldAsset, isOpen, showDropdown]);
 
   // Lô quy hoạch (nếu có): áp dụng khi Tách sổ (chọn Sổ gốc) hoặc Cấp mới/Cấp thẳng (chọn Dự án)
   useEffect(() => {
@@ -129,13 +191,6 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
     if (lot.planned_area) setArea(String(lot.planned_area));
   };
 
-  const filteredAssets = allAssets.filter(a => {
-    if (!searchOldAsset) return false;
-    const s = searchOldAsset.toLowerCase();
-    return (a.certificate_no?.toLowerCase().includes(s) || a.asset_code?.toLowerCase().includes(s) || a.legal_lot_code?.toLowerCase().includes(s));
-  }).slice(0, 20);
-
-  const selectedParentAsset = allAssets.find(a => a.id === oldAssetId);
   const isParentInWarehouse = selectedParentAsset ? (
     selectedParentAsset.is_in_warehouse !== undefined
       ? Boolean(selectedParentAsset.is_in_warehouse)
@@ -145,10 +200,16 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const handleChildAreaChange = (newAreaStr: string) => {
     setArea(newAreaStr);
     if (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && selectedParentAsset?.area) {
-      const childVal = Number(newAreaStr);
-      if (!isNaN(childVal) && childVal > 0) {
-        const rem = Math.max(0, Number((selectedParentAsset.area - childVal).toFixed(2)));
-        setRemainingArea(rem.toString());
+      if (isHighRiseAsset(assetType)) {
+        // Cao tầng: Không trừ lùi diện tích sổ gốc
+        setRemainingArea(selectedParentAsset.area.toString());
+      } else {
+        // Thấp tầng: Trừ lùi diện tích sổ gốc
+        const childVal = Number(newAreaStr);
+        if (!isNaN(childVal) && childVal > 0) {
+          const rem = Math.max(0, Number((selectedParentAsset.area - childVal).toFixed(2)));
+          setRemainingArea(rem.toString());
+        }
       }
     }
   };
@@ -176,22 +237,41 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
       }
     }
 
-    if (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL') {
+    if (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && isLowRiseAsset(assetType)) {
       if (!remainingArea || Number(remainingArea) <= 0) {
-        toast.error('Vui lòng nhập diện tích còn lại hợp lệ cho Sổ gốc khi tách 1 phần');
+        toast.error('Vui lòng nhập diện tích còn lại hợp lệ cho Sổ gốc khi tách 1 phần đất');
         return;
       }
     }
 
     setLoading(true);
     try {
+      // 1. Kiểm tra trùng GCN qua RPC check_asset_duplicate trên server (chỉ cảnh báo cho NĐT, không chặn)
+      try {
+        const dupCheck = await checkAssetDuplicateServer({
+          certificateNo: certificateNo.trim(),
+          projectId: projectId || null,
+          legalLotCode: legalLotCode.trim() || null,
+          mapSheetNo: mapSheetNo.trim() || null,
+          landLotNo: landLotNo.trim() || null,
+        });
+        if (dupCheck.is_duplicate) {
+          toast(
+            `Cảnh báo trùng GCN: ${dupCheck.reason || 'Dữ liệu trùng lặp trong hệ thống'}. Hồ sơ vẫn được gửi để cấp quản lý thẩm định.`,
+            { icon: '⚠️', duration: 6000 }
+          );
+        }
+      } catch (checkErr) {
+        console.warn('Không thể kiểm tra trùng GCN:', checkErr);
+      }
+
       await createDeclarationRequest({
         request_type: requestType,
         relationship_type: requestType === 'cap_doi' ? 'RENEW' : (requestType === 'tach_so' ? splitMode : null),
         invalidation_type: requestType === 'cap_doi' ? 'FULL' : (requestType === 'tach_so' ? (splitMode === 'SPLIT_PARTIAL' ? 'PARTIAL' : 'FULL') : 'NONE'),
         parent_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
         old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
-        remaining_area: (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && remainingArea) ? Number(remainingArea) : null,
+        remaining_area: (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && isLowRiseAsset(assetType) && remainingArea) ? Number(remainingArea) : null,
         certificate_no: certificateNo.trim(),
         registry_no: registryNo.trim() || null,
         registry_date: registryDate || null,
@@ -230,6 +310,7 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
         setArea('');
         setRemainingArea('');
         setOldAssetId('');
+        setSelectedParentAsset(null);
         setSearchOldAsset('');
         setNotes('');
       }
@@ -269,6 +350,18 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
 
         <div className="p-6 overflow-y-auto">
           <form id="declare-form" onSubmit={handleSubmit} className="space-y-6">
+            {duplicateWarning && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start space-x-2 text-amber-900 text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-900">Cảnh báo trùng lặp: </span>
+                  <span className="text-amber-800">{duplicateWarning}</span>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    Lưu ý: Bạn vẫn có thể gửi đề xuất. Cấp quản lý sẽ kiểm tra và quyết định khi thẩm định hồ sơ.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Loại yêu cầu <span className="text-red-500">*</span></label>
@@ -334,9 +427,9 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                     />
                   </div>
 
-                  {showDropdown && filteredAssets.length > 0 && (
+                  {showDropdown && parentSearchResults.length > 0 && (
                     <div className="absolute z-20 left-4 right-4 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto divide-y divide-gray-100">
-                      {filteredAssets.map(a => {
+                      {parentSearchResults.map(a => {
                         const inWh = a.is_in_warehouse !== undefined ? Boolean(a.is_in_warehouse) : (a.custody_status === 'in_stock');
                         const whName = a.warehouses?.name || 'Kho lưu trữ';
                         return (
@@ -345,6 +438,7 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                             type="button"
                             onClick={() => {
                               setOldAssetId(a.id);
+                              setSelectedParentAsset(a);
                               setSearchOldAsset(`[${a.asset_code || 'Chưa cấp mã'}] - ${a.certificate_no} - ${inWh ? `🔴 Đang lưu tại ${whName}` : '🟢 Đã xuất kho'}`);
                               setShowDropdown(false);
                               if (requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && a.area && area) {
@@ -425,56 +519,71 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
 
             {/* DIỆN TÍCH VÀ DIỆN TÍCH CÒN LẠI KHI TÁCH 1 PHẦN */}
             {requestType === 'tach_so' && splitMode === 'SPLIT_PARTIAL' && (
-              <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3">
-                <div className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                  Tính Toán Diện Tích Tách Sổ Một Phần
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                  <div className="bg-white p-3 rounded-lg border border-amber-200">
-                    <span className="text-gray-500 block">Diện tích Sổ gốc (m²)</span>
-                    <span className="text-base font-bold text-gray-900">
-                      {selectedParentAsset?.area ? `${selectedParentAsset.area} m²` : 'Chưa có thông tin'}
-                    </span>
+              isHighRiseAsset(assetType) ? (
+                <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-xl space-y-2">
+                  <div className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-purple-700" />
+                    Tách Căn Hộ / Sàn Cao Tầng (Bảo Toàn Diện Tích Đất Sổ Gốc)
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Diện tích Sổ con mới tách (m²) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="VD: 150.5"
-                      value={area}
-                      onChange={(e) => handleChildAreaChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Diện tích còn lại của Sổ gốc (m²) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="Tự động tính hoặc nhập tay..."
-                      value={remainingArea}
-                      onChange={(e) => setRemainingArea(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-semibold text-amber-900"
-                      required
-                    />
-                  </div>
-                </div>
-                {selectedParentAsset?.area && area && remainingArea && (
-                  <p className="text-[11px] text-amber-800 italic">
-                    Công thức: {selectedParentAsset.area} m² (Gốc) - {area} m² (Mới) = {remainingArea} m² (Còn lại của Sổ gốc sau duyệt)
+                  <p className="text-xs text-purple-800 leading-relaxed">
+                    Tài sản thuộc nhóm <strong>Cao tầng / Căn hộ / Sàn 3D</strong> ({assetType}). Diện tích thông thủy của căn hộ/sàn độc lập với diện tích đất xây dựng của Sổ gốc và <strong>không bị trừ lùi</strong> vào diện tích Sổ gốc.
                   </p>
-                )}
-              </div>
+                  <div className="pt-1 flex items-center gap-2 text-xs text-purple-900 font-semibold">
+                    <span>Diện tích Sổ gốc: {selectedParentAsset?.area ? `${selectedParentAsset.area} m²` : 'Chưa rõ DT'} (Giữ nguyên)</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3">
+                  <div className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    Tính Toán Diện Tích Tách Sổ Một Phần (Thấp Tầng / Đất Nền)
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div className="bg-white p-3 rounded-lg border border-amber-200">
+                      <span className="text-gray-500 block">Diện tích Sổ gốc (m²)</span>
+                      <span className="text-base font-bold text-gray-900">
+                        {selectedParentAsset?.area ? `${selectedParentAsset.area} m²` : 'Chưa có thông tin'}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Diện tích Sổ con mới tách (m²) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="VD: 150.5"
+                        value={area}
+                        onChange={(e) => handleChildAreaChange(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Diện tích còn lại của Sổ gốc (m²) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Tự động tính hoặc nhập tay..."
+                        value={remainingArea}
+                        onChange={(e) => setRemainingArea(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-semibold text-amber-900"
+                        required
+                      />
+                    </div>
+                  </div>
+                  {selectedParentAsset?.area && area && remainingArea && (
+                    <p className="text-[11px] text-amber-800 italic">
+                      Công thức: {selectedParentAsset.area} m² (Gốc) - {area} m² (Mới) = {remainingArea} m² (Còn lại của Sổ gốc sau duyệt)
+                    </p>
+                  )}
+                </div>
+              )
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Số GCN <span className="text-red-500">*</span></label>
                 <input
@@ -496,6 +605,34 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                   {projects.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Loại Tài Sản *</label>
+                <select
+                  value={assetType}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    setAssetType(newType);
+                    if (isHighRiseAsset(newType) && selectedParentAsset?.area) {
+                      setRemainingArea(selectedParentAsset.area.toString());
+                    } else if (selectedParentAsset?.area && area) {
+                      const rem = Math.max(0, Number((selectedParentAsset.area - Number(area)).toFixed(2)));
+                      setRemainingArea(rem.toString());
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-medium text-gray-900"
+                >
+                  <optgroup label="🏢 Cao tầng / Căn hộ / Sàn 3D">
+                    {HIGH_RISE_ASSET_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🏡 Thấp tầng / Đất nền">
+                    {LOW_RISE_ASSET_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             </div>
@@ -629,7 +766,7 @@ export const DeclareNewAssetModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                 <input type="text" value={legalLotCode} onChange={e => setLegalLotCode(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Phân khu A-Lô 12..." />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Diện tích (m²)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">{getAreaLabel(assetType)}</label>
                 <input type="number" step="0.01" value={area} onChange={e => setArea(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
             </div>

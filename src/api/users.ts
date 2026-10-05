@@ -18,42 +18,27 @@ export {
 };
 
 export async function fetchProfiles(): Promise<Profile[]> {
-  let baseProfiles: Profile[] = [];
-
   if (!isSupabaseConfigured) {
-    baseProfiles = mockStore.getProfiles();
-  } else {
-    try {
-      const { data, error } = await withTimeout(
-        supabase
-          .from('profiles')
-          .select('*, regions(name), areas(name)')
-          .order('created_at', { ascending: false }),
-        DEFAULT_READ_TIMEOUT
-      );
-
-      if (error) {
-        if (isSchemaMissingError(error)) {
-          console.warn('Bảng profiles hoặc quan hệ regions/areas chưa có trên Supabase, dùng mockStore:', error.message);
-          baseProfiles = mockStore.getProfiles();
-        } else {
-          console.warn('Lỗi khi tải danh sách profiles từ Supabase:', error);
-          baseProfiles = mockStore.getProfiles();
-        }
-      } else {
-        baseProfiles = data || [];
-      }
-    } catch (err: any) {
-      if (isSchemaMissingError(err)) {
-        baseProfiles = mockStore.getProfiles();
-      } else {
-        console.warn('Lỗi fetchProfiles, fallback sang mockStore:', err);
-        baseProfiles = mockStore.getProfiles();
-      }
-    }
+    return mockStore.getProfiles();
   }
 
-  return baseProfiles;
+  try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('profiles')
+        .select('*, regions(name), areas(name)')
+        .order('created_at', { ascending: false }),
+      DEFAULT_READ_TIMEOUT
+    );
+
+    if (error) {
+      throw new Error('Lỗi khi tải danh sách người dùng từ Supabase: ' + error.message);
+    }
+
+    return data || [];
+  } catch (err: any) {
+    throw err instanceof Error ? err : new Error('Không thể tải danh sách người dùng: ' + String(err));
+  }
 }
 
 export async function updateUserRole(userId: string, role: Role) {

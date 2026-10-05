@@ -63,7 +63,12 @@ export async function approveDeclarationRequest(requestId: string, assetCodePref
     DEFAULT_WRITE_TIMEOUT
   );
 
-  if (error) throw new Error('Lỗi approveDeclarationRequest: ' + error.message);
+  if (error) {
+    if (error.message && error.message.includes('DUPLICATE_UNCONFIRMED')) {
+      throw new Error('Số GCN đã tồn tại trong hệ thống. Vui lòng kiểm tra lại hồ sơ trước khi duyệt.');
+    }
+    throw new Error('Lỗi approveDeclarationRequest: ' + error.message);
+  }
 }
 
 export async function bulkApproveDeclarationRequests(

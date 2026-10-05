@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
 import { Notification } from '../types';
 
@@ -18,17 +18,11 @@ export async function fetchNotifications(userId?: string): Promise<Notification[
 
     const { data, error } = await withTimeout(query, DEFAULT_READ_TIMEOUT);
     if (error) {
-      if (isSchemaMissingError(error)) {
-        console.warn('Bảng notifications chưa có trong Supabase, sử dụng mockStore:', error.message);
-        return mockStore.getNotifications(userId);
-      }
-      console.warn('Lỗi khi tải thông báo từ Supabase, sử dụng mockStore:', error);
-      return mockStore.getNotifications(userId);
+      throw new Error('Lỗi khi tải thông báo từ Supabase: ' + error.message);
     }
     return data || [];
   } catch (err: any) {
-    console.warn('Lỗi trong hàm fetchNotifications, fallback sang mockStore:', err);
-    return mockStore.getNotifications(userId);
+    throw err instanceof Error ? err : new Error('Không thể tải thông báo: ' + String(err));
   }
 }
 
@@ -47,21 +41,10 @@ export async function markNotificationAsRead(id: string): Promise<void> {
     );
 
     if (error) {
-      if (isSchemaMissingError(error)) {
-        mockStore.markNotificationAsRead(id);
-        return;
-      }
-      console.warn('Lỗi khi đánh dấu thông báo đã đọc trên Supabase:', error);
-      mockStore.markNotificationAsRead(id);
-      return;
+      throw new Error('Lỗi khi đánh dấu thông báo đã đọc trên Supabase: ' + error.message);
     }
-
-    try {
-      mockStore.markNotificationAsRead(id);
-    } catch {}
   } catch (err: any) {
-    console.warn('Lỗi trong hàm markNotificationAsRead, cập nhật trên mockStore:', err);
-    mockStore.markNotificationAsRead(id);
+    throw err instanceof Error ? err : new Error('Không thể đánh dấu thông báo đã đọc: ' + String(err));
   }
 }
 
@@ -77,21 +60,10 @@ export async function markAllNotificationsAsRead(userId?: string): Promise<void>
     }
     const { error } = await withTimeout(query, DEFAULT_WRITE_TIMEOUT);
     if (error) {
-      if (isSchemaMissingError(error)) {
-        mockStore.markAllNotificationsAsRead(userId);
-        return;
-      }
-      console.warn('Lỗi khi đánh dấu toàn bộ thông báo đã đọc trên Supabase:', error);
-      mockStore.markAllNotificationsAsRead(userId);
-      return;
+      throw new Error('Lỗi khi đánh dấu tất cả thông báo đã đọc trên Supabase: ' + error.message);
     }
-
-    try {
-      mockStore.markAllNotificationsAsRead(userId);
-    } catch {}
   } catch (err: any) {
-    console.warn('Lỗi trong hàm markAllNotificationsAsRead, cập nhật trên mockStore:', err);
-    mockStore.markAllNotificationsAsRead(userId);
+    throw err instanceof Error ? err : new Error('Không thể đánh dấu tất cả thông báo đã đọc: ' + String(err));
   }
 }
 
@@ -137,20 +109,11 @@ export async function createNotification(data: {
     );
 
     if (error) {
-      if (isSchemaMissingError(error)) {
-        return mockStore.addNotification(newNotif);
-      }
-      console.warn('Lỗi khi tạo thông báo trên Supabase, lưu vào mockStore:', error);
-      return mockStore.addNotification(newNotif);
+      throw new Error('Lỗi khi tạo thông báo trên Supabase: ' + error.message);
     }
-
-    try {
-      mockStore.addNotification(inserted);
-    } catch {}
 
     return inserted;
   } catch (err: any) {
-    console.warn('Lỗi trong hàm createNotification, lưu vào mockStore:', err);
-    return mockStore.addNotification(newNotif);
+    throw err instanceof Error ? err : new Error('Không thể tạo thông báo: ' + String(err));
   }
 }

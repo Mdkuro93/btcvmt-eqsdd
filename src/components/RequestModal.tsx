@@ -5,6 +5,8 @@ import { TransactionType, TransactionReason, Asset } from '../types';
 import { DEFAULT_WAREHOUSE_SLA_DAYS, DEFAULT_RETURN_DAYS } from '../lib/constants';
 import { previewVoucherCode } from '../lib/voucherEngine';
 import { fetchInvestorEntities } from '../api/investorEntities';
+import { validateScanLink } from '../lib/scanLink';
+import toast from 'react-hot-toast';
 
 interface Props {
   isOpen: boolean;
@@ -234,12 +236,18 @@ export const RequestModal: React.FC<Props> = ({
     if (!selectedOpt) return;
     if (selectedOpt.reason === 'khác' && otherReasonDetail.trim().length < OTHER_REASON_MIN_LENGTH) return;
 
+    const scanValidation = validateScanLink(scanUrl);
+    if (!scanValidation.ok) {
+      toast.error(scanValidation.error || 'Link bản scan không hợp lệ.');
+      return;
+    }
+
     setLoading(true);
     try {
       let details: any = {
         reason: selectedOpt.reason,
-        scan_url: scanUrl.trim() || null,
-        scanUrl: scanUrl.trim() || null,
+        scan_url: scanValidation.url || null,
+        scanUrl: scanValidation.url || null,
       };
 
       if (selectedOpt.reason === 'khác') {

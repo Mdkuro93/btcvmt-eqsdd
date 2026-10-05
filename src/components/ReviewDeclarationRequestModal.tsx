@@ -17,12 +17,21 @@ import {
   GitFork,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchProjects, fetchWarehouses, fetchAssetIdentifierCandidates, fetchAssets } from '../api/assets';
+import { fetchProjects, fetchWarehouses, fetchAssets, fetchAssetById, checkAssetDuplicateServer, peekNextAssetCode } from '../api/assets';
 import { updateDeclarationRequest, approveDeclarationRequest } from '../api/assetDeclarationRequests';
 import { fetchInvestorEntities } from '../api/investorEntities';
-import { PROPERTY_TYPES, COLLATERAL_TYPES, checkAssetDuplicate, generateNextAssetCode } from '../lib/assetIdentifier';
+import { COLLATERAL_TYPES, resolveRegionCode, getProvinceCode } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
+import {
+  HIGH_RISE_ASSET_TYPES,
+  LOW_RISE_ASSET_TYPES,
+  isHighRiseAsset,
+  isLowRiseAsset,
+  getAreaLabel,
+  getAreaSubLabel,
+} from '../constants/assetTypes';
+import { validateScanLink } from '../lib/scanLink';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -43,7 +52,6 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
   const [approving, setApproving] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [allAssets, setAllAssets] = useState<any[]>([]);
   const [investorEntities, setInvestorEntities] = useState<any[]>([]);
 
   // Request & Old Asset
@@ -51,6 +59,9 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
   const [relationshipType, setRelationshipType] = useState<'SPLIT_FULL' | 'SPLIT_PARTIAL' | 'RENEW' | 'MERGE'>('SPLIT_FULL');
   const [remainingArea, setRemainingArea] = useState('');
   const [oldAssetId, setOldAssetId] = useState('');
+  const [selectedParentAsset, setSelectedParentAsset] = useState<any>(null);
+  const [parentSearchResults, setParentSearchResults] = useState<any[]>([]);
+  const [isSearchingParent, setIsSearchingParent] = useState(false);
   const [searchOldAsset, setSearchOldAsset] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -116,13 +127,30 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
 
       const pId = request.parent_asset_id || request.old_asset_id || '';
       setOldAssetId(pId);
-      if (pId && allAssets.length > 0) {
-        const oldAsset = allAssets.find(a => a.id === pId);
-        if (oldAsset) {
-          const inWh = oldAsset.is_in_warehouse !== undefined ? Boolean(oldAsset.is_in_warehouse) : (oldAsset.custody_status === 'in_stock');
-          const whName = oldAsset.warehouses?.name || 'Kho lưu trữ';
-          setSearchOldAsset(`[${oldAsset.asset_code || 'Chưa cấp mã'}] - ${oldAsset.certificate_no} - ${inWh ? `🔴 Đang lưu tại ${whName}` : '🟢 Đã xuất kho'}`);
+      if (pId) {
+        if (request.old_asset) {
+          setSelectedParentAsset(request.old_asset);
+          const inWh = request.old_asset.is_in_warehouse !== undefined ? Boolean(request.old_asset.is_in_warehouse) : (request.old_asset.custody_status === 'in_stock');
+          const whName = request.old_asset.warehouses?.name || 'Kho lưu trữ';
+          setSearchOldAsset(`[${request.old_asset.asset_code || 'Chưa cấp mã'}] - ${request.old_asset.certificate_no} - ${inWh ? `🔴 Đang lưu tại ${whName}` : '🟢 Đã xuất kho'}`);
+        } else if (request.parent_asset) {
+          setSelectedParentAsset(request.parent_asset);
+          const inWh = request.parent_asset.is_in_warehouse !== undefined ? Boolean(request.parent_asset.is_in_warehouse) : (request.parent_asset.custody_status === 'in_stock');
+          const whName = request.parent_asset.warehouses?.name || 'Kho lưu trữ';
+          setSearchOldAsset(`[${request.parent_asset.asset_code || 'Chưa cấp mã'}] - ${request.parent_asset.certificate_no} - ${inWh ? `🔴 Đang lưu tại ${whName}` : '🟢 Đã xuất kho'}`);
+        } else {
+          fetchAssetById(pId).then(oldAsset => {
+            if (oldAsset) {
+              setSelectedParentAsset(oldAsset);
+              const inWh = oldAsset.is_in_warehouse !== undefined ? Boolean(oldAsset.is_in_warehouse) : (oldAsset.custody_status === 'in_stock');
+              const whName = oldAsset.warehouses?.name || 'Kho lưu trữ';
+              setSearchOldAsset(`[${oldAsset.asset_code || 'Chưa cấp mã'}] - ${oldAsset.certificate_no} - ${inWh ? `🔴 Đang lưu tại ${whName}` : '🟢 Đã xuất kho'}`);
+            }
+          }).catch(() => {});
         }
+      } else {
+        setSelectedParentAsset(null);
+        setSearchOldAsset('');
       }
 
       setCollateralType(request.collateral_type || 'BDS');
@@ -170,47 +198,78 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       setNotes(request.notes || '');
       setDuplicateWarning(null);
     }
-  }, [request, isOpen, investorEntities, allAssets]);
+  }, [request, isOpen, investorEntities]);
 
   const loadData = async () => {
     try {
-      const [p, w, a, e] = await Promise.all([
+      const [p, w, e] = await Promise.all([
         fetchProjects(),
         fetchWarehouses(),
-        fetchAssetIdentifierCandidates(),
         fetchInvestorEntities(),
       ]);
       setProjects(p);
       setWarehouses(w);
-      setAllAssets(a);
       setInvestorEntities(e);
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Live duplicate warning check
+  // Debounced search for parent asset (debounce 400ms, minimum 2 characters, max 20 results)
+  useEffect(() => {
+    if (!isOpen || !showDropdown) return;
+    const term = searchOldAsset.trim();
+    if (term.length < 2) {
+      setParentSearchResults([]);
+      setIsSearchingParent(false);
+      return;
+    }
+
+    setIsSearchingParent(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchAssets({ search: term }, 1, 20);
+        setParentSearchResults(res.data ? res.data.slice(0, 20) : []);
+      } catch (err) {
+        console.error('Lỗi tìm kiếm sổ gốc:', err);
+        setParentSearchResults([]);
+      } finally {
+        setIsSearchingParent(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchOldAsset, isOpen, showDropdown]);
+
+  // Live duplicate warning check qua RPC máy chủ (check_asset_duplicate)
   useEffect(() => {
     if (!isOpen) return;
-    const dup = checkAssetDuplicate(
-      {
-        certificate_no: certificateNo,
-        project_id: projectId || null,
-        legal_lot_code: legalLotCode || null,
-        map_sheet_no: mapSheetNo || null,
-        land_lot_no: landLotNo || null,
-      },
-      allAssets,
-      undefined,
-      projects.find(p => p.id === projectId)?.name
-    );
-
-    if (dup.isDuplicate) {
-      setDuplicateWarning(dup.reason || 'Trùng lặp dữ liệu GCN trong hệ thống!');
-    } else {
+    if (!certificateNo.trim() && !legalLotCode.trim() && (!mapSheetNo.trim() || !landLotNo.trim())) {
       setDuplicateWarning(null);
+      return;
     }
-  }, [certificateNo, projectId, legalLotCode, mapSheetNo, landLotNo, allAssets, isOpen, projects]);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await checkAssetDuplicateServer({
+          certificateNo: certificateNo.trim() || null,
+          projectId: projectId || null,
+          legalLotCode: legalLotCode.trim() || null,
+          mapSheetNo: mapSheetNo.trim() || null,
+          landLotNo: landLotNo.trim() || null,
+        });
+        if (res.is_duplicate) {
+          setDuplicateWarning(res.reason || 'Trùng lặp dữ liệu GCN trong hệ thống!');
+        } else {
+          setDuplicateWarning(null);
+        }
+      } catch (err) {
+        console.error('Lỗi khi kiểm tra trùng GCN:', err);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [certificateNo, projectId, legalLotCode, mapSheetNo, landLotNo, isOpen]);
 
   const filteredEntities = investorEntities
     .filter(e => {
@@ -219,15 +278,6 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
     })
     .slice(0, 50);
 
-  const filteredAssets = allAssets
-    .filter(a => {
-      if (!searchOldAsset) return false;
-      const s = searchOldAsset.toLowerCase();
-      return a.certificate_no?.toLowerCase().includes(s) || a.asset_code?.toLowerCase().includes(s) || a.legal_lot_code?.toLowerCase().includes(s);
-    })
-    .slice(0, 20);
-
-  const selectedParentAsset = allAssets.find(a => a.id === oldAssetId);
   const isParentInWarehouse = selectedParentAsset ? (
     selectedParentAsset.is_in_warehouse !== undefined
       ? Boolean(selectedParentAsset.is_in_warehouse)
@@ -237,10 +287,16 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
   const handleChildAreaChange = (newAreaStr: string) => {
     setArea(newAreaStr);
     if (requestType === 'tach_so' && relationshipType === 'SPLIT_PARTIAL' && selectedParentAsset?.area) {
-      const childVal = Number(newAreaStr);
-      if (!isNaN(childVal) && childVal > 0) {
-        const rem = Math.max(0, Number((selectedParentAsset.area - childVal).toFixed(2)));
-        setRemainingArea(rem.toString());
+      if (isHighRiseAsset(assetType)) {
+        // Cao tầng: Không trừ lùi diện tích sổ gốc
+        setRemainingArea(selectedParentAsset.area.toString());
+      } else {
+        // Thấp tầng: Trừ lùi diện tích sổ gốc
+        const childVal = Number(newAreaStr);
+        if (!isNaN(childVal) && childVal > 0) {
+          const rem = Math.max(0, Number((selectedParentAsset.area - childVal).toFixed(2)));
+          setRemainingArea(rem.toString());
+        }
       }
     }
   };
@@ -272,7 +328,7 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       invalidation_type: inval,
       parent_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
       old_asset_id: (requestType === 'tach_so' || requestType === 'cap_doi') ? oldAssetId : null,
-      remaining_area: (requestType === 'tach_so' && relationshipType === 'SPLIT_PARTIAL' && remainingArea) ? Number(remainingArea) : null,
+      remaining_area: (requestType === 'tach_so' && relationshipType === 'SPLIT_PARTIAL' && isLowRiseAsset(assetType) && remainingArea) ? Number(remainingArea) : null,
       certificate_no: certificateNo.trim(),
       registry_no: registryNo.trim() || null,
       registry_date: registryDate || null,
@@ -292,7 +348,7 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       collateral_type: collateralType || 'BDS',
       warehouse_id: warehouseId || null,
       managing_unit: managingUnit.trim() || null,
-      scan_file_url: scanFileUrl.trim() || null,
+      scan_file_url: (validateScanLink(scanFileUrl).url) || null,
       mortgage_status: isMortgaged ? 'mortgaged' : 'none',
       mortgage_bank: isMortgaged ? (mortgageBank.trim() || null) : null,
       mortgage_unit: isMortgaged ? (mortgageUnit.trim() || null) : null,
@@ -311,6 +367,13 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       toast.error('Vui lòng nhập số GCN');
       return;
     }
+
+    const scanValidation = validateScanLink(scanFileUrl);
+    if (!scanValidation.ok) {
+      toast.error(scanValidation.error || 'Link bản scan không hợp lệ.');
+      return;
+    }
+
     if ((requestType === 'tach_so' || requestType === 'cap_doi')) {
       if (!oldAssetId) {
         toast.error('Vui lòng chọn sổ gốc / GCN cũ');
@@ -325,14 +388,33 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
         );
         return;
       }
-      if (relationshipType === 'SPLIT_PARTIAL' && (!remainingArea || Number(remainingArea) <= 0)) {
-        toast.error('Vui lòng nhập diện tích còn lại hợp lệ cho Sổ gốc khi tách 1 phần');
+      if (relationshipType === 'SPLIT_PARTIAL' && isLowRiseAsset(assetType) && (!remainingArea || Number(remainingArea) <= 0)) {
+        toast.error('Vui lòng nhập diện tích còn lại hợp lệ cho Sổ gốc khi tách 1 phần đất');
         return;
       }
     }
 
     setLoading(true);
     try {
+      // Kiểm tra trùng GCN qua RPC check_asset_duplicate trên server (chỉ cảnh báo, không chặn lưu thông tin)
+      try {
+        const dupCheck = await checkAssetDuplicateServer({
+          certificateNo: certificateNo.trim(),
+          projectId: projectId || null,
+          legalLotCode: legalLotCode.trim() || null,
+          mapSheetNo: mapSheetNo.trim() || null,
+          landLotNo: landLotNo.trim() || null,
+        });
+        if (dupCheck.is_duplicate) {
+          toast(
+            `Cảnh báo trùng GCN: ${dupCheck.reason || 'Dữ liệu trùng lặp trong hệ thống'}.`,
+            { icon: '⚠️', duration: 5000 }
+          );
+        }
+      } catch (checkErr) {
+        console.warn('Không thể kiểm tra trùng GCN:', checkErr);
+      }
+
       const payload = buildPayload();
       await updateDeclarationRequest(request.id, payload);
       toast.success('Đã lưu thông tin bổ sung của GCN!');
@@ -351,6 +433,13 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       toast.error('Vui lòng nhập số GCN trước khi duyệt');
       return;
     }
+
+    const scanValidation = validateScanLink(scanFileUrl);
+    if (!scanValidation.ok) {
+      toast.error(scanValidation.error || 'Link bản scan không hợp lệ.');
+      return;
+    }
+
     if (!warehouseId) {
       toast.error('Vui lòng chọn Kho lưu trữ tiếp nhận sổ');
       return;
@@ -370,15 +459,10 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
         );
         return;
       }
-      if (relationshipType === 'SPLIT_PARTIAL' && (!remainingArea || Number(remainingArea) <= 0)) {
-        toast.error('Vui lòng nhập diện tích còn lại hợp lệ cho Sổ gốc khi tách 1 phần');
+      if (relationshipType === 'SPLIT_PARTIAL' && isLowRiseAsset(assetType) && (!remainingArea || Number(remainingArea) <= 0)) {
+        toast.error('Vui lòng nhập diện tích còn lại hợp lệ cho Sổ gốc khi tách 1 phần đất');
         return;
       }
-    }
-
-    if (duplicateWarning) {
-      const confirmDup = window.confirm(`${duplicateWarning}\n\nBạn có chắc chắn muốn tiếp tục duyệt và nhập kho GCN này?`);
-      if (!confirmDup) return;
     }
 
     setApproving(true);
@@ -387,15 +471,15 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       const payload = buildPayload();
       await updateDeclarationRequest(request.id, payload);
 
-      // 2. Tính tiền tố mã tài sản (nếu cấp mới hoặc tách sổ)
+      // 2. Tính tiền tố mã tài sản (nếu cấp mới hoặc tách sổ) qua peekNextAssetCode trên server
       let prefix = null;
       if (requestType === 'cap_moi' || requestType === 'tach_so') {
-        const assetsRes = await fetchAssets({ projectId: projectId || undefined, collateralType });
-        const existingAssets = assetsRes.data || [];
         const selectedProj = projects.find(p => p.id === projectId);
-        const provCode = selectedProj?.areas?.province_code || selectedProj?.areas?.name;
-        const fullCode = generateNextAssetCode(undefined, provCode, collateralType, existingAssets);
-        prefix = fullCode.substring(0, fullCode.lastIndexOf('_') + 1);
+        const wh = warehouses.find(w => w.id === warehouseId);
+        const regCode = resolveRegionCode(projectId, projects, wh?.region_code);
+        const provCode = getProvinceCode(selectedProj?.areas?.province_code || selectedProj?.areas?.name || 'DNG');
+        const codePreview = await peekNextAssetCode(regCode, provCode, collateralType);
+        prefix = codePreview.substring(0, codePreview.lastIndexOf('_') + 1);
       }
 
       // 3. Gọi RPC duyệt và sinh phiếu nhập kho (PN)
@@ -563,9 +647,9 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
                       />
                     </div>
 
-                    {canEdit && showDropdown && filteredAssets.length > 0 && (
+                    {canEdit && showDropdown && parentSearchResults.length > 0 && (
                       <div className="absolute z-20 left-3 right-3 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto divide-y divide-gray-100">
-                        {filteredAssets.map(a => {
+                        {parentSearchResults.map(a => {
                           const inWh = a.is_in_warehouse !== undefined ? Boolean(a.is_in_warehouse) : (a.custody_status === 'in_stock');
                           const whName = a.warehouses?.name || 'Kho lưu trữ';
                           return (
@@ -574,6 +658,7 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
                               type="button"
                               onClick={() => {
                                 setOldAssetId(a.id);
+                                setSelectedParentAsset(a);
                                 setSearchOldAsset(`[${a.asset_code || 'Chưa cấp mã'}] - ${a.certificate_no} - ${inWh ? `🔴 Đang lưu tại ${whName}` : '🟢 Đã xuất kho'}`);
                                 setShowDropdown(false);
                                 if (requestType === 'tach_so' && relationshipType === 'SPLIT_PARTIAL' && a.area && area) {
@@ -648,55 +733,70 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
 
               {/* DIỆN TÍCH VÀ DIỆN TÍCH CÒN LẠI KHI TÁCH 1 PHẦN */}
               {requestType === 'tach_so' && relationshipType === 'SPLIT_PARTIAL' && (
-                <div className="p-3.5 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2.5">
-                  <div className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                    Cân Đối Diện Tích Tách Sổ Một Phần
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                    <div className="bg-white p-2.5 rounded-lg border border-amber-200">
-                      <span className="text-gray-500 block text-[11px]">Diện tích Sổ gốc (m²)</span>
-                      <span className="text-sm font-bold text-gray-900">
-                        {selectedParentAsset?.area ? `${selectedParentAsset.area} m²` : 'Chưa có thông tin'}
-                      </span>
+                isHighRiseAsset(assetType) ? (
+                  <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-xl space-y-2">
+                    <div className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-purple-700" />
+                      Tách Căn Hộ / Sàn Cao Tầng (Bảo Toàn Diện Tích Đất Sổ Gốc)
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                        Diện tích Sổ con mới tách (m²) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="VD: 150.5"
-                        value={area}
-                        onChange={(e) => handleChildAreaChange(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white font-medium"
-                        required
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                        Diện tích còn lại của Sổ gốc (m²) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Tự động tính hoặc nhập tay..."
-                        value={remainingArea}
-                        onChange={(e) => setRemainingArea(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white font-semibold text-amber-900"
-                        required
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-                  {selectedParentAsset?.area && area && remainingArea && (
-                    <p className="text-[11px] text-amber-800 italic">
-                      Công thức: {selectedParentAsset.area} m² (Gốc) - {area} m² (Mới) = {remainingArea} m² (Sổ gốc sau khi tách)
+                    <p className="text-xs text-purple-800 leading-relaxed">
+                      Tài sản thuộc nhóm <strong>Cao tầng / Căn hộ / Sàn 3D</strong> ({assetType || 'Chưa chọn'}). Diện tích thông thủy của căn hộ/sàn độc lập với diện tích đất xây dựng của Sổ gốc và <strong>không bị trừ lùi</strong> vào diện tích Sổ gốc.
                     </p>
-                  )}
-                </div>
+                    <div className="pt-1 flex items-center gap-2 text-xs text-purple-900 font-semibold">
+                      <span>Diện tích Sổ gốc: {selectedParentAsset?.area ? `${selectedParentAsset.area} m²` : 'Chưa rõ DT'} (Giữ nguyên)</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2.5">
+                    <div className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      Cân Đối Diện Tích Tách Sổ Một Phần (Thấp Tầng / Đất Nền)
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="bg-white p-2.5 rounded-lg border border-amber-200">
+                        <span className="text-gray-500 block text-[11px]">Diện tích Sổ gốc (m²)</span>
+                        <span className="text-sm font-bold text-gray-900">
+                          {selectedParentAsset?.area ? `${selectedParentAsset.area} m²` : 'Chưa có thông tin'}
+                        </span>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                          Diện tích Sổ con mới tách (m²) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="VD: 150.5"
+                          value={area}
+                          onChange={(e) => handleChildAreaChange(e.target.value)}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white font-medium"
+                          required
+                          disabled={!canEdit}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                          Diện tích còn lại của Sổ gốc (m²) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Tự động tính hoặc nhập tay..."
+                          value={remainingArea}
+                          onChange={(e) => setRemainingArea(e.target.value)}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white font-semibold text-amber-900"
+                          required
+                          disabled={!canEdit}
+                        />
+                      </div>
+                    </div>
+                    {selectedParentAsset?.area && area && remainingArea && (
+                      <p className="text-[11px] text-amber-800 italic">
+                        Công thức: {selectedParentAsset.area} m² (Gốc) - {area} m² (Mới) = {remainingArea} m² (Sổ gốc sau khi tách)
+                      </p>
+                    )}
+                  </div>
+                )
               )}
             </div>
 
@@ -828,11 +928,18 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
                           value={assetType}
                           onChange={e => setAssetType(e.target.value)}
                           disabled={!canEdit}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white disabled:bg-gray-100"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white disabled:bg-gray-100 font-medium"
                         >
-                          {PROPERTY_TYPES.map(pt => (
-                            <option key={pt} value={pt}>{pt}</option>
-                          ))}
+                          <optgroup label="🏢 Cao tầng / Căn hộ / Sàn 3D">
+                            {HIGH_RISE_ASSET_TYPES.map(t => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="🏡 Thấp tầng / Đất nền">
+                            {LOW_RISE_ASSET_TYPES.map(t => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </optgroup>
                         </select>
                       </div>
 
@@ -850,7 +957,7 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Diện tích (m²)</label>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">{getAreaLabel(assetType)}</label>
                         <input
                           type="number"
                           step="0.01"
