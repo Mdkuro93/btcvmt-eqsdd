@@ -1,6 +1,16 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT } from '../lib/supabase';
-import { mockStore } from '../lib/mockStore';
 import { sanitizeUuid } from './assets';
+
+export function isDuplicateUnconfirmed(message?: string | null): boolean {
+  if (!message) return false;
+  return message.includes('DUPLICATE_UNCONFIRMED');
+}
+
+export interface BulkApproveDeclarationItem {
+  request_id: string;
+  asset_code_prefix: string | null;
+  duplicate_ack_reason?: string | null;
+}
 
 export async function fetchDeclarationRequests(filters?: any): Promise<any[]> {
   if (!isSupabaseConfigured) {
@@ -49,37 +59,60 @@ export async function createDeclarationRequest(payload: any): Promise<any> {
   return true;
 }
 
-export async function approveDeclarationRequest(requestId: string, assetCodePrefix: string | null = null): Promise<void> {
+export async function approveDeclarationRequest(
+  requestId: string,
+  assetCodePrefix: string | null = null,
+  duplicateAckReason: string | null = null
+): Promise<void> {
   if (!isSupabaseConfigured) {
     throw new Error('Tính năng này yêu cầu kết nối Supabase.');
   }
+
+  const cleanAck = duplicateAckReason ? duplicateAckReason.trim() : null;
 
   const { error } = await withTimeout(
     supabase.rpc('approve_asset_declaration_request', {
       p_request_id: requestId,
       p_decision: 'approved',
-      p_asset_code_prefix: assetCodePrefix
+      p_asset_code_prefix: assetCodePrefix,
+      p_duplicate_ack_reason: cleanAck && cleanAck.length > 0 ? cleanAck : null
     }),
     DEFAULT_WRITE_TIMEOUT
   );
 
   if (error) {
-    if (error.message && error.message.includes('DUPLICATE_UNCONFIRMED')) {
-      throw new Error('Số GCN đã tồn tại trong hệ thống. Vui lòng kiểm tra lại hồ sơ trước khi duyệt.');
+    if (isDuplicateUnconfirmed(error.message)) {
+      const err = new Error(error.message) as Error & { code: string };
+      err.code = 'DUPLICATE_UNCONFIRMED';
+      throw err;
     }
     throw new Error('Lỗi approveDeclarationRequest: ' + error.message);
   }
 }
 
 export async function bulkApproveDeclarationRequests(
-  items: { request_id: string; asset_code_prefix: string | null }[]
+  items: BulkApproveDeclarationItem[]
 ): Promise<{ request_id: string; asset_id: string | null; error_message: string | null }[]> {
   if (!isSupabaseConfigured) {
     throw new Error('Tính năng này yêu cầu kết nối Supabase.');
   }
 
+  const sanitizedItems = items.map((it) => {
+    const itemObj: Record<string, any> = {
+      request_id: it.request_id,
+      asset_code_prefix: it.asset_code_prefix,
+    };
+    if (it.duplicate_ack_reason) {
+      const trimmed = it.duplicate_ack_reason.trim();
+      if (trimmed.length > 0) {
+        itemObj.duplicate_ack_reason = trimmed;
+      }
+    }
+    return itemObj;
+  });
+
   const { data, error } = await withTimeout(
-    supabase.rpc('approve_asset_declaration_requests_bulk', { p_items: items }),
+    supabase.rpc('approve_asset_declaration_requests_bulk', { p_items: sanitizedItems }),
     DEFAULT_WRITE_TIMEOUT
   );
 

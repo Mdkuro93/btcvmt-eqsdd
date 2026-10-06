@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Asset, AuditLog } from '../types';
 import { fetchAuditLogs } from '../api/auditLogs';
+import { fetchWarehouses, fetchProjects, fetchAssetById } from '../api/assets';
+import { fetchInvestorEntities } from '../api/investorEntities';
 import { 
   X, 
   History, 
@@ -34,6 +36,49 @@ const FIELD_LABELS: Record<string, { label: string; icon?: any }> = {
   business_plot_code: { label: 'Mã Lô Kinh Doanh (Mã bán hàng)', icon: Tag },
   project_id: { label: 'Dự Án Pháp Lý' },
   legal_lot_code: { label: 'Mã Lô Pháp Lý', icon: Layers },
+  certificate_no: { label: 'Số GCN QSDĐ' },
+  new_certificate_no: { label: 'Số GCN Mới' },
+  registry_no: { label: 'Số Vào Sổ Cấp' },
+  registry_date: { label: 'Ngày Vào Sổ Cấp' },
+  usage_term_date: { label: 'Ngày Hết Hạn Sử Dụng' },
+  land_lot_no: { label: 'Số Thửa Bản Đồ' },
+  map_sheet_no: { label: 'Số Tờ Bản Đồ' },
+  area: { label: 'Diện Tích (m²)' },
+  original_area: { label: 'Diện Tích Gốc (m²)' },
+  remaining_area: { label: 'Diện Tích Còn Lại (m²)' },
+  current_owner_entity_id: { label: 'Chủ Sở Hữu (Pháp nhân)' },
+  asset_type: { label: 'Loại Tài Sản' },
+  usage_purpose: { label: 'Mục Đích Sử Dụng' },
+  usage_term_type: { label: 'Loại Thời Hạn Sử Dụng' },
+  sale_status: { label: 'Trạng Thái Kinh Doanh' },
+  custody_status: { label: 'Trạng Thái Lưu Kho' },
+  lifecycle_status: { label: 'Trạng Thái Pháp Lý' },
+  status: { label: 'Trạng Thái' },
+  mortgage_status: { label: 'Trạng Thái Thế Chấp' },
+  mortgage_bank: { label: 'Ngân Hàng Thế Chấp' },
+  mortgage_unit: { label: 'Đơn Vị Vay' },
+  mortgage_valuation: { label: 'Định Giá Thế Chấp' },
+  collateral_ratio: { label: 'Tỷ Lệ Bảo Đảm (%)' },
+  collateral_value: { label: 'Giá Trị Bảo Đảm' },
+  mortgage_expected_release_date: { label: 'Ngày Dự Kiến Giải Chấp' },
+  scan_file_url: { label: 'Link Bản Scan' },
+  managing_unit: { label: 'Đơn Vị Quản Lý' },
+  holder: { label: 'Người Giữ' },
+  holder_name: { label: 'Người Giữ' },
+  is_in_warehouse: { label: 'Đang Lưu Kho' },
+  invalidation_type: { label: 'Loại Vô Hiệu' },
+  relationship_type: { label: 'Quan Hệ Sổ' },
+  parent_asset_id: { label: 'Sổ Gốc' },
+  duplicate_ack_reason: { label: 'Lý Do Xác Nhận Trùng Số GCN' },
+  new_owner_code: { label: 'Mã Công Ty Chủ Mới' },
+  new_owner_name: { label: 'Tên Chủ Sở Hữu Mới' },
+  new_owner_role: { label: 'Vai Trò Chủ Mới' },
+  project_name: { label: 'Tên Dự Án' },
+  asset_code: { label: 'Mã Tài Sản' },
+  old_asset_code: { label: 'Mã Tài Sản Sổ Cũ' },
+  warehouse_id: { label: 'Kho Lưu Trữ' },
+  notes: { label: 'Ghi Chú' },
+  certificate_group: { label: 'Nhóm Sổ' },
   // Các field cũ dưới đây đã bị gộp/xóa khỏi hệ thống (xem migration 0021), giữ lại
   // nhãn hiển thị này chỉ để đọc đúng các log lịch sử ghi lại TRƯỚC thời điểm đó.
   subdivision: { label: 'Phân Khu (cũ)', icon: Layers },
@@ -48,32 +93,35 @@ const FIELD_LABELS: Record<string, { label: string; icon?: any }> = {
   mortgage_bank_2: { label: 'Ngân Hàng Thế Chấp 2 (cũ, đã gộp)' },
   mortgage_unit_2: { label: 'Đơn Vị Vay 2 (cũ, đã gộp)' },
   credit_grant_rate: { label: 'Tỷ Lệ Cấp Tín Dụng (cũ, đã bỏ)' },
-  land_lot_no: { label: 'Số Thửa Bản Đồ' },
-  map_sheet_no: { label: 'Số Tờ Bản Đồ' },
-  area: { label: 'Diện Tích (m²)' },
-  current_owner_entity_id: { label: 'Chủ Sở Hữu (Pháp nhân)' },
-  asset_type: { label: 'Loại Tài Sản' },
-  usage_purpose: { label: 'Mục Đích Sử Dụng' },
-  usage_term_type: { label: 'Loại Thời Hạn Sử Dụng' },
-  usage_term_date: { label: 'Ngày Hết Hạn Sử Dụng' },
-  sale_status: { label: 'Trạng Thái Kinh Doanh' },
-  custody_status: { label: 'Trạng Thái Lưu Kho' },
-  lifecycle_status: { label: 'Trạng Thái Pháp Lý' },
-  mortgage_status: { label: 'Trạng Thái Thế Chấp' },
-  mortgage_bank: { label: 'Ngân Hàng Thế Chấp' },
-  mortgage_unit: { label: 'Đơn Vị Vay' },
-  warehouse_id: { label: 'Kho Lưu Trữ' },
-  notes: { label: 'Ghi Chú' },
-  certificate_no: { label: 'Số GCN QSDĐ' },
-  certificate_group: { label: 'Nhóm Sổ' },
 };
 
-function formatValue(val: any): string {
+function formatValue(val: any, key?: string, lookupMap?: Map<string, string>): string {
   if (val === null || val === undefined || val === '') return '(Trống / Chưa gán)';
   if (typeof val === 'boolean') return val ? 'Có' : 'Không';
   if (typeof val === 'number') return val.toLocaleString('vi-VN');
-  
-  // Statuses
+
+  const strVal = String(val).trim();
+
+  // 3. Ngày dạng YYYY-MM-DD (nhận diện bằng regex ^\d{4}-\d{2}-\d{2}) hiển thị dd/mm/yyyy bằng thao tác chuỗi
+  const dateMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateMatch) {
+    return `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
+  }
+
+  // 2. Giá trị là UUID của warehouse_id, project_id, current_owner_entity_id, parent_asset_id
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isTargetKey = key === 'warehouse_id' || key === 'project_id' || key === 'current_owner_entity_id' || key === 'parent_asset_id';
+
+  if (isTargetKey || uuidRegex.test(strVal)) {
+    if (lookupMap && lookupMap.has(strVal)) {
+      return lookupMap.get(strVal)!;
+    }
+    if (uuidRegex.test(strVal)) {
+      return `(Không còn trong danh mục) ${strVal.slice(0, 8)}`;
+    }
+  }
+
+  // Statuses & Enums
   if (val === 'ready_for_sale') return 'Sẵn sàng bán';
   if (val === 'not_ready') return 'Chưa sẵn sàng bán';
   if (val === 'sold') return 'Đã bán';
@@ -84,8 +132,14 @@ function formatValue(val: any): string {
   if (val === 'invalidated') return 'Vô hiệu';
   if (val === 'mortgaged') return 'Đang thế chấp';
   if (val === 'none') return 'Không thế chấp';
+  if (val === 'cdt') return 'Chủ đầu tư (CĐT)';
+  if (val === 'ndt') return 'Nhà đầu tư (NĐT)';
+  if (val === 'so_lon') return 'Sổ lớn';
+  if (val === 'so_nho') return 'Sổ con';
+  if (val === 'fixed_date') return 'Có thời hạn';
+  if (val === 'long_term') return 'Lâu dài';
 
-  return String(val);
+  return strVal;
 }
 
 export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
@@ -93,13 +147,56 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showRawJson, setShowRawJson] = useState<Record<string, boolean>>({});
+  const [lookupMap, setLookupMap] = useState<Map<string, string>>(new Map());
 
   const loadData = async () => {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const data = await fetchAuditLogs(asset.id);
+      const [data, warehouses, projectsList, entities] = await Promise.all([
+        fetchAuditLogs(asset.id),
+        fetchWarehouses().catch(() => []),
+        fetchProjects().catch(() => []),
+        fetchInvestorEntities().catch(() => []),
+      ]);
+
       setLogs(data);
+
+      const map = new Map<string, string>();
+      for (const w of warehouses) {
+        if (w.id && w.name) map.set(w.id, w.name);
+      }
+      for (const p of projectsList) {
+        if (p.id && p.name) map.set(p.id, p.name);
+      }
+      for (const e of entities) {
+        if (e.id) map.set(e.id, e.name || e.code || e.id);
+      }
+
+      // Tra sổ gốc (parent_asset_id)
+      const parentIds = new Set<string>();
+      if (asset.parent_asset_id) parentIds.add(asset.parent_asset_id);
+      for (const log of data) {
+        if (log.old_data?.parent_asset_id) parentIds.add(String(log.old_data.parent_asset_id));
+        if (log.new_data?.parent_asset_id) parentIds.add(String(log.new_data.parent_asset_id));
+      }
+
+      if (parentIds.size > 0) {
+        await Promise.all(
+          Array.from(parentIds).map(async (pid) => {
+            try {
+              const pAsset = await fetchAssetById(pid);
+              if (pAsset) {
+                map.set(pid, pAsset.asset_code || pAsset.certificate_no || pid);
+              }
+            } catch {
+              // ignore
+            }
+          })
+        );
+      }
+
+      setLookupMap(map);
     } catch (err: any) {
       console.error('Error fetching audit logs:', err);
       setErrorMessage(err?.message || 'Không thể tải lịch sử kiểm toán.');
@@ -117,6 +214,23 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
   };
 
   const getActionBadge = (action: string) => {
+    if (action.startsWith('bulk_correct:')) {
+      const modeKey = action.replace('bulk_correct:', '').trim();
+      let modeText = modeKey;
+      if (modeKey === 'info') modeText = 'thông tin';
+      else if (modeKey === 'mortgage') modeText = 'thế chấp';
+      else if (modeKey === 'owner') modeText = 'đổi chủ sở hữu';
+      else if (modeKey === 'certificate') modeText = 'sửa sai số GCN';
+      else if (modeKey === 'reissue') modeText = 'cấp đổi';
+
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+          <Layers className="w-3.5 h-3.5" />
+          Cập nhật hàng loạt ({modeText})
+        </span>
+      );
+    }
+
     switch (action) {
       case 'CREATE':
         return (
@@ -273,9 +387,9 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
 
                       {/* Event Notes */}
                       {log.notes && (
-                        <div className="px-4 py-2 bg-blue-50/40 border-b border-blue-50 text-xs text-blue-900 flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          <span>{log.notes}</span>
+                        <div className="px-4 py-2 bg-blue-50/40 border-b border-blue-50 text-xs text-blue-900 flex items-start gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                          <span><strong>Lý do:</strong> {log.notes}</span>
                         </div>
                       )}
 
@@ -294,26 +408,26 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                               <tbody className="divide-y divide-slate-100">
                                 {changedKeys.map((key) => {
                                   const fieldMeta = FIELD_LABELS[key];
-                                  const label = fieldMeta ? fieldMeta.label : key;
+                                  const label = fieldMeta ? fieldMeta.label : `(${key})`;
                                   const Icon = fieldMeta?.icon;
                                   const oldV = oldData[key];
                                   const newV = newData[key];
 
                                   return (
                                     <tr key={key} className="hover:bg-slate-50/60 transition-colors">
-                                      <td className="py-2 px-3 font-medium text-slate-700">
-                                        <div className="flex items-center gap-1.5">
-                                          {Icon && <Icon className="w-3.5 h-3.5 text-blue-600" />}
-                                          <span>{label}</span>
+                                      <td className="py-2 px-3 font-medium text-slate-700 max-w-[200px] break-words">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {Icon && <Icon className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                                          <span className={!fieldMeta ? 'font-mono text-xs text-slate-500' : ''}>{label}</span>
                                         </div>
                                       </td>
-                                      <td className="py-2 px-3 text-slate-600 font-mono text-[11px] bg-rose-50/30">
-                                        {formatValue(oldV)}
+                                      <td className="py-2 px-3 text-slate-600 font-mono text-[11px] bg-rose-50/30 break-words">
+                                        {formatValue(oldV, key, lookupMap)}
                                       </td>
-                                      <td className="py-2 px-3 text-emerald-900 font-semibold font-mono text-[11px] bg-emerald-50/40">
+                                      <td className="py-2 px-3 text-emerald-900 font-semibold font-mono text-[11px] bg-emerald-50/40 break-words">
                                         <div className="flex items-center gap-1">
-                                          <ArrowRight className="w-3 h-3 text-emerald-600 shrink-0" />
-                                          <span>{formatValue(newV)}</span>
+                                          <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                          <span>{formatValue(newV, key, lookupMap)}</span>
                                         </div>
                                       </td>
                                     </tr>

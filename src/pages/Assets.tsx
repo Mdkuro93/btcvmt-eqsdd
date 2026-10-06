@@ -1180,7 +1180,8 @@ export const Assets: React.FC = () => {
           selectedAssets={selectedAssetsList}
           userRole={profile?.role as any}
           warehouses={warehouses}
-          onSubmit={async (type: TransactionType, details: any) => {
+          onSubmit={async (type: TransactionType, details: any, appliedAssets?: Asset[]) => {
+            const targetAssets = appliedAssets || details?.appliedAssets || selectedAssetsList;
             try {
               await createTransaction({
                 type,
@@ -1189,7 +1190,7 @@ export const Assets: React.FC = () => {
                 notes: details.notes || '',
                 scan_url: details.scan_url || null,
                 desiredReceiveDate: details.desiredReceiveDate,
-                items: selectedAssetsList.map(a => ({
+                items: targetAssets.map(a => ({
                   asset_id: a.id,
                   assetId: a.id,
                   type,
@@ -1197,9 +1198,10 @@ export const Assets: React.FC = () => {
                   details,
                 })),
               });
-              toast.success('Đã tạo yêu cầu kho thành công!');
+              toast.success(`Đã tạo yêu cầu kho thành công cho ${targetAssets.length} GCN!`);
               setIsModalOpen(false);
-              setSelectedAssetIds([]);
+              const processedIds = new Set(targetAssets.map(a => a.id));
+              setSelectedAssetIds(prev => prev.filter(id => !processedIds.has(id)));
               loadAssets();
             } catch (err: any) {
               toast.error('Lỗi khi gửi yêu cầu kho: ' + err.message);

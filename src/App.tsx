@@ -70,6 +70,7 @@ const Requests = lazyWithRetry(() => import('./pages/Requests'), 'Requests');
 const Reports = lazyWithRetry(() => import('./pages/Reports'), 'Reports');
 const ActivityLogs = lazyWithRetry(() => import('./pages/ActivityLogs'), 'ActivityLogs');
 const Import = lazyWithRetry(() => import('./pages/Import'), 'Import');
+const BulkUpdate = lazyWithRetry(() => import('./pages/BulkUpdate'), 'BulkUpdate');
 const Admin = lazyWithRetry(() => import('./pages/Admin'), 'Admin');
 const Lookup = lazyWithRetry(() => import('./pages/Lookup'), 'Lookup');
 const AccessRequests = lazyWithRetry(() => import('./pages/AccessRequests'), 'AccessRequests');
@@ -146,6 +147,7 @@ export default function App() {
                   {/* Data Operations / Import: BTC Manager, Warehouse Manager & Admin */}
                   <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'admin', 'super_admin']} />}>
                     <Route path="/import" element={<Import />} />
+                    <Route path="/bulk-update" element={<BulkUpdate />} />
                   </Route>
                 </Route>
               </Route>

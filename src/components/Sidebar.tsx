@@ -16,7 +16,8 @@ import {
   ClipboardCheck,
   KeyRound,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Layers
 } from 'lucide-react';
 
 export interface SidebarProps {
@@ -136,6 +137,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       name: 'Import dữ liệu', 
       href: '/import', 
       icon: Upload, 
+      roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
+    },
+    { 
+      name: 'Cập nhật hàng loạt', 
+      href: '/bulk-update', 
+      icon: Layers, 
       roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
     },
   ];

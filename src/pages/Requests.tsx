@@ -2,8 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems, voidTransactionItem } from '../api/transactions';
 import { fetchOverdueAssets } from '../api/assets';
 import { fetchWarehouses, fetchAssets } from '../api/assets';
-import { fetchDeclarationRequests, approveDeclarationRequest, rejectDeclarationRequest, bulkApproveDeclarationRequests } from '../api/assetDeclarationRequests';
+import {
+  fetchDeclarationRequests,
+  approveDeclarationRequest,
+  rejectDeclarationRequest,
+  bulkApproveDeclarationRequests,
+  isDuplicateUnconfirmed,
+  BulkApproveDeclarationItem,
+} from '../api/assetDeclarationRequests';
 import { ReviewDeclarationRequestModal } from '../components/ReviewDeclarationRequestModal';
+import { DuplicateCertificateAckDialog } from '../components/DuplicateCertificateAckDialog';
 import { generateNextAssetCode } from '../lib/assetIdentifier';
 import { DecideRequestModal } from '../components/DecideRequestModal';
 import { BulkDecideModal } from '../components/BulkDecideModal';
@@ -88,6 +96,19 @@ export const Requests: React.FC = () => {
   
   // Print Modal
   const [printModalData, setPrintModalData] = useState<{ item: any; tx?: any } | null>(null);
+
+  // Duplicate Certificate Ack Dialog State (for both single and bulk approval)
+  const [duplicateAckState, setDuplicateAckState] = useState<{
+    isOpen: boolean;
+    items: {
+      requestId: string;
+      certificateNo: string;
+      projectName?: string;
+      message?: string;
+      prefix: string | null;
+    }[];
+  } | null>(null);
+  const [isAckSubmitting, setIsAckSubmitting] = useState<boolean>(false);
 
   // Void Modal
   const [voidModalData, setVoidModalData] = useState<{ item: any; tx?: any } | null>(null);
@@ -226,14 +247,41 @@ export const Requests: React.FC = () => {
       }
 
       const results = await bulkApproveDeclarationRequests(items);
-      const successCount = results.filter(r => !r.error_message).length;
-      const failed = results.filter(r => r.error_message);
+      const duplicateFailed = results.filter((r) => isDuplicateUnconfirmed(r.error_message));
+      const otherFailed = results.filter((r) => r.error_message && !isDuplicateUnconfirmed(r.error_message));
+      const successCount = results.filter((r) => !r.error_message).length;
 
-      if (failed.length > 0) {
-        toast.error(`Duyệt được ${successCount}/${items.length}. ${failed.length} yêu cầu lỗi: ${failed.map(f => f.error_message).join('; ')}`);
-      } else {
-        toast.success(`Đã duyệt ${successCount} đề xuất, gộp chung 1 phiếu nhập kho!`);
+      if (successCount > 0) {
+        toast.success(`Đã duyệt ${successCount} đề xuất thành công!`);
       }
+      if (otherFailed.length > 0) {
+        toast.error(`${otherFailed.length} đề xuất lỗi: ${otherFailed.map((f) => f.error_message).join('; ')}`);
+      }
+
+      if (duplicateFailed.length > 0) {
+        const ackItems = duplicateFailed.map((df) => {
+          const req = declarationRequests.find((r) => r.id === df.request_id);
+          const origItem = items.find((it) => it.request_id === df.request_id);
+          return {
+            requestId: df.request_id,
+            certificateNo: req?.certificate_no || 'Chưa cập nhật',
+            projectName: req?.projects?.name,
+            message: df.error_message || undefined,
+            prefix: origItem?.asset_code_prefix ?? null,
+          };
+        });
+
+        setDuplicateAckState({
+          isOpen: true,
+          items: ackItems,
+        });
+
+        // Giữ lại các ID bị trùng số chưa duyệt trong selectedDeclarations
+        setSelectedDeclarations(new Set(duplicateFailed.map((df) => df.request_id)));
+        loadDeclarationRequests();
+        return;
+      }
+
       setSelectedDeclarations(new Set());
       loadDeclarationRequests();
     } catch (err: any) {
@@ -245,8 +293,8 @@ export const Requests: React.FC = () => {
   };
 
   const handleApproveDeclaration = async (req: any) => {
+    let prefix: string | null = null;
     try {
-      let prefix = null;
       if (req.request_type === 'cap_moi' || req.request_type === 'tach_so') {
         const assetsRes = await fetchAssets({ projectId: req.project_id || undefined, collateralType: req.collateral_type });
         const existingAssets = assetsRes.data || [];
@@ -257,7 +305,60 @@ export const Requests: React.FC = () => {
       toast.success('Đã duyệt và nhập kho GCN thành công!');
       loadDeclarationRequests();
     } catch (err: any) {
+      if (err?.code === 'DUPLICATE_UNCONFIRMED' || isDuplicateUnconfirmed(err?.message)) {
+        setDuplicateAckState({
+          isOpen: true,
+          items: [
+            {
+              requestId: req.id,
+              certificateNo: req.certificate_no || 'Chưa cập nhật',
+              projectName: req.projects?.name,
+              message: err.message,
+              prefix,
+            },
+          ],
+        });
+        return;
+      }
       toast.error(err.message || 'Lỗi duyệt yêu cầu');
+    }
+  };
+
+  const handleConfirmDuplicateAck = async (reasons: Record<string, string>) => {
+    if (!duplicateAckState || duplicateAckState.items.length === 0) return;
+    setIsAckSubmitting(true);
+    try {
+      if (duplicateAckState.items.length === 1) {
+        const item = duplicateAckState.items[0];
+        const reason = reasons[item.requestId]?.trim();
+        await approveDeclarationRequest(item.requestId, item.prefix, reason);
+        toast.success('Đã xác nhận và duyệt GCN thành công!');
+      } else {
+        const retryPayload: BulkApproveDeclarationItem[] = duplicateAckState.items.map((it) => ({
+          request_id: it.requestId,
+          asset_code_prefix: it.prefix,
+          duplicate_ack_reason: reasons[it.requestId]?.trim() || null,
+        }));
+        const results = await bulkApproveDeclarationRequests(retryPayload);
+        const successCount = results.filter((r) => !r.error_message).length;
+        const failed = results.filter((r) => r.error_message);
+        if (failed.length > 0) {
+          toast.error(
+            `Duyệt được ${successCount}/${retryPayload.length}. Lỗi: ${failed
+              .map((f) => f.error_message)
+              .join('; ')}`
+          );
+        } else {
+          toast.success(`Đã xác nhận và duyệt thành công ${successCount} hồ sơ trùng số GCN!`);
+        }
+      }
+      setDuplicateAckState(null);
+      setSelectedDeclarations(new Set());
+      loadDeclarationRequests();
+    } catch (err: any) {
+      toast.error('Lỗi khi duyệt hồ sơ trùng số GCN: ' + (err.message || ''));
+    } finally {
+      setIsAckSubmitting(false);
     }
   };
 
@@ -950,6 +1051,15 @@ export const Requests: React.FC = () => {
           request={reviewRequest}
         />
       )}
+
+      {/* Duplicate Certificate Ack Dialog (for single or bulk approve) */}
+      <DuplicateCertificateAckDialog
+        isOpen={Boolean(duplicateAckState?.isOpen)}
+        items={duplicateAckState?.items || []}
+        isSubmitting={isAckSubmitting}
+        onConfirm={handleConfirmDuplicateAck}
+        onCancel={() => setDuplicateAckState(null)}
+      />
 
       {/* Standard A4 Printable Voucher Modal */}
       {printModalData && (

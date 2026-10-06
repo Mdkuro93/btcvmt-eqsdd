@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchProjects, fetchWarehouses, fetchAssets, fetchAssetById, checkAssetDuplicateServer, peekNextAssetCode } from '../api/assets';
-import { updateDeclarationRequest, approveDeclarationRequest } from '../api/assetDeclarationRequests';
+import { updateDeclarationRequest, approveDeclarationRequest, isDuplicateUnconfirmed } from '../api/assetDeclarationRequests';
+import { DuplicateCertificateAckDialog } from './DuplicateCertificateAckDialog';
 import { fetchInvestorEntities } from '../api/investorEntities';
 import { COLLATERAL_TYPES, resolveRegionCode, getProvinceCode } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
@@ -111,6 +112,14 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
 
   // Duplicate Warning
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
+  // Duplicate Certificate Ack Dialog state
+  const [duplicateAckState, setDuplicateAckState] = useState<{
+    isOpen: boolean;
+    prefix: string | null;
+    message?: string;
+  } | null>(null);
+  const [isAckSubmitting, setIsAckSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -483,14 +492,43 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       }
 
       // 3. Gọi RPC duyệt và sinh phiếu nhập kho (PN)
-      await approveDeclarationRequest(request.id, prefix);
-      toast.success('Đã phê duyệt và nhập kho GCN thành công!');
-      onSuccess();
-      onClose();
+      try {
+        await approveDeclarationRequest(request.id, prefix);
+        toast.success('Đã phê duyệt và nhập kho GCN thành công!');
+        onSuccess();
+        onClose();
+      } catch (rpcErr: any) {
+        if (rpcErr?.code === 'DUPLICATE_UNCONFIRMED' || isDuplicateUnconfirmed(rpcErr?.message)) {
+          setDuplicateAckState({
+            isOpen: true,
+            prefix,
+            message: rpcErr.message,
+          });
+          return;
+        }
+        throw rpcErr;
+      }
     } catch (err: any) {
       toast.error(err.message || 'Lỗi duyệt và nhập kho GCN');
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleConfirmDuplicateAck = async (reasons: Record<string, string>) => {
+    const reason = reasons[request.id]?.trim();
+    if (!reason || reason.length < 10) return;
+    setIsAckSubmitting(true);
+    try {
+      await approveDeclarationRequest(request.id, duplicateAckState?.prefix ?? null, reason);
+      toast.success('Đã phê duyệt và nhập kho GCN thành công!');
+      setDuplicateAckState(null);
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi duyệt GCN trùng số');
+    } finally {
+      setIsAckSubmitting(false);
     }
   };
 
@@ -1360,6 +1398,26 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
         isOpen={!!previewFileUrl}
         fileUrlOrPath={previewFileUrl || ''}
         onClose={() => setPreviewFileUrl(null)}
+      />
+
+      {/* DUPLICATE CERTIFICATE ACK DIALOG */}
+      <DuplicateCertificateAckDialog
+        isOpen={Boolean(duplicateAckState?.isOpen)}
+        items={
+          duplicateAckState
+            ? [
+                {
+                  requestId: request.id,
+                  certificateNo: certificateNo || request.certificate_no || 'Chưa cập nhật',
+                  projectName: projects.find((p) => p.id === projectId)?.name || request.projects?.name,
+                  message: duplicateAckState.message,
+                },
+              ]
+            : []
+        }
+        isSubmitting={isAckSubmitting}
+        onConfirm={handleConfirmDuplicateAck}
+        onCancel={() => setDuplicateAckState(null)}
       />
     </div>
   );
