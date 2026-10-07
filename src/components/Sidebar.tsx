@@ -17,7 +17,8 @@ import {
   KeyRound,
   ChevronLeft,
   ChevronRight,
-  Layers
+  Layers,
+  ArrowLeftRight
 } from 'lucide-react';
 
 export interface SidebarProps {
@@ -99,6 +100,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       href: '/requests', 
       icon: CheckSquare, 
       roles: ['btc_manager', 'warehouse_manager', 'capital_dept', 'project_dept', 're_dept', 'supervisor', 'investor', 'admin', 'super_admin'] 
+    },
+    { 
+      name: 'Luân chuyển kho', 
+      href: '/warehouse-transfers', 
+      icon: ArrowLeftRight, 
+      roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
     },
     { 
       name: 'Duyệt truy cập kho', 

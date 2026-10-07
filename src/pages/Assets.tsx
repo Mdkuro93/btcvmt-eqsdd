@@ -23,6 +23,7 @@ import { AssetAuditModal } from '../components/AssetAuditModal';
 import { DeleteAssetsModal } from '../components/DeleteAssetsModal';
 import { AssetTable } from '../components/AssetTable';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
+import { CreateTransferModal } from '../components/warehouse-transfers/CreateTransferModal';
 import { exportAssetsToExcel } from '../lib/excelHelper';
 import { COLLATERAL_TYPES, formatPlotCode } from '../lib/assetIdentifier';
 import {
@@ -48,13 +49,13 @@ import {
   Square,
   History,
   Database,
+  ArrowLeftRight,
   RefreshCw,
   Info,
   CheckCircle2,
   XCircle,
   Layers,
   SlidersHorizontal,
-  ArrowLeftRight,
   CalendarClock,
   Calendar,
   UserCheck,
@@ -189,8 +190,12 @@ export const Assets: React.FC = () => {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferTargetAssets, setTransferTargetAssets] = useState<Asset[]>([]);
 
+  // Warehouse Transfer Modal States (Luân chuyển kho)
+  const [isWarehouseTransferModalOpen, setIsWarehouseTransferModalOpen] = useState(false);
+
   // Permissions helpers
   const userRole = profile?.role || '';
+  const canWarehouseTransfer = ['super_admin', 'admin', 'btc_manager', 'warehouse_manager'].includes(userRole);
   const canCreate =
     ['super_admin', 'admin', 'btc_manager', 'warehouse_manager'].includes(userRole) ||
     profile?.permissions?.includes('asset.create');
@@ -410,6 +415,18 @@ export const Assets: React.FC = () => {
             <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>Xuất Excel {selectedAssetIds.length > 0 ? `(${selectedAssetIds.length})` : ''}</span>
           </button>
+
+          {selectedAssetIds.length > 0 && canWarehouseTransfer && (
+            <button
+              id="btn-warehouse-transfer"
+              onClick={() => setIsWarehouseTransferModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors shadow-2xs cursor-pointer"
+              title="Lập lệnh xuất luân chuyển sang kho khác cho các GCN đã chọn"
+            >
+              <ArrowLeftRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Luân chuyển kho ({selectedAssetIds.length})</span>
+            </button>
+          )}
 
           {canImport && (
             <button
@@ -1295,6 +1312,19 @@ export const Assets: React.FC = () => {
           }
         }}
       />
+
+      {/* Modal Luân chuyển kho */}
+      {isWarehouseTransferModalOpen && (
+        <CreateTransferModal
+          isOpen={isWarehouseTransferModalOpen}
+          onClose={() => setIsWarehouseTransferModalOpen(false)}
+          onSuccess={() => {
+            loadAssets();
+            setSelectedAssetIds([]);
+          }}
+          preSelectedAssets={selectedAssetsList}
+        />
+      )}
     </div>
   );
 };

@@ -76,6 +76,7 @@ const Lookup = lazyWithRetry(() => import('./pages/Lookup'), 'Lookup');
 const AccessRequests = lazyWithRetry(() => import('./pages/AccessRequests'), 'AccessRequests');
 const UserManagement = lazyWithRetry(() => import('./pages/UserManagement'), 'UserManagement');
 const InventoryAudits = lazyWithRetry(() => import('./pages/InventoryAudits'), 'InventoryAudits');
+const WarehouseTransfers = lazyWithRetry(() => import('./pages/WarehouseTransfers'), 'WarehouseTransfers');
 
 // Dispatcher for the root route "/"
 function RootRoute() {
@@ -129,8 +130,9 @@ export default function App() {
                     <Route path="/users" element={<Navigate to="/user-management" replace />} />
                   </Route>
 
-                  {/* Access Approval, Activity Logs & Reports */}
+                  {/* Access Approval, Warehouse Transfers, Activity Logs & Reports */}
                   <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'admin', 'super_admin']} />}>
+                    <Route path="/warehouse-transfers" element={<WarehouseTransfers />} />
                     <Route path="/access-requests" element={<AccessRequests />} />
                     <Route path="/inventory-audits" element={<InventoryAudits />} />
                     <Route path="/activity-logs" element={<ActivityLogs />} />
