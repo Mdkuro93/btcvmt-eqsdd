@@ -21,14 +21,15 @@ export function getVoucherTypeFromTransaction(txType: string, reason?: string): 
 }
 
 /**
- * Determine Region Code (VMB, VMT, VMN)
+ * Xác định Mã Vùng (region_code) của kho lưu trữ.
+ * Mã phiếu dùng trực tiếp warehouses.region_code; nếu thiếu thì báo lỗi cấu hình, không đoán.
  */
-export function getRegionCode(warehouse?: Warehouse | null, regionName?: string): string {
-  if (warehouse?.region_code) return warehouse.region_code.toUpperCase();
-  const name = (regionName || warehouse?.regions?.name || '').toLowerCase();
-  if (name.includes('bắc') || name.includes('hà nội')) return 'VMB';
-  if (name.includes('nam') || name.includes('hồ chí minh') || name.includes('bình dương') || name.includes('đồng nai')) return 'VMN';
-  return 'VMT'; // Miền Trung default
+export function getRegionCode(warehouse?: Warehouse | null): string {
+  const code = warehouse?.region_code?.trim().toUpperCase();
+  if (code && /^[A-Z0-9]{2,8}$/.test(code)) {
+    return code;
+  }
+  throw new Error(`Kho "${warehouse?.name || 'Chưa xác định'}" chưa được cấu hình mã vùng (region_code). Vui lòng cấu hình tại Danh mục > Kho.`);
 }
 
 /**

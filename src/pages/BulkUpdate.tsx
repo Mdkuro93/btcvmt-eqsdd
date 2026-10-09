@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { Layers } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import {
   BulkUpdateMode,
   BulkRowResult,
@@ -8,6 +10,7 @@ import {
   runInChunks,
   bulkCorrectAssets,
   createReissueRequestsBulk,
+  importAssetsBulk,
 } from '../api/bulkUpdate';
 import { BulkUpdateStepper } from '../components/bulk-update/BulkUpdateStepper';
 import { ModeSelectionStep } from '../components/bulk-update/ModeSelectionStep';
@@ -17,13 +20,37 @@ import { PreviewStep } from '../components/bulk-update/PreviewStep';
 import { ConfirmStep } from '../components/bulk-update/ConfirmStep';
 import { ExecutionStep } from '../components/bulk-update/ExecutionStep';
 
+const VALID_MODES: BulkUpdateMode[] = ['create', 'info', 'mortgage', 'owner', 'certificate', 'reissue'];
+
 export const BulkUpdate: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const { profile } = useAuth();
+
+  const userRole = profile?.role || '';
+  const hasPermission =
+    ['super_admin', 'admin', 'btc_manager', 'warehouse_manager'].includes(userRole) ||
+    profile?.permissions?.includes('import.excel');
+
+  const modeParam = searchParams.get('mode') as BulkUpdateMode | null;
+  const isModeValid = modeParam ? VALID_MODES.includes(modeParam) : false;
+
+  const initialMode = isModeValid && hasPermission && modeParam ? modeParam : 'info';
+  const initialStep = isModeValid && hasPermission ? 2 : 1;
+
   // Stepper state
-  const [currentStep, setCurrentStep] = useState<number>(1);
-  const [maxAccessibleStep, setMaxAccessibleStep] = useState<number>(1);
+  const [currentStep, setCurrentStep] = useState<number>(initialStep);
+  const [maxAccessibleStep, setMaxAccessibleStep] = useState<number>(initialStep);
 
   // Dữ liệu nghiệp vụ
-  const [selectedMode, setSelectedMode] = useState<BulkUpdateMode>('info');
+  const [selectedMode, setSelectedMode] = useState<BulkUpdateMode>(initialMode);
+
+  useEffect(() => {
+    if (isModeValid && hasPermission && modeParam) {
+      setSelectedMode(modeParam);
+      setCurrentStep(2);
+      setMaxAccessibleStep(prev => Math.max(prev, 2));
+    }
+  }, [modeParam, hasPermission]);
   const [projects, setProjects] = useState<BulkProjectItem[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<Record<string, any>[]>([]);
@@ -129,7 +156,9 @@ export const BulkUpdate: React.FC = () => {
         parsedRows,
         500,
         async (chunk) => {
-          if (selectedMode === 'reissue') {
+          if (selectedMode === 'create') {
+            return await importAssetsBulk(chunk, null, false);
+          } else if (selectedMode === 'reissue') {
             return await createReissueRequestsBulk(chunk, null, false);
           } else {
             return await bulkCorrectAssets(selectedMode, chunk, null, false);
@@ -195,12 +224,16 @@ export const BulkUpdate: React.FC = () => {
     setAbortedInfo(null);
     setHasUncertainRows(false);
 
+    const applyBatchId = crypto.randomUUID();
+
     try {
       const res = await runInChunks(
         rowsToApply,
         500,
         async (chunk) => {
-          if (selectedMode === 'reissue') {
+          if (selectedMode === 'create') {
+            return await importAssetsBulk(chunk, trimmedReason, true, applyBatchId);
+          } else if (selectedMode === 'reissue') {
             return await createReissueRequestsBulk(chunk, trimmedReason, true);
           } else {
             return await bulkCorrectAssets(selectedMode, chunk, trimmedReason, true);

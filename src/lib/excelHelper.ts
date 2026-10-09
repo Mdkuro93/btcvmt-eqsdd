@@ -461,3 +461,45 @@ export function exportInventoryAuditToExcel(
 
   XLSX.writeFile(workbook, fileName);
 }
+
+/**
+ * Phân tích sheet Excel thông minh:
+ * Tự động nhận diện dòng tiêu đề thực tế (kể cả khi file có dòng gộp nhóm THÔNG TIN CHUNG, tiêu đề tài liệu ở trên cùng).
+ * Trả về danh sách đối tượng dòng dữ liệu chuẩn, bỏ qua các dòng rỗng.
+ */
+export function parseExcelSheetWithSmartHeaders(worksheet: XLSX.WorkSheet): Record<string, any>[] {
+  const rawMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+  if (!rawMatrix || rawMatrix.length === 0) return [];
+
+  let headerRowIdx = 0;
+  const headerKeywords = [
+    'số gcn',
+    'gcn qsdđ',
+    'gcn qsdd',
+    'mã tài sản',
+    'mã tsđb',
+    'dự án',
+    'tên dự án',
+    'id hệ thống',
+    'mã lô',
+    'diện tích',
+    'chủ sở hữu',
+    'certificate_no',
+    'asset_code'
+  ];
+
+  for (let r = 0; r < Math.min(10, rawMatrix.length); r++) {
+    const row = rawMatrix[r] || [];
+    const rowText = row.map((cell: any) => String(cell || '').toLowerCase().trim()).join(' ');
+    const matchCount = headerKeywords.filter(k => rowText.includes(k)).length;
+    if (matchCount >= 2 || rowText.includes('số gcn qsdđ') || rowText.includes('mã tài sản / tsđb')) {
+      headerRowIdx = r;
+      break;
+    }
+  }
+
+  const rows = XLSX.utils.sheet_to_json(worksheet, { range: headerRowIdx, defval: '' }) as Record<string, any>[];
+  return rows.filter((row: any) =>
+    Object.values(row).some((val: any) => val !== '' && val !== null && val !== undefined)
+  );
+}

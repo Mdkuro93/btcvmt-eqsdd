@@ -202,8 +202,65 @@ export const FileUploadStep: React.FC<Props> = ({
         }
 
         const worksheet = workbook.Sheets[firstSheetName];
-        // Đọc raw json với dòng 1 là keys
-        const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: null });
+
+        // 4. Chuẩn hóa tiêu đề cột & tự động dò dòng tiêu đề (kể cả file có 2 dòng tiêu đề)
+        const allowedKeys = new Set([...config.requiredKeys, ...config.optionalKeys].map((k) => k.toLowerCase()));
+        const labelToKey = new Map<string, string>();
+        for (const g of config.guides) {
+          const cleanName = g.name.replace(/\s*\*\s*$/, '').trim().toLowerCase();
+          labelToKey.set(cleanName, g.key);
+          if (g.key === 'business_project_name') {
+            labelToKey.set('tên dự án kinh doanh', g.key);
+          }
+        }
+        // Bổ sung các nhãn tiếng Việt phổ biến
+        labelToKey.set('kho', 'warehouse_name');
+        labelToKey.set('kho lưu giữ', 'warehouse_name');
+        labelToKey.set('kho lưu trữ', 'warehouse_name');
+        labelToKey.set('mã lô pháp lý', 'legal_lot_code');
+        labelToKey.set('mã lô', 'legal_lot_code');
+        labelToKey.set('loại ts', 'asset_type');
+        labelToKey.set('mã loại ts', 'collateral_type');
+        labelToKey.set('mã cty cđt/nđt', 'company_code');
+        labelToKey.set('mã công ty', 'company_code');
+        labelToKey.set('mã công ty sở hữu', 'company_code');
+        labelToKey.set('phân loại chủ', 'owner_role');
+        labelToKey.set('vai trò chủ', 'owner_role');
+        labelToKey.set('phân loại', 'owner_role');
+        labelToKey.set('số vào sổ', 'registry_no');
+        labelToKey.set('số thửa bản đồ', 'land_lot_no');
+        labelToKey.set('số tờ bản đồ', 'map_sheet_no');
+        labelToKey.set('mục đích', 'usage_purpose');
+        labelToKey.set('đơn vị quản lý sổ', 'managing_unit');
+
+        const rawMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+        if (!rawMatrix || rawMatrix.length === 0) {
+          toast.error('File Excel không có dòng dữ liệu nào.');
+          setIsParsing(false);
+          return;
+        }
+
+        // Tự dò dòng tiêu đề trong 10 dòng đầu
+        let headerRowIdx = 0;
+        let maxMatches = 0;
+        const scanLimit = Math.min(10, rawMatrix.length);
+        for (let r = 0; r < scanLimit; r++) {
+          const rowCells = (rawMatrix[r] || []).map((c: any) => String(c ?? '').trim());
+          let matches = 0;
+          for (const cell of rowCells) {
+            const norm = normalizeHeader(cell, allowedKeys, labelToKey);
+            if (allowedKeys.has(norm)) {
+              matches++;
+            }
+          }
+          if (matches > maxMatches) {
+            maxMatches = matches;
+            headerRowIdx = r;
+          }
+        }
+
+        // Đọc raw json từ dòng tiêu đề đã dò thấy
+        const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet, { range: headerRowIdx, defval: null });
 
         if (!rawJson || rawJson.length === 0) {
           toast.error('File Excel không có dòng dữ liệu nào.');
@@ -229,17 +286,6 @@ export const FileUploadStep: React.FC<Props> = ({
           );
           setIsParsing(false);
           return;
-        }
-
-        // 4. Chuẩn hóa tiêu đề cột
-        const allowedKeys = new Set([...config.requiredKeys, ...config.optionalKeys].map((k) => k.toLowerCase()));
-        const labelToKey = new Map<string, string>();
-        for (const g of config.guides) {
-          const cleanName = g.name.replace(/\s*\*\s*$/, '').trim().toLowerCase();
-          labelToKey.set(cleanName, g.key);
-          if (g.key === 'business_project_name') {
-            labelToKey.set('tên dự án kinh doanh', g.key);
-          }
         }
 
         const rawHeaders = Object.keys(nonEmptyRows[0] || {}).map((h) => h.trim());
@@ -281,6 +327,47 @@ export const FileUploadStep: React.FC<Props> = ({
               newRow[normKey] = val;
             }
           }
+
+          // Chuẩn hóa nhóm sổ cho tiếng Việt
+          if (newRow.certificate_group !== undefined && newRow.certificate_group !== null) {
+            const g = String(newRow.certificate_group).trim().toLowerCase();
+            if (g.includes('lớn') || g.includes('lon') || g.includes('mẹ') || g === 'so_lon') {
+              newRow.certificate_group = 'so_lon';
+            } else if (g.includes('nhỏ') || g.includes('nho') || g.includes('con') || g === 'so_nho') {
+              newRow.certificate_group = 'so_nho';
+            }
+          }
+
+          // Chuẩn hóa generate_receipt
+          if (newRow.generate_receipt !== undefined && newRow.generate_receipt !== null) {
+            const gen = String(newRow.generate_receipt).trim().toLowerCase();
+            if (['có', 'co', 'yes', 'y', 'true', '1'].includes(gen)) {
+              newRow.generate_receipt = 'true';
+            } else if (['không', 'khong', 'no', 'n', 'false', '0'].includes(gen)) {
+              newRow.generate_receipt = 'false';
+            }
+          }
+
+          // Chuẩn hóa owner_role
+          if (newRow.owner_role !== undefined && newRow.owner_role !== null) {
+            const r = String(newRow.owner_role).trim().toLowerCase();
+            if (r.includes('chủ đầu tư') || r === 'cdt') {
+              newRow.owner_role = 'cdt';
+            } else if (r.includes('nhà đầu tư') || r === 'ndt') {
+              newRow.owner_role = 'ndt';
+            }
+          }
+
+          // Chuẩn hóa usage_term_type
+          if (newRow.usage_term_type !== undefined && newRow.usage_term_type !== null) {
+            const ut = String(newRow.usage_term_type).trim().toLowerCase();
+            if (ut.includes('lâu dài') || ut === 'long_term') {
+              newRow.usage_term_type = 'long_term';
+            } else if (ut.includes('thời hạn') || ut === 'fixed_date') {
+              newRow.usage_term_type = 'fixed_date';
+            }
+          }
+
           return newRow;
         });
 

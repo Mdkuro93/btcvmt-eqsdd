@@ -28,6 +28,7 @@ export const FIELD_LABELS: Record<string, string> = {
   asset_code: 'Mã tài sản',
   old_asset_code: 'Mã tài sản sổ cũ',
   project_name: 'Tên dự án',
+  warehouse_name: 'Kho lưu trữ',
   legal_lot_code: 'Mã pháp lý (mã lô)',
   certificate_no: 'Số GCN',
   new_certificate_no: 'Số GCN mới',
@@ -35,14 +36,18 @@ export const FIELD_LABELS: Record<string, string> = {
   registry_date: 'Ngày cấp',
   usage_term_date: 'Thời hạn sử dụng',
   land_lot_no: 'Số thửa',
-  map_sheet_no: 'Số tờ bản đồ',
+  map_sheet_no: 'Số tờ',
   registry_no: 'Số vào sổ cấp',
   usage_purpose: 'Mục đích sử dụng',
   usage_term_type: 'Loại thời hạn',
   asset_type: 'Loại tài sản',
+  collateral_type: 'Mã loại TS (tiền tố)',
   certificate_group: 'Nhóm sổ',
+  company_code: 'Mã công ty CĐT/NĐT',
+  owner_role: 'Phân loại chủ (cdt/ndt)',
+  generate_receipt: 'Tự động sinh phiếu nhập kho (Có/Không)',
   business_plot_code: 'Mã lô kinh doanh',
-  business_project_name: 'Tên dự án kinh doanh (khác dự án pháp lý ở cột Tên dự án)',
+  business_project_name: 'Tên dự án kinh doanh',
   managing_unit: 'Đơn vị quản lý',
   scan_file_url: 'Link bản scan',
   notes: 'Ghi chú',
@@ -70,6 +75,143 @@ const PROJECT_GUIDE_NAME: ColumnGuide = {
 };
 
 export const BULK_MODES_CONFIG: Record<BulkUpdateMode, ModeMeta> = {
+  create: {
+    key: 'create',
+    title: 'Thêm mới GCN',
+    shortDesc: 'Nhập GCN mới hàng loạt vào kho lưu trữ. Tự động sinh mã TSĐB theo Dự án và sinh phiếu nhập kho tương ứng.',
+    requiredKeys: [
+      'certificate_no',
+      'project_name',
+      'warehouse_name',
+      'legal_lot_code',
+      'area',
+      'certificate_group',
+      'asset_type',
+    ],
+    optionalKeys: [
+      'collateral_type',
+      'company_code',
+      'owner_role',
+      'registry_date',
+      'usage_term_date',
+      'usage_term_type',
+      'scan_file_url',
+      'mortgage_bank',
+      'mortgage_unit',
+      'mortgage_valuation',
+      'collateral_ratio',
+      'collateral_value',
+      'mortgage_expected_release_date',
+      'generate_receipt',
+      'duplicate_ack_reason',
+      'registry_no',
+      'land_lot_no',
+      'map_sheet_no',
+      'usage_purpose',
+      'managing_unit',
+      'business_plot_code',
+      'business_project_name',
+      'notes',
+    ],
+    numberKeys: ['area', 'mortgage_valuation', 'collateral_ratio', 'collateral_value'],
+    dateKeys: ['registry_date', 'usage_term_date', 'mortgage_expected_release_date'],
+    headers: [
+      'certificate_no',
+      'project_name',
+      'warehouse_name',
+      'legal_lot_code',
+      'area',
+      'certificate_group',
+      'asset_type',
+      'collateral_type',
+      'company_code',
+      'owner_role',
+      'registry_date',
+      'usage_term_date',
+      'usage_term_type',
+      'scan_file_url',
+      'mortgage_bank',
+      'mortgage_unit',
+      'mortgage_valuation',
+      'collateral_ratio',
+      'collateral_value',
+      'mortgage_expected_release_date',
+      'generate_receipt',
+      'duplicate_ack_reason',
+      'registry_no',
+      'land_lot_no',
+      'map_sheet_no',
+      'usage_purpose',
+      'managing_unit',
+      'business_plot_code',
+      'business_project_name',
+      'notes',
+    ],
+    sampleRow: [
+      'BA 123456',
+      'Tên dự án trong danh mục',
+      'Kho Hồ Sơ Trung Tâm',
+      'LK-01',
+      125.5,
+      'so_lon',
+      'Đất ở tại đô thị',
+      'BDS',
+      'CDT_01',
+      'cdt',
+      '15/05/2023',
+      '15/05/2073',
+      'fixed_date',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'Có',
+      '',
+      'CH 12345',
+      '105',
+      '24',
+      'Đất ở tại đô thị',
+      'Công ty Cổ phần VMT',
+      'KD-01',
+      'Khu Đô Thị Mới',
+      'Ghi chú hồ sơ',
+    ],
+    guides: [
+      { key: 'certificate_no', name: 'Số GCN', required: 'Bắt buộc', format: 'Chuỗi (tối đa 200 ký tự)', example: 'BA 123456', notes: 'Số phát hành trên phôi GCN' },
+      PROJECT_GUIDE_NAME,
+      { key: 'warehouse_name', name: 'Kho lưu trữ', required: 'Bắt buộc', format: 'Chuỗi', example: 'Kho Hồ Sơ Trung Tâm', notes: 'Phải khớp đúng tên kho được phân quyền quản lý' },
+      { key: 'legal_lot_code', name: 'Mã pháp lý (mã lô)', required: 'Bắt buộc', format: 'Chuỗi', example: 'LK-01', notes: 'Mã lô đất quy hoạch pháp lý' },
+      { key: 'area', name: 'Diện tích (m²)', required: 'Bắt buộc', format: 'Số dương', example: '125.5', notes: 'Diện tích thửa đất ghi trên GCN' },
+      { key: 'certificate_group', name: 'Nhóm sổ', required: 'Bắt buộc', format: 'so_lon | so_nho (hoặc Sổ lớn / Sổ nhỏ)', example: 'so_lon', notes: 'so_lon (Sổ lớn) hoặc so_nho (Sổ con/sổ nhỏ)' },
+      { key: 'asset_type', name: 'Loại tài sản', required: 'Bắt buộc', format: 'Chuỗi', example: 'Đất ở tại đô thị', notes: 'Loại hình bất động sản / tài sản' },
+      { key: 'collateral_type', name: 'Mã loại TS (tiền tố)', required: 'Tùy chọn', format: '2-8 ký tự chữ/số (mặc định BDS)', example: 'BDS', notes: 'Dùng làm phân đoạn thứ 3 trong Mã TSĐB' },
+      { key: 'company_code', name: 'Mã công ty CĐT/NĐT', required: 'Tùy chọn', format: 'Chuỗi mã pháp nhân', example: 'CDT_01', notes: 'Mã công ty sở hữu đã khai báo trong danh mục pháp nhân' },
+      { key: 'owner_role', name: 'Phân loại chủ', required: 'Tùy chọn', format: 'cdt | ndt', example: 'cdt', notes: 'cdt (Chủ đầu tư) hoặc ndt (Nhà đầu tư). Mặc định cdt' },
+      { key: 'registry_date', name: 'Ngày cấp', required: 'Tùy chọn', format: 'dd/mm/yyyy', example: '15/05/2023', notes: 'Ngày cấp trên GCN' },
+      { key: 'usage_term_date', name: 'Thời hạn sử dụng', required: 'Tùy chọn', format: 'dd/mm/yyyy', example: '15/05/2073', notes: 'Bắt buộc nếu loại thời hạn là fixed_date' },
+      { key: 'usage_term_type', name: 'Loại thời hạn', required: 'Tùy chọn', format: 'fixed_date | long_term', example: 'fixed_date', notes: 'fixed_date (Có thời hạn) hoặc long_term (Lâu dài)' },
+      { key: 'scan_file_url', name: 'Link bản scan', required: 'Tùy chọn', format: 'Link SharePoint/OneDrive', example: 'https://company.sharepoint.com/...', notes: 'Link tài liệu bản scan an toàn' },
+      { key: 'mortgage_bank', name: 'Ngân hàng thế chấp', required: 'Tùy chọn', format: 'Chuỗi', example: 'Vietcombank - CN Tân Bình', notes: 'Bắt buộc nếu GCN đang thế chấp' },
+      { key: 'mortgage_unit', name: 'Đơn vị vay', required: 'Tùy chọn', format: 'Chuỗi', example: 'Công ty Cổ phần VMT', notes: 'Đơn vị đứng tên hợp đồng tín dụng' },
+      { key: 'mortgage_valuation', name: 'Định giá thế chấp (VNĐ)', required: 'Tùy chọn', format: 'Số không âm', example: '5000000000', notes: 'Giá trị định giá của ngân hàng' },
+      { key: 'collateral_ratio', name: 'Tỷ lệ bảo đảm (%)', required: 'Tùy chọn', format: 'Số từ 0 đến 100', example: '70', notes: 'Tỷ lệ bảo đảm cấp tín dụng' },
+      { key: 'collateral_value', name: 'Giá trị bảo đảm (VNĐ)', required: 'Tùy chọn', format: 'Số không âm', example: '3500000000', notes: 'Hạn mức tín dụng được bảo đảm' },
+      { key: 'mortgage_expected_release_date', name: 'Ngày dự kiến giải chấp', required: 'Tùy chọn', format: 'dd/mm/yyyy', example: '31/12/2025', notes: 'Thời điểm dự kiến giải chấp' },
+      { key: 'generate_receipt', name: 'Tự động sinh phiếu nhập kho', required: 'Tùy chọn', format: 'Có | Không (true / false)', example: 'Có', notes: 'Mặc định Không. GCN đã thế chấp không sinh phiếu nhập kho' },
+      { key: 'duplicate_ack_reason', name: 'Lý do xác nhận trùng GCN', required: 'Tùy chọn', format: 'Chuỗi tối thiểu 10 ký tự', example: 'UBND cấp trùng số đợt 2', notes: 'Bắt buộc nếu số GCN bị trùng trong hệ thống' },
+      { key: 'registry_no', name: 'Số vào sổ cấp', required: 'Tùy chọn', format: 'Chuỗi', example: 'CH 12345', notes: 'Số vào sổ cấp giấy chứng nhận' },
+      { key: 'land_lot_no', name: 'Số thửa', required: 'Tùy chọn', format: 'Chuỗi hoặc số', example: '105', notes: 'Số thửa đất theo bản đồ địa chính' },
+      { key: 'map_sheet_no', name: 'Số tờ', required: 'Tùy chọn', format: 'Chuỗi hoặc số', example: '24', notes: 'Số tờ bản đồ địa chính' },
+      { key: 'usage_purpose', name: 'Mục đích sử dụng', required: 'Tùy chọn', format: 'Chuỗi', example: 'Đất ở tại đô thị', notes: 'Mục đích sử dụng đất ghi trên GCN' },
+      { key: 'managing_unit', name: 'Đơn vị quản lý', required: 'Tùy chọn', format: 'Chuỗi', example: 'Công ty Cổ phần VMT', notes: 'Đơn vị quản lý hoặc lưu giữ hồ sơ' },
+      { key: 'business_plot_code', name: 'Mã lô kinh doanh', required: 'Tùy chọn', format: 'Chuỗi', example: 'KD-01', notes: 'Mã lô/căn theo bảng hàng kinh doanh' },
+      { key: 'business_project_name', name: 'Tên dự án kinh doanh', required: 'Tùy chọn', format: 'Chuỗi', example: 'Khu Đô Thị Mới', notes: 'Tên dự án kinh doanh (nếu khác dự án pháp lý)' },
+      { key: 'notes', name: 'Ghi chú', required: 'Tùy chọn', format: 'Chuỗi văn bản', example: 'Ghi chú hồ sơ', notes: 'Ghi chú thông tin bổ sung' },
+    ],
+  },
   info: {
     key: 'info',
     title: 'Cập nhật thông tin',
@@ -499,9 +641,10 @@ export function exportPreviewReport(
   const wb = XLSX.utils.book_new();
 
   const isReissue = mode === 'reissue';
+  const isCreate = mode === 'create';
   const headers = [
     'STT dòng Excel',
-    isReissue ? 'Mã tài sản sổ cũ' : 'Mã tài sản',
+    isCreate ? 'Số GCN' : isReissue ? 'Mã tài sản sổ cũ' : 'Mã tài sản',
     'Tên dự án (theo file)',
     'Trạng thái kiểm tra',
     'Mã kết quả (server)',
@@ -518,12 +661,12 @@ export function exportPreviewReport(
 
     return [
       r.row, // Số thứ tự giữ kiểu number
-      sanitizeExcelCellValue(r.assetCode),
+      sanitizeExcelCellValue(isCreate ? (r.certificateNo || r.assetCode) : r.assetCode),
       sanitizeExcelCellValue(r.projectName || ''),
       sanitizeExcelCellValue(statusLabel),
       sanitizeExcelCellValue(r.status),
       sanitizeExcelCellValue(r.message),
-      sanitizeExcelCellValue(changesText || (isReissue ? 'Tạo hồ sơ cấp đổi' : 'Không có thay đổi')),
+      sanitizeExcelCellValue(changesText || (isCreate ? 'Thêm mới GCN vào kho' : isReissue ? 'Tạo hồ sơ cấp đổi' : 'Không có thay đổi')),
     ];
   });
 
@@ -557,13 +700,14 @@ export function exportExecutionReport(
   const wb = XLSX.utils.book_new();
 
   const isReissue = mode === 'reissue';
+  const isCreate = mode === 'create';
   const headers = [
     'STT dòng Excel',
-    isReissue ? 'Mã tài sản sổ cũ' : 'Mã tài sản',
-    'Tên dự án (theo file)',
+    isCreate ? 'Số GCN' : isReissue ? 'Mã tài sản sổ cũ' : 'Mã tài sản',
+    isCreate ? 'Mã tài sản được cấp' : 'Tên dự án (theo file)',
     'Kết quả thực thi',
     'Mã kết quả (server)',
-    isReissue ? 'Mã hồ sơ cấp đổi (request_id)' : 'Ghi chú',
+    isCreate ? 'Mã phiếu nhập (nếu sinh)' : isReissue ? 'Mã hồ sơ cấp đổi (request_id)' : 'Ghi chú',
     'Thông báo chi tiết',
   ];
 
@@ -576,7 +720,9 @@ export function exportExecutionReport(
     }
 
     let noteOrReqId = '';
-    if (isReissue) {
+    if (isCreate) {
+      noteOrReqId = r.voucherCode || '-';
+    } else if (isReissue) {
       noteOrReqId = r.requestId || '-';
     } else {
       if (r.status === 'applied') {
@@ -586,8 +732,8 @@ export function exportExecutionReport(
 
     return [
       r.row, // Số thứ tự giữ kiểu number
-      sanitizeExcelCellValue(r.assetCode),
-      sanitizeExcelCellValue(r.projectName || ''),
+      sanitizeExcelCellValue(isCreate ? (r.certificateNo || r.assetCode) : r.assetCode),
+      sanitizeExcelCellValue(isCreate ? r.assetCode : (r.projectName || '')),
       sanitizeExcelCellValue(resultLabel),
       sanitizeExcelCellValue(r.status),
       sanitizeExcelCellValue(noteOrReqId),
@@ -595,7 +741,16 @@ export function exportExecutionReport(
     ];
   });
 
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const exportData: any[][] = [headers, ...rows];
+  if (isCreate) {
+    exportData.push([]);
+    exportData.push([
+      'Ghi chú:',
+      'Nếu phát hiện đã nhập nhầm dự án hoặc loại tài sản sau khi tạo: mở chi tiết GCN > Tái cấp mã. Nhập nhầm kho: dùng Chuyển kho hoặc Luân chuyển kho.',
+    ]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(exportData);
   ws['!cols'] = [
     { wch: 15 },
     { wch: 20 },

@@ -140,8 +140,8 @@ const ALL_NAV_PAGES: NavPageItem[] = [
   },
   {
     id: 'import',
-    name: 'Import dữ liệu Excel',
-    href: '/import',
+    name: 'Nhập & cập nhật hàng loạt',
+    href: '/bulk-update?mode=create',
     category: 'Hệ thống',
     icon: Upload,
     roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'],
@@ -471,10 +471,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                               <span className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#1E3A8A] dark:group-hover:text-blue-400">
                                 {asset.certificate_no}
                               </span>
-                              {asset.asset_code && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                  {asset.asset_code}
+                              {asset.former_code_label ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  {asset.former_code_label}
                                 </span>
+                              ) : (
+                                asset.asset_code && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                    {asset.asset_code}
+                                  </span>
+                                )
                               )}
                               {asset.import_receipt_number && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs">

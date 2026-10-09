@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Landmark, Building2, FileEdit, RefreshCw, AlertTriangle, ArrowRight } from 'lucide-react';
+import { FilePlus, FileText, Landmark, Building2, FileEdit, RefreshCw, AlertTriangle, ArrowRight } from 'lucide-react';
 import { BulkUpdateMode } from '../../api/bulkUpdate';
 import { BULK_MODES_CONFIG } from '../../utils/bulkUpdateExcel';
 
@@ -20,6 +20,12 @@ export const ModeSelectionStep: React.FC<Props> = ({
     accentColor: string;
     bgHover: string;
   }[] = [
+    {
+      id: 'create',
+      icon: FilePlus,
+      accentColor: 'text-teal-600 bg-teal-50 border-teal-200',
+      bgHover: 'hover:border-teal-300',
+    },
     {
       id: 'info',
       icon: FileText,
@@ -59,7 +65,7 @@ export const ModeSelectionStep: React.FC<Props> = ({
           Bước 1: Chọn loại cập nhật hàng loạt
         </h2>
         <p className="text-sm text-gray-600 mb-6">
-          Vui lòng chọn 1 trong 5 chế độ xử lý phù hợp với nghiệp vụ. Mỗi chế độ có bộ cột Excel và quy tắc kiểm soát riêng biệt trên máy chủ.
+          Vui lòng chọn 1 trong 6 chế độ xử lý phù hợp với nghiệp vụ. Mỗi chế độ có bộ cột Excel và quy tắc kiểm soát riêng biệt trên máy chủ.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

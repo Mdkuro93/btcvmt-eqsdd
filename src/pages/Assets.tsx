@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   fetchAssets,
@@ -7,6 +7,7 @@ import {
   createAsset,
   fetchWarehouses,
   requestExtension,
+  fetchAssetById,
 } from '../api/assets';
 import { adminDeleteAssets } from '../api/assetDeletion';
 import { createTransaction, fetchLatestCheckinScanUrl } from '../api/transactions';
@@ -15,12 +16,12 @@ import { StatusBadges } from '../components/StatusBadges';
 import { RequestModal } from '../components/RequestModal';
 import { CreateAssetModal } from '../components/CreateAssetModal';
 import { EditAssetModal } from '../components/EditAssetModal';
-import { ImportExcelModal } from '../components/ImportExcelModal';
 import { AssetHistoryModal } from '../components/AssetHistoryModal';
 import { AssetExtensionModal } from '../components/AssetExtensionModal';
 import { BulkEditModal } from '../components/BulkEditModal';
 import { AssetAuditModal } from '../components/AssetAuditModal';
 import { DeleteAssetsModal } from '../components/DeleteAssetsModal';
+import { ReassignAssetCodeModal } from '../components/ReassignAssetCodeModal';
 import { AssetTable } from '../components/AssetTable';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { CreateTransferModal } from '../components/warehouse-transfers/CreateTransferModal';
@@ -170,7 +171,6 @@ export const Assets: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeclareModalOpen, setIsDeclareModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [historyAsset, setHistoryAsset] = useState<Asset | null>(null);
@@ -192,6 +192,9 @@ export const Assets: React.FC = () => {
 
   // Warehouse Transfer Modal States (Luân chuyển kho)
   const [isWarehouseTransferModalOpen, setIsWarehouseTransferModalOpen] = useState(false);
+
+  // Reassign Asset Code Modal State
+  const [reassignTargetAsset, setReassignTargetAsset] = useState<Asset | null>(null);
 
   // Permissions helpers
   const userRole = profile?.role || '';
@@ -429,15 +432,15 @@ export const Assets: React.FC = () => {
           )}
 
           {canImport && (
-            <button
+            <Link
               id="btn-import-excel"
-              onClick={() => setIsImportModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors shadow-2xs cursor-pointer"
-              title="Nhập danh sách từ Excel"
+              to="/bulk-update?mode=create"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors shadow-2xs"
+              title="Nhập & cập nhật hàng loạt từ Excel"
             >
               <Upload className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>Nhập Excel</span>
-            </button>
+            </Link>
           )}
 
           {canDeclare && (
@@ -875,14 +878,42 @@ export const Assets: React.FC = () => {
                   <p className="text-xs text-slate-500">
                     Mã định danh hệ thống: <span className="font-mono font-medium">{detailAsset.asset_code || '-'}</span>
                   </p>
+                  {detailAsset.former_asset_codes && detailAsset.former_asset_codes.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs">
+                      <span className="font-semibold text-amber-700">Mã cũ (đã tái cấp):</span>
+                      {detailAsset.former_asset_codes.map((c, idx) => (
+                        <span
+                          key={idx}
+                          className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 line-through font-semibold"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              <button
-                onClick={() => setDetailAsset(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {(['super_admin', 'admin', 'btc_manager'].includes(userRole) ||
+                  (userRole === 'warehouse_manager' &&
+                    Boolean(detailAsset.warehouse_id && profile?.managed_warehouse_ids?.includes(detailAsset.warehouse_id)))) && (
+                  <button
+                    type="button"
+                    onClick={() => setReassignTargetAsset(detailAsset)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                    title="Tái cấp mã định danh qua RPC máy chủ"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Tái cấp mã</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setDetailAsset(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Content Body */}
@@ -1131,6 +1162,31 @@ export const Assets: React.FC = () => {
         />
       )}
 
+      {/* Reassign Asset Code Modal */}
+      {reassignTargetAsset && (
+        <ReassignAssetCodeModal
+          isOpen={!!reassignTargetAsset}
+          onClose={() => setReassignTargetAsset(null)}
+          asset={reassignTargetAsset}
+          projects={projects}
+          onSuccess={async () => {
+            const targetId = reassignTargetAsset.id;
+            setReassignTargetAsset(null);
+            loadAssets();
+            if (detailAsset && detailAsset.id === targetId) {
+              try {
+                const refreshed = await fetchAssetById(targetId);
+                if (refreshed) {
+                  setDetailAsset(refreshed);
+                }
+              } catch (err) {
+                console.warn('Không thể tải lại chi tiết GCN sau tái cấp mã:', err);
+              }
+            }
+          }}
+        />
+      )}
+
       {/* Declare Asset Modal */}
       {isDeclareModalOpen && (
         <DeclareNewAssetModal
@@ -1138,19 +1194,6 @@ export const Assets: React.FC = () => {
           onClose={() => setIsDeclareModalOpen(false)}
           onSuccess={() => {
             setIsDeclareModalOpen(false);
-            loadAssets();
-          }}
-        />
-      )}
-
-      {/* Import Excel Modal */}
-      {isImportModalOpen && (
-        <ImportExcelModal
-          isOpen={isImportModalOpen}
-          onClose={() => setIsImportModalOpen(false)}
-          currentUser={profile}
-          onSuccess={() => {
-            setIsImportModalOpen(false);
             loadAssets();
           }}
         />

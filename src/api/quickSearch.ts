@@ -13,6 +13,8 @@ export interface QuickAssetSearchResult {
   project_name?: string | null;
   warehouse_name?: string | null;
   import_receipt_number?: string | null;
+  matched_former_code?: string | null;
+  former_code_label?: string | null;
 }
 
 /**
@@ -59,19 +61,38 @@ export async function quickSearchAssets(keyword: string, limit = 10): Promise<Qu
              importReceipt.includes(searchKey);
     });
 
-    return filtered.slice(0, limit).map(a => ({
-      id: a.id,
-      asset_code: a.asset_code || (a as any).ma_tsdb,
-      certificate_no: a.certificate_no || (a as any).so_gcn,
-      business_project_name: a.business_project_name || a.projects?.name || (a as any).ten_du_an,
-      business_plot_code: a.business_plot_code,
-      legal_lot_code: a.legal_lot_code || (a as any).ma_lo,
-      custody_status: a.custody_status,
-      is_in_warehouse: a.is_in_warehouse,
-      project_name: a.projects?.name || (a as any).ten_du_an,
-      warehouse_name: a.warehouses?.name,
-      import_receipt_number: receiptMap[a.id] || (a as any).import_receipt_number || null,
-    }));
+    let matchedByFormer = false;
+    let targetList = filtered;
+    if (filtered.length === 0) {
+      const normalizedQuery = clean.toUpperCase();
+      const formerMatches = assets.filter(item => {
+        const codes = (item as any).former_asset_codes || [];
+        return Array.isArray(codes) && codes.some(c => String(c).toUpperCase() === normalizedQuery);
+      });
+      if (formerMatches.length > 0) {
+        matchedByFormer = true;
+        targetList = formerMatches;
+      }
+    }
+
+    return targetList.slice(0, limit).map(a => {
+      const currentCode = a.asset_code || (a as any).ma_tsdb;
+      return {
+        id: a.id,
+        asset_code: currentCode,
+        certificate_no: a.certificate_no || (a as any).so_gcn,
+        business_project_name: a.business_project_name || a.projects?.name || (a as any).ten_du_an,
+        business_plot_code: a.business_plot_code,
+        legal_lot_code: a.legal_lot_code || (a as any).ma_lo,
+        custody_status: a.custody_status,
+        is_in_warehouse: a.is_in_warehouse,
+        project_name: a.projects?.name || (a as any).ten_du_an,
+        warehouse_name: a.warehouses?.name,
+        import_receipt_number: receiptMap[a.id] || (a as any).import_receipt_number || null,
+        matched_former_code: matchedByFormer ? clean.toUpperCase() : null,
+        former_code_label: matchedByFormer ? `Mã cũ: ${clean.toUpperCase()} → mã hiện tại ${currentCode || '(Chưa có mã)'}` : null,
+      };
+    });
   }
 
   // 1. Tìm các giao dịch nhập kho chứa số phiếu khớp từ khóa nếu có
@@ -145,7 +166,43 @@ export async function quickSearchAssets(keyword: string, limit = 10): Promise<Qu
     throw new Error('Không thể tìm kiếm GCN: ' + error.message);
   }
 
-  const rawAssets = data || [];
+  let rawAssets = data || [];
+  let isMatchedByFormer = false;
+
+  // Nếu không có kết quả khớp trực tiếp, thử thêm truy vấn khớp chính xác trong assets.former_asset_codes
+  if (rawAssets.length === 0) {
+    const normalizedCode = clean.toUpperCase();
+    const { data: formerData, error: formerError } = await withTimeout(
+      supabase
+        .from('assets')
+        .select(`
+          id,
+          asset_code,
+          certificate_no,
+          legal_lot_code,
+          business_plot_code,
+          business_project_name,
+          custody_status,
+          is_in_warehouse,
+          projects(name),
+          warehouses(name)
+        `)
+        .contains('former_asset_codes', [normalizedCode])
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      DEFAULT_READ_TIMEOUT
+    );
+
+    if (formerError) {
+      throw new Error('Không thể tìm kiếm GCN theo mã cũ: ' + formerError.message);
+    }
+
+    if (formerData && formerData.length > 0) {
+      rawAssets = formerData;
+      isMatchedByFormer = true;
+    }
+  }
+
   const foundIds = rawAssets.map((a: any) => a.id).filter(Boolean);
 
   // 3. Tra cứu bổ sung số phiếu nhập kho cho các tài sản tìm thấy
@@ -192,5 +249,7 @@ export async function quickSearchAssets(keyword: string, limit = 10): Promise<Qu
     project_name: a.projects?.name,
     warehouse_name: a.warehouses?.name,
     import_receipt_number: receiptNumberMap[a.id] || null,
+    matched_former_code: isMatchedByFormer ? clean.toUpperCase() : null,
+    former_code_label: isMatchedByFormer ? `Mã cũ: ${clean.toUpperCase()} → mã hiện tại ${a.asset_code || '(Chưa có mã)'}` : null,
   }));
 }

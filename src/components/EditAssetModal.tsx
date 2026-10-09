@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Save, AlertTriangle, Building2, MapPin, ShieldCheck, FileText, CheckCircle2, ArrowLeftRight } from 'lucide-react';
+import { X, Loader2, Save, AlertTriangle, Building2, MapPin, ShieldCheck, FileText, CheckCircle2, ArrowLeftRight, RefreshCw } from 'lucide-react';
 import { Asset, Project, Warehouse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { updateAsset, checkAssetDuplicateServer } from '../api/assets';
+import { updateAsset, checkAssetDuplicateServer, fetchAssetById } from '../api/assets';
 import { fetchInvestorEntities } from '../api/investorEntities';
 import { logActivity } from '../api/activityLogs';
-import { COLLATERAL_TYPES, resolveRegionCode } from '../lib/assetIdentifier';
+import { COLLATERAL_TYPES } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { AssetTransferModal } from './AssetTransferModal';
+import { ReassignAssetCodeModal } from './ReassignAssetCodeModal';
 import { canTransferAsset } from '../lib/permissions';
 import { validateScanLink } from '../lib/scanLink';
 import { HIGH_RISE_ASSET_TYPES, LOW_RISE_ASSET_TYPES } from '../constants/assetTypes';
@@ -34,6 +35,12 @@ export const EditAssetModal: React.FC<Props> = ({
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+
+  const canReassignCode =
+    ['super_admin', 'admin', 'btc_manager'].includes(profile?.role || '') ||
+    (profile?.role === 'warehouse_manager' &&
+      Boolean(asset?.warehouse_id && profile?.managed_warehouse_ids?.includes(asset.warehouse_id)));
 
   // Form State
   const [assetCode, setAssetCode] = useState('');
@@ -234,8 +241,9 @@ export const EditAssetModal: React.FC<Props> = ({
       }
 
       const isDup = isDuplicate || dupCheck.is_duplicate;
+      const finalNotes = notes.trim() || null;
+
       const updates: Partial<Asset> = {
-        asset_code: assetCode || asset.asset_code,
         collateral_type: collateralType,
         certificate_no: certificateNo.trim(),
         certificate_group: certificateGroup,
@@ -266,14 +274,14 @@ export const EditAssetModal: React.FC<Props> = ({
         collateral_ratio: isMortgaged && collateralRatio ? Number(collateralRatio) : null,
         collateral_value: isMortgaged && collateralValue ? Number(collateralValue) : null,
         mortgage_expected_release_date: isMortgaged ? (mortgageReleaseDate || null) : null,
-        notes: notes.trim() || null,
+        notes: finalNotes || null,
       };
 
       await updateAsset(
         asset.id, 
         updates, 
         profile ? { id: profile.id, email: profile.email, full_name: profile.full_name } : null,
-        notes || 'Chỉnh sửa cập nhật thông tin GCN'
+        finalNotes || 'Chỉnh sửa cập nhật thông tin GCN'
       );
 
       // Log activity
@@ -319,16 +327,54 @@ export const EditAssetModal: React.FC<Props> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {canReassignCode && (
+              <button
+                type="button"
+                onClick={() => setIsReassignModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                title="Tái cấp mã định danh qua RPC máy chủ"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Tái cấp mã</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Cảnh báo khi người dùng đổi Dự án hoặc Loại tài sản trên GCN đã có mã */}
+          {Boolean(
+            asset.asset_code &&
+            ((projectId && projectId !== (asset.project_id || '')) ||
+             (collateralType && collateralType !== (asset.collateral_type || 'BDS')))
+          ) && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  Đổi dự án/loại tài sản sẽ <strong>KHÔNG</strong> đổi mã. Dùng nút <strong>Tái cấp mã</strong> nếu mã cần sinh lại.
+                </span>
+              </div>
+              {canReassignCode && (
+                <button
+                  type="button"
+                  onClick={() => setIsReassignModalOpen(true)}
+                  className="shrink-0 px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md text-[11px] transition-colors cursor-pointer"
+                >
+                  Tái cấp mã
+                </button>
+              )}
+            </div>
+          )}
+
           {isDuplicate && duplicateWarning && (
             <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
               <div className="flex items-start space-x-2 text-amber-900 text-xs">
@@ -379,15 +425,28 @@ export const EditAssetModal: React.FC<Props> = ({
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Mã Định Danh Tài Sản (Hệ thống)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Mã Định Danh Tài Sản (Hệ thống)
+                  </label>
+                  {canReassignCode && (
+                    <button
+                      type="button"
+                      onClick={() => setIsReassignModalOpen(true)}
+                      className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Tái cấp mã
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={assetCode}
-                  onChange={e => setAssetCode(e.target.value)}
-                  placeholder="VMT_BDS_00001"
-                  className="w-full px-3 py-2 border rounded-md text-xs font-mono bg-gray-50 border-gray-300 focus:bg-white"
+                  readOnly
+                  disabled
+                  placeholder="VMT_DNG_BDS_00000001"
+                  className="w-full px-3 py-2 border rounded-md text-xs font-mono bg-gray-100 border-gray-300 text-gray-700 cursor-not-allowed select-all"
                 />
               </div>
 
@@ -905,6 +964,31 @@ export const EditAssetModal: React.FC<Props> = ({
           onSuccess={() => {
             onSuccess();
             onClose();
+          }}
+        />
+      )}
+
+      {/* Reassign Asset Code Modal */}
+      {asset && isReassignModalOpen && (
+        <ReassignAssetCodeModal
+          isOpen={isReassignModalOpen}
+          onClose={() => setIsReassignModalOpen(false)}
+          asset={asset}
+          projects={projects}
+          onSuccess={async (newCode) => {
+            if (newCode) setAssetCode(newCode);
+            try {
+              const fresh = await fetchAssetById(asset.id);
+              if (fresh) {
+                if (fresh.project_id) setProjectId(fresh.project_id);
+                if (fresh.collateral_type) setCollateralType(fresh.collateral_type);
+                if (fresh.asset_code) setAssetCode(fresh.asset_code);
+              }
+            } catch (err) {
+              console.warn('Không thể tải lại chi tiết GCN trong EditAssetModal:', err);
+            }
+            setIsReassignModalOpen(false);
+            onSuccess();
           }}
         />
       )}

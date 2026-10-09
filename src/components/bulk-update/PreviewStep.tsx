@@ -102,7 +102,23 @@ export const PreviewStep: React.FC<Props> = ({
   };
 
   const isReissue = selectedMode === 'reissue';
+  const isCreate = selectedMode === 'create';
   const canProceed = !isPreviewing && stats.ok > 0;
+
+  const hasProjectError = useMemo(() => {
+    if (!isCreate) return false;
+    return results.some((r) => {
+      if (r.status !== 'error') return false;
+      const m = (r.message || '').toLowerCase();
+      return (
+        m.includes('dự án') ||
+        m.includes('địa bàn') ||
+        m.includes('mã vùng') ||
+        m.includes('mã tỉnh') ||
+        m.includes('vùng')
+      );
+    });
+  }, [isCreate, results]);
 
   return (
     <div className="space-y-6">
@@ -287,13 +303,13 @@ export const PreviewStep: React.FC<Props> = ({
                   <tr>
                     <th className="py-2.5 px-3 w-16">Dòng</th>
                     <th className="py-2.5 px-3 w-36">
-                      {isReissue ? 'Mã GCN cũ' : 'Mã tài sản'}
+                      {isCreate ? 'Số GCN' : isReissue ? 'Mã GCN cũ' : 'Mã tài sản'}
                     </th>
                     <th className="py-2.5 px-3 w-44">Dự án (theo file)</th>
                     <th className="py-2.5 px-3 w-28">Trạng thái</th>
                     <th className="py-2.5 px-3">Thông báo</th>
                     <th className="py-2.5 px-3 w-72">
-                      {isReissue ? 'Hành động' : 'Thay đổi (cũ → mới)'}
+                      {isCreate ? 'Hành động' : isReissue ? 'Hành động' : 'Thay đổi (cũ → mới)'}
                     </th>
                   </tr>
                 </thead>
@@ -333,7 +349,7 @@ export const PreviewStep: React.FC<Props> = ({
                             #{r.row}
                           </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-gray-900">
-                            {r.assetCode}
+                            {isCreate ? (r.certificateNo || r.assetCode) : r.assetCode}
                           </td>
                           <td className={`py-2.5 px-3 text-xs ${
                             isProjectMismatch
@@ -393,7 +409,11 @@ export const PreviewStep: React.FC<Props> = ({
                             </div>
                           </td>
                           <td className="py-2.5 px-3 text-gray-600 font-mono text-[11px]">
-                            {isReissue ? (
+                            {isCreate ? (
+                              <span className="text-teal-700 font-sans">
+                                Thêm mới GCN vào kho
+                              </span>
+                            ) : isReissue ? (
                               <span className="text-blue-700 font-sans">
                                 Tạo hồ sơ cấp đổi (chờ duyệt)
                               </span>
@@ -443,6 +463,21 @@ export const PreviewStep: React.FC<Props> = ({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Khung ghi chú khi có lỗi dự án (Prompt 19 Mục 3) */}
+        {hasProjectError && (
+          <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-3 text-amber-950 text-xs">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-amber-900">
+                Lưu ý xử lý lỗi Dự án / Mã vùng / Mã tỉnh:
+              </p>
+              <p className="mt-1 leading-relaxed">
+                Dòng lỗi KHÔNG được tạo. Sửa tên dự án trong file rồi nhập lại các dòng này, hoặc nhờ quản trị cấu hình mã tại Danh mục. Hệ thống KHÔNG tự suy dự án hay mã từ kho.
+              </p>
+            </div>
           </div>
         )}
 

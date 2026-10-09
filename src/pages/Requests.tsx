@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchTransactions, decideTransactionItem, bulkDecideTransactionItems, voidTransactionItem } from '../api/transactions';
 import { fetchOverdueAssets } from '../api/assets';
-import { fetchWarehouses, fetchAssets } from '../api/assets';
+import { fetchWarehouses, fetchAssets, fetchProjects } from '../api/assets';
 import {
   fetchDeclarationRequests,
   approveDeclarationRequest,
@@ -12,13 +13,13 @@ import {
 } from '../api/assetDeclarationRequests';
 import { ReviewDeclarationRequestModal } from '../components/ReviewDeclarationRequestModal';
 import { DuplicateCertificateAckDialog } from '../components/DuplicateCertificateAckDialog';
-import { generateNextAssetCode } from '../lib/assetIdentifier';
+import { resolveAssetCodePrefix } from '../lib/assetIdentifier';
 import { DecideRequestModal } from '../components/DecideRequestModal';
 import { BulkDecideModal } from '../components/BulkDecideModal';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
 import { DEFAULT_PERMISSIONS_BY_ROLE, getEffectivePermissions } from '../api/users';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw, CalendarX, Ban } from 'lucide-react';
+import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw, CalendarX, Ban, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -91,6 +92,7 @@ export const Requests: React.FC = () => {
   const [selectedDeclarations, setSelectedDeclarations] = useState<Set<string>>(new Set());
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [modalItem, setModalItem] = useState<any>(null);
   const [modalDecision, setModalDecision] = useState<'approved' | 'rejected' | null>(null);
   
@@ -126,6 +128,7 @@ export const Requests: React.FC = () => {
 
   useEffect(() => {
     fetchWarehouses().then(setWarehouses).catch(() => {});
+    fetchProjects().then(setProjects).catch(() => {});
   }, []);
 
   const effectivePerms = getEffectivePermissions(profile);
@@ -139,6 +142,8 @@ export const Requests: React.FC = () => {
 
   const canVoidItem = (item: any): boolean => {
     if (!profile) return false;
+    // Phiếu có lý do luân chuyển: xử lý ở /warehouse-transfers, ẩn nút Hủy tại đây
+    if (String(item?.reason || '').trim().toLowerCase() === 'luân chuyển') return false;
     const currentRole = effectiveRole || profile.role || user?.role || '';
     const initialRole = originalRole || (profile as any)?.originalRole || '';
 
@@ -238,10 +243,15 @@ export const Requests: React.FC = () => {
         if (!req) continue;
         let prefix: string | null = null;
         if (req.request_type === 'cap_moi' || req.request_type === 'tach_so') {
-          const assetsRes = await fetchAssets({ projectId: req.project_id || undefined, collateralType: req.collateral_type });
-          const existingAssets = assetsRes.data || [];
-          const fullCode = generateNextAssetCode(undefined, req.projects?.areas?.province_code || req.projects?.areas?.name, req.collateral_type, existingAssets);
-          prefix = fullCode.substring(0, fullCode.lastIndexOf('_') + 1);
+          const res = resolveAssetCodePrefix({
+            projectId: req.project_id,
+            projectName: req.projects?.name,
+            projects,
+            collateralType: req.collateral_type,
+          });
+          if (res.isValid) {
+            prefix = res.prefix;
+          }
         }
         items.push({ request_id: id, asset_code_prefix: prefix });
       }
@@ -296,10 +306,15 @@ export const Requests: React.FC = () => {
     let prefix: string | null = null;
     try {
       if (req.request_type === 'cap_moi' || req.request_type === 'tach_so') {
-        const assetsRes = await fetchAssets({ projectId: req.project_id || undefined, collateralType: req.collateral_type });
-        const existingAssets = assetsRes.data || [];
-        const fullCode = generateNextAssetCode(undefined, req.projects?.areas?.province_code || req.projects?.areas?.name, req.collateral_type, existingAssets);
-        prefix = fullCode.substring(0, fullCode.lastIndexOf('_') + 1);
+        const res = resolveAssetCodePrefix({
+          projectId: req.project_id,
+          projectName: req.projects?.name,
+          projects,
+          collateralType: req.collateral_type,
+        });
+        if (res.isValid) {
+          prefix = res.prefix;
+        }
       }
       await approveDeclarationRequest(req.id, prefix);
       toast.success('Đã duyệt và nhập kho GCN thành công!');
@@ -467,6 +482,10 @@ export const Requests: React.FC = () => {
   }, [transactions, isWarehouseManager, managedWarehouseIds, selectedWarehouseFilter, selectedTypeFilter, selectedStatusFilter]);
 
   const toggleItemSelection = (itemId: string) => {
+    // Không cho chọn phiếu có lý do luân chuyển
+    const targetItem = transactions.flatMap(t => t.items || []).find(i => i.id === itemId);
+    if (String(targetItem?.reason || '').trim().toLowerCase() === 'luân chuyển') return;
+
     setSelectedItems(prev => {
       const next = new Set(prev);
       if (next.has(itemId)) next.delete(itemId);
@@ -479,7 +498,8 @@ export const Requests: React.FC = () => {
     const list: any[] = [];
     transactions.forEach(tx => {
       (tx.items || []).forEach((i: any) => {
-        if (selectedItems.has(i.id)) list.push({ ...i, transaction_id: tx.id, transaction: tx });
+        const isTransfer = String(i?.reason || '').trim().toLowerCase() === 'luân chuyển';
+        if (selectedItems.has(i.id) && !isTransfer) list.push({ ...i, transaction_id: tx.id, transaction: tx });
       });
     });
     return list;
@@ -802,12 +822,15 @@ export const Requests: React.FC = () => {
                               const whId = getResponsibleWarehouseId(item, tx.type);
                               const isOverdueSLA = item.status === 'pending' && tx.details?.desiredReceiveDate && new Date(tx.details.desiredReceiveDate) < new Date(new Date().setHours(0, 0, 0, 0));
                               const warehouseObj = warehouses.find(w => w.id === whId);
+                              const isTransfer = String(item?.reason || '').trim().toLowerCase() === 'luân chuyển' ||
+                                                 String(tx?.reason || '').trim().toLowerCase() === 'luân chuyển' ||
+                                                 String(tx?.details?.reason || '').trim().toLowerCase() === 'luân chuyển';
 
                               return (
                                 <tr key={item.id} className="hover:bg-white dark:hover:bg-slate-800/60 transition-colors">
                                   {isApprover && (
                                     <td className="py-2.5 pr-3">
-                                      {item.status === 'pending' && (
+                                      {item.status === 'pending' && !isTransfer && (
                                         <input 
                                           type="checkbox" 
                                           checked={selectedItems.has(item.id)}
@@ -860,49 +883,62 @@ export const Requests: React.FC = () => {
                                   </td>
                                   <td className="py-2.5 pr-4 text-right">
                                     <div className="flex items-center justify-end gap-1.5">
-                                      {/* Print Button if approved or has voucher */}
-                                      {(item.status === 'approved' || item.status === 'completed' || item.voucher_code) && (
-                                        <button
-                                          type="button"
-                                          onClick={() => setPrintModalData({ item, tx })}
-                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#1E3A8A] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-md transition-colors cursor-pointer"
-                                          title="In phiếu xuất/nhập A4"
+                                      {isTransfer ? (
+                                        <Link
+                                          to="/warehouse-transfers"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800 rounded-md transition-colors"
+                                          title="Phiếu điều chuyển kho — chuyển sang trang Luân chuyển kho để xử lý"
                                         >
-                                          <Printer className="w-3 h-3" /> In biên bản
-                                        </button>
-                                      )}
-
-                                      {/* Void Button */}
-                                      {canVoidItem(item) && ['approved', 'confirmed', 'checked_out', 'completed'].includes(item.status) && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setVoidModalData({ item, tx });
-                                            setVoidReason('');
-                                          }}
-                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800 rounded-md transition-colors cursor-pointer"
-                                          title="Hủy phiếu và hoàn trả tài sản về kho"
-                                        >
-                                          <Ban className="w-3 h-3" /> Hủy phiếu
-                                        </button>
-                                      )}
-
-                                      {isApprover && item.status === 'pending' && (
+                                          <span>Luân chuyển kho</span>
+                                          <ArrowRight className="w-3 h-3" />
+                                        </Link>
+                                      ) : (
                                         <>
-                                          <button
-                                            disabled={decidingItemId === item.id}
-                                            onClick={() => handleDecide(item, 'rejected')}
-                                            className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 disabled:opacity-50 cursor-pointer"
-                                          >
-                                            Từ chối
-                                          </button>
-                                          <button
-                                            disabled={decidingItemId === item.id}
-                                            onClick={() => handleDecide(item, 'approved')}
-                                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 dark:bg-emerald-500 text-white hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 shadow-sm cursor-pointer"
-                                          >
-                                            {decidingItemId === item.id ? 'Đang xử lý...' : 'Duyệt phiếu'}
-                                          </button>
+                                          {/* Print Button if approved or has voucher */}
+                                          {(item.status === 'approved' || item.status === 'completed' || item.voucher_code) && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setPrintModalData({ item, tx })}
+                                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#1E3A8A] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-md transition-colors cursor-pointer"
+                                              title="In phiếu xuất/nhập A4"
+                                            >
+                                              <Printer className="w-3 h-3" /> In biên bản
+                                            </button>
+                                          )}
+
+                                          {/* Void Button */}
+                                          {canVoidItem(item) && ['approved', 'confirmed', 'checked_out', 'completed'].includes(item.status) && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setVoidModalData({ item, tx });
+                                                setVoidReason('');
+                                              }}
+                                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800 rounded-md transition-colors cursor-pointer"
+                                              title="Hủy phiếu và hoàn trả tài sản về kho"
+                                            >
+                                              <Ban className="w-3 h-3" /> Hủy phiếu
+                                            </button>
+                                          )}
+
+                                          {isApprover && item.status === 'pending' && (
+                                            <>
+                                              <button
+                                                disabled={decidingItemId === item.id}
+                                                onClick={() => handleDecide(item, 'rejected')}
+                                                className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 disabled:opacity-50 cursor-pointer"
+                                              >
+                                                Từ chối
+                                              </button>
+                                              <button
+                                                disabled={decidingItemId === item.id}
+                                                onClick={() => handleDecide(item, 'approved')}
+                                                className="px-3 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 dark:bg-emerald-500 text-white hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 shadow-sm cursor-pointer"
+                                              >
+                                                {decidingItemId === item.id ? 'Đang xử lý...' : 'Duyệt phiếu'}
+                                              </button>
+                                            </>
+                                          )}
                                         </>
                                       )}
                                     </div>

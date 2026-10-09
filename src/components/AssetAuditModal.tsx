@@ -232,6 +232,13 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
     }
 
     switch (action) {
+      case 'reassign_asset_code':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+            <Tag className="w-3.5 h-3.5" />
+            Tái cấp mã tài sản
+          </span>
+        );
       case 'CREATE':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -362,6 +369,20 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                 const oldData = log.old_data || {};
                 const newData = log.new_data || {};
                 const changedKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]));
+                const isReassign = log.action === 'reassign_asset_code';
+                const hist = newData.history || {};
+                const hasHadHistory = Boolean(
+                  newData.had_history ||
+                  (hist && (
+                    (Number(hist.transactions) || 0) > 0 ||
+                    (Number(hist.inventory_audits) || 0) > 0 ||
+                    (Number(hist.lineage) || 0) > 0 ||
+                    (Number(hist.declaration_requests) || 0) > 0 ||
+                    (Number(hist.ownership_transfers) || 0) > 0 ||
+                    hist.mortgaged === true ||
+                    hist.checked_out === true
+                  ))
+                );
 
                 return (
                   <div key={log.id} className="relative group">
@@ -371,8 +392,14 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                     <div className="bg-white rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden">
                       {/* Event Header */}
                       <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {getActionBadge(log.action)}
+                          {hasHadHistory && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              GCN đã có lịch sử
+                            </span>
+                          )}
                           <span className="text-xs font-semibold text-slate-800 flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-slate-600" />
                             {log.profiles?.full_name || log.changed_by_name || log.profiles?.email || 'Người dùng hệ thống'}
@@ -384,6 +411,20 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                           <span className="text-slate-600">({timeAgo})</span>
                         </div>
                       </div>
+
+                      {/* Reassign Asset Code summary banner */}
+                      {isReassign && (oldData.asset_code || newData.asset_code) && (
+                        <div className="px-4 py-2.5 bg-purple-50/70 border-b border-purple-100 flex items-center gap-2 text-xs flex-wrap">
+                          <span className="text-purple-900 font-semibold">Tái cấp mã:</span>
+                          <span className="font-mono font-bold text-slate-500 line-through px-1.5 py-0.5 bg-slate-100 rounded">
+                            {oldData.asset_code || '(Chưa có mã)'}
+                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          <span className="font-mono font-bold text-purple-900 px-1.5 py-0.5 bg-purple-100 border border-purple-200 rounded">
+                            {newData.asset_code || '(Chưa có mã)'}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Event Notes */}
                       {log.notes && (
@@ -422,12 +463,18 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                                         </div>
                                       </td>
                                       <td className="py-2 px-3 text-slate-600 font-mono text-[11px] bg-rose-50/30 break-words">
-                                        {formatValue(oldV, key, lookupMap)}
+                                        {key === 'asset_code' && isReassign ? (
+                                          <span className="line-through text-rose-800 font-semibold">{formatValue(oldV, key, lookupMap)}</span>
+                                        ) : (
+                                          formatValue(oldV, key, lookupMap)
+                                        )}
                                       </td>
                                       <td className="py-2 px-3 text-emerald-900 font-semibold font-mono text-[11px] bg-emerald-50/40 break-words">
                                         <div className="flex items-center gap-1">
                                           <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                          <span>{formatValue(newV, key, lookupMap)}</span>
+                                          <span className={key === 'asset_code' && isReassign ? 'font-bold text-emerald-800' : ''}>
+                                            {formatValue(newV, key, lookupMap)}
+                                          </span>
                                         </div>
                                       </td>
                                     </tr>

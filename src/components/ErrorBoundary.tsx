@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
       const reloadKey = `err_mismatch_${window.location.pathname}`;
       const now = Date.now();
       const lastReload = Number(sessionStorage.getItem(reloadKey) || '0');
-      if (now - lastReload > 8000) {
+      if (now - lastReload > 4000) {
         sessionStorage.setItem(reloadKey, String(now));
         window.location.reload();
       }

@@ -1,5 +1,3 @@
-import Tesseract from 'tesseract.js';
-
 export interface OcrProgressCallback {
   (progress: number, statusText: string): void;
 }
@@ -12,11 +10,14 @@ export async function extractTextFromImage(
   onProgress?: OcrProgressCallback
 ): Promise<string> {
   try {
+    const TesseractModule = await import('tesseract.js');
+    const Tesseract = TesseractModule.default || TesseractModule;
+    
     const result = await Tesseract.recognize(
       imageSource,
       'vie+eng',
       {
-        logger: (m) => {
+        logger: (m: any) => {
           if (m.status === 'recognizing text' && typeof m.progress === 'number') {
             const pct = Math.round(m.progress * 100);
             onProgress?.(pct, `Đang đọc ký tự từ ảnh... ${pct}%`);
@@ -33,7 +34,7 @@ export async function extractTextFromImage(
       }
     );
 
-    const rawText = result.data.text || '';
+    const rawText = result?.data?.text || '';
     return rawText.trim();
   } catch (err: any) {
     console.error('Lỗi nhận diện OCR Tesseract:', err);

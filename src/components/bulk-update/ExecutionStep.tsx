@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BulkUpdateMode, BulkRowResult } from '../../api/bulkUpdate';
@@ -54,6 +55,19 @@ export const ExecutionStep: React.FC<Props> = ({
   };
 
   const isReissue = selectedMode === 'reissue';
+  const isCreate = selectedMode === 'create';
+
+  const hasProjectError = isCreate && executedResults.some((r) => {
+    if (r.status !== 'error') return false;
+    const m = (r.message || '').toLowerCase();
+    return (
+      m.includes('dự án') ||
+      m.includes('địa bàn') ||
+      m.includes('mã vùng') ||
+      m.includes('mã tỉnh') ||
+      m.includes('vùng')
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -226,11 +240,12 @@ export const ExecutionStep: React.FC<Props> = ({
                     <tr>
                       <th className="py-2.5 px-3 w-16">Dòng</th>
                       <th className="py-2.5 px-3 w-36">
-                        {isReissue ? 'Mã GCN cũ' : 'Mã tài sản'}
+                        {isCreate ? 'Số GCN' : isReissue ? 'Mã GCN cũ' : 'Mã tài sản'}
                       </th>
                       <th className="py-2.5 px-3 w-44">Dự án (theo file)</th>
                       <th className="py-2.5 px-3 w-28">Kết quả</th>
                       <th className="py-2.5 px-3">Thông báo</th>
+                      {isCreate && <th className="py-2.5 px-3 w-44">Mã TS / Phiếu nhập</th>}
                       {isReissue && <th className="py-2.5 px-3 w-72">Mã hồ sơ (ID)</th>}
                     </tr>
                   </thead>
@@ -256,7 +271,7 @@ export const ExecutionStep: React.FC<Props> = ({
                         >
                           <td className="py-2.5 px-3 font-mono text-gray-500">#{r.row}</td>
                           <td className="py-2.5 px-3 font-mono font-bold text-gray-900">
-                            {r.assetCode}
+                            {isCreate ? (r.certificateNo || r.assetCode) : r.assetCode}
                           </td>
                           <td className={`py-2.5 px-3 text-xs ${
                             isProjectMismatch
@@ -279,6 +294,12 @@ export const ExecutionStep: React.FC<Props> = ({
                             )}
                           </td>
                           <td className="py-2.5 px-3 text-gray-700">{r.message}</td>
+                          {isCreate && (
+                            <td className="py-2.5 px-3 font-mono text-[11px] text-teal-800 font-bold">
+                              {r.assetCode !== '-' ? r.assetCode : ''}
+                              {r.voucherCode ? ` · ${r.voucherCode}` : ''}
+                            </td>
+                          )}
                           {isReissue && (
                             <td className="py-2.5 px-3 font-mono text-[11px] text-gray-600">
                               {r.requestId || '-'}
@@ -318,6 +339,34 @@ export const ExecutionStep: React.FC<Props> = ({
                 </div>
               )}
             </div>
+
+            {/* Khung ghi chú khi có lỗi dự án (Prompt 19 Mục 3) */}
+            {hasProjectError && (
+              <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-3 text-amber-950 text-xs">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-amber-900">
+                    Lưu ý xử lý lỗi Dự án / Mã vùng / Mã tỉnh:
+                  </p>
+                  <p className="mt-1 leading-relaxed">
+                    Dòng lỗi KHÔNG được tạo. Sửa tên dự án trong file rồi nhập lại các dòng này, hoặc nhờ quản trị cấu hình mã tại Danh mục. Hệ thống KHÔNG tự suy dự án hay mã từ kho.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Hướng dẫn khi tạo thành công (Prompt 19 Mục 3) */}
+            {isCreate && successRows.length > 0 && (
+              <div className="mt-4 p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-start gap-3 text-blue-950 text-xs">
+                <HelpCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-blue-900">Hướng dẫn sau khi thêm mới GCN:</p>
+                  <p className="mt-1 leading-relaxed">
+                    Nếu phát hiện đã nhập nhầm dự án hoặc loại tài sản sau khi tạo: mở chi tiết GCN &gt; Tái cấp mã. Nhập nhầm kho: dùng Chuyển kho hoặc Luân chuyển kho.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

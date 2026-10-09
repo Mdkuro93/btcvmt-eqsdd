@@ -4,7 +4,7 @@ import { normalizeNumberInput, normalizeDateInput } from '../lib/inputNormalize'
 
 export { normalizeNumberInput, normalizeDateInput };
 
-export type BulkUpdateMode = 'info' | 'mortgage' | 'owner' | 'certificate' | 'reissue';
+export type BulkUpdateMode = 'create' | 'info' | 'mortgage' | 'owner' | 'certificate' | 'reissue';
 
 export interface BulkProjectItem {
   id: string;
@@ -30,14 +30,27 @@ export interface BulkReissueResultItem {
   r_request_id: string | null;
 }
 
+export interface BulkImportResultItem {
+  r_row: number;
+  r_certificate_no: string | null;
+  r_result: 'ok' | 'created' | 'error';
+  r_message: string;
+  r_asset_id: string | null;
+  r_asset_code: string | null;
+  r_voucher: string | null;
+}
+
 export interface BulkRowResult {
   row: number;
   assetCode: string;
+  certificateNo?: string;
   projectName?: string | null;
   status: 'ok' | 'unchanged' | 'error' | 'applied' | 'created';
   message: string;
   changes?: Record<string, [any, any]> | null;
   requestId?: string | null;
+  assetId?: string | null;
+  voucherCode?: string | null;
 }
 
 export interface RunInChunksResult {
@@ -281,6 +294,46 @@ export async function createReissueRequestsBulk(
     status: it.r_result,
     message: it.r_message,
     requestId: it.r_request_id,
+  }));
+}
+
+/**
+ * Gọi RPC import_assets_bulk (chế độ Thêm mới GCN hàng loạt)
+ */
+export async function importAssetsBulk(
+  rows: any[],
+  reason?: string | null,
+  apply: boolean = false,
+  batchId?: string | null
+): Promise<BulkRowResult[]> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase chưa được cấu hình. Vui lòng kiểm tra biến môi trường.');
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('import_assets_bulk', {
+      p_rows: rows,
+      p_reason: reason || null,
+      p_apply: apply,
+      p_batch_id: batchId || null,
+    }),
+    BULK_RPC_TIMEOUT,
+    'Hết thời gian chờ phản hồi từ máy chủ khi nhập GCN hàng loạt.'
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  const items = (data || []) as BulkImportResultItem[];
+  return items.map((it) => ({
+    row: it.r_row,
+    assetCode: it.r_asset_code || '-',
+    certificateNo: it.r_certificate_no || undefined,
+    status: it.r_result,
+    message: it.r_message,
+    assetId: it.r_asset_id,
+    voucherCode: it.r_voucher,
   }));
 }
 

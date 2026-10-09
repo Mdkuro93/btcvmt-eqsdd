@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
-import { Asset, Region, Area, Warehouse, Project } from '../types';
-import { generateNextAssetCode, resolveRegionCode, checkAssetDuplicate } from '../lib/assetIdentifier';
+import { Asset, Region, Area, Warehouse, Project, AssetCodeHistoryEntry, ReassignAssetCodeResult } from '../types';
+import { generateNextAssetCode, resolveRegionCode, checkAssetDuplicate, resolveAssetCodePrefix } from '../lib/assetIdentifier';
 import { createAuditLog } from './auditLogs';
 import { logActivity } from './activityLogs';
 import { fetchInvestorEntities } from './investorEntities';
@@ -252,19 +252,27 @@ export async function checkAssetDuplicateServer(
  * Xem trước mã tài sản kế tiếp qua RPC máy chủ (peek_next_asset_code, không tăng bộ đếm)
  */
 export async function peekNextAssetCode(
-  region: string = 'VMT',
-  province: string = 'DNG',
+  region: string,
+  province: string,
   type: string = 'BDS'
 ): Promise<string> {
+  const cleanRegion = (region || '').trim().toUpperCase();
+  const cleanProv = (province || '').trim().toUpperCase();
+  const cleanType = (type || 'BDS').trim().toUpperCase();
+
+  if (!cleanRegion || !cleanProv) {
+    throw new Error('Thiếu mã vùng hoặc mã tỉnh để xem trước mã tài sản.');
+  }
+
   if (!isSupabaseConfigured) {
-    return generateNextAssetCode(region, province, type, mockStore.getAssets());
+    return generateNextAssetCode(cleanRegion, cleanProv, cleanType, mockStore.getAssets());
   }
 
   const { data, error } = await withTimeout(
     supabase.rpc('peek_next_asset_code', {
-      p_region: region,
-      p_province: province,
-      p_type: type,
+      p_region: cleanRegion,
+      p_province: cleanProv,
+      p_type: cleanType,
     }),
     DEFAULT_READ_TIMEOUT
   );
@@ -278,27 +286,70 @@ export async function peekNextAssetCode(
 
 /**
  * Cấp mã tài sản kế tiếp nguyên tử khi lưu qua RPC máy chủ (allocate_asset_code)
+ * Dùng allocateAssetCodeByPrefix làm đường chính; bản 3 tham số không còn giá trị mặc định.
  */
 export async function allocateAssetCode(
-  region: string = 'VMT',
-  province: string = 'DNG',
-  type: string = 'BDS'
+  regionOrPrefix: string,
+  province?: string,
+  type?: string
 ): Promise<string> {
+  if (!regionOrPrefix) {
+    throw new Error('Thiếu tiền tố hoặc mã vùng để cấp mã tài sản.');
+  }
+
+  // Nếu truyền trực tiếp dạng tiền tố hoàn chỉnh (ví dụ: VMB_HAN_BDS_ hoặc VMT_DNG_BDS)
+  if (!province && regionOrPrefix.includes('_')) {
+    return allocateAssetCodeByPrefix(regionOrPrefix);
+  }
+
+  if (!province || !type) {
+    throw new Error('Thiếu mã tỉnh hoặc loại tài sản khi cấp mã (không dùng giá trị mặc định).');
+  }
+
+  const cleanRegion = regionOrPrefix.trim().toUpperCase();
+  const cleanProv = province.trim().toUpperCase();
+  const cleanType = type.trim().toUpperCase();
+  const prefix = `${cleanRegion}_${cleanProv}_${cleanType}_`;
+
+  return allocateAssetCodeByPrefix(prefix);
+}
+
+/**
+ * Cấp mã tài sản từ chuỗi tiền tố động [MÃ_VÙNG]_[MÃ_ĐỊA_BÀN]_[LOẠI_TS]_
+ * qua RPC allocate_asset_code(p_prefix)
+ */
+export async function allocateAssetCodeByPrefix(prefix: string): Promise<string> {
+  let cleanPrefix = prefix.trim().toUpperCase();
+  if (!cleanPrefix.endsWith('_')) {
+    cleanPrefix = cleanPrefix + '_';
+  }
+
   if (!isSupabaseConfigured) {
-    return generateNextAssetCode(region, province, type, mockStore.getAssets());
+    const parts = cleanPrefix.replace(/_$/, '').split('_');
+    const r = parts[0];
+    const p = parts[1];
+    const t = parts[2] || 'BDS';
+    if (!r || !p) {
+      throw new Error(`Tiền tố mã không hợp lệ "${prefix}": Thiếu mã vùng hoặc mã tỉnh/địa bàn.`);
+    }
+    return generateNextAssetCode(r, p, t, mockStore.getAssets());
   }
 
   const { data, error } = await withTimeout(
     supabase.rpc('allocate_asset_code', {
-      p_region: region,
-      p_province: province,
-      p_type: type,
+      p_prefix: cleanPrefix,
     }),
     DEFAULT_WRITE_TIMEOUT
   );
 
   if (error) {
-    throw new Error('Lỗi cấp mã tài sản: ' + (error.message || 'Lỗi RPC'));
+    if (isSchemaMissingError(error) || error.code === 'PGRST202') {
+      throw new Error(
+        `Cơ sở dữ liệu Supabase chưa có hàm 'allocate_asset_code(p_prefix)' (Mã lỗi: ${error.code || 'PGRST202'}). ` +
+        `Vui lòng thực thi migration 'supabase/migrations/0095_region_code_config_fix_allocate_and_import.sql' trên Supabase SQL Editor.`
+      );
+    }
+    throw new Error('Lỗi cấp mã tài sản theo tiền tố: ' + (error.message || 'Lỗi RPC'));
   }
 
   return data as string;
@@ -530,13 +581,39 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
   const projects = mockStore.getProjects();
   const warehouses = mockStore.getWarehouses();
   
-  const selectedWh = warehouses.find(w => w.id === assetData.warehouse_id);
-  const regionCode = resolveRegionCode(assetData.project_id, projects, selectedWh?.region_code);
+  const regionCode = resolveRegionCode(assetData.project_id, projects);
   const collateralType = assetData.collateral_type || 'BDS';
   // Ghi chú: (assetData as any).provinceCodeHint chỉ dùng để sinh Mã Tài Sản (asset_code),
   // KHÔNG lưu vào bảng assets (đã bỏ cột province theo Data Dictionary mới).
   const provinceCodeHint = (assetData as any).provinceCodeHint || (assetData as any).province;
-  const autoCode = assetData.asset_code || generateNextAssetCode(regionCode, provinceCodeHint, collateralType, current);
+
+  let autoCode = assetData.asset_code;
+  if (!autoCode) {
+    if (isSupabaseConfigured) {
+      const resolved = resolveAssetCodePrefix({
+        projectId: assetData.project_id,
+        projects,
+        collateralType,
+      });
+      if (resolved.isValid) {
+        autoCode = await allocateAssetCodeByPrefix(resolved.prefix);
+      } else {
+        throw new Error(resolved.error || 'Dự án hoặc địa bàn chưa cấu hình mã vùng/mã tỉnh.');
+      }
+    } else {
+      const resolved = resolveAssetCodePrefix({
+        projectId: assetData.project_id,
+        projects,
+        collateralType,
+      });
+      const reg = resolved.isValid ? resolved.regionCode : regionCode;
+      const prov = resolved.isValid ? resolved.provinceCode : (provinceCodeHint || '');
+      if (!reg || !prov) {
+        throw new Error(resolved.error || 'Thiếu mã vùng hoặc mã tỉnh/địa bàn để sinh mã tài sản.');
+      }
+      autoCode = generateNextAssetCode(reg, prov, collateralType, current);
+    }
+  }
 
   // Chuẩn hóa dữ liệu insert: chuyển các UUID foreign keys rỗng "" hoặc không hợp lệ thành null
   const payloadToInsert: Record<string, any> = {
@@ -835,300 +912,6 @@ export async function bulkUpdateAssets(
   return { count: ids.length };
 }
 
-export async function importExcelAndUpdateAssets(
-  rows: any[],
-  user?: { id?: string; email?: string; full_name?: string } | null,
-  mode: 'update_or_create' | 'update_only' | 'create_only' = 'update_or_create',
-  recordHistory: boolean = false
-): Promise<{ updatedCount: number; createdCount: number; errors: string[] }> {
-  let currentAssets: Asset[] = [];
-  if (!isSupabaseConfigured) {
-    currentAssets = mockStore.getAssets();
-  } else {
-    const { data: dbAssets, error: fetchErr } = await withTimeout(
-      supabase.from('assets').select('*'),
-      DEFAULT_READ_TIMEOUT * 2
-    );
-    if (fetchErr) {
-      console.error('Lỗi khi tải danh sách GCN hiện có để đối chiếu Excel:', fetchErr);
-      throw new Error(`Không thể đọc danh sách GCN hiện có từ cơ sở dữ liệu: ${fetchErr.message || 'Lỗi cơ sở dữ liệu'}.`);
-    }
-    currentAssets = (dbAssets || []) as Asset[];
-  }
-
-  const [projects, warehouses, investorEntities] = await Promise.all([
-    fetchProjects(),
-    fetchWarehouses(),
-    fetchInvestorEntities(),
-  ]);
-
-  let updatedCount = 0;
-  let createdCount = 0;
-  const errors: string[] = [];
-
-  for (const row of rows) {
-    try {
-      const matchId = (row.id || row['ID Hệ Thống'] || '').toString().trim();
-      const matchAssetCode = (row.asset_code || row['Mã Tài Sản / TSĐB'] || row['Mã Tài Sản'] || '').toString().trim();
-      const matchCertNo = (row.certificate_no || row['Số GCN QSDĐ'] || row['Số GCN'] || row['Số sổ'] || '').toString().trim();
-
-      const existing = currentAssets.find((a: any) => 
-        (matchId && a.id === matchId) ||
-        (matchAssetCode && a.asset_code === matchAssetCode) ||
-        (matchCertNo && a.certificate_no?.trim().toLowerCase() === matchCertNo.toLowerCase())
-      );
-
-      // Match project
-      const projName = row.project_name || row['Dự Án (Pháp lý)'] || row['Dự Án'] || row['Tên Dự Án'];
-      const matchedProj = projName ? projects.find((p: any) => p.name.toLowerCase() === projName.toString().trim().toLowerCase()) : null;
-
-      // Match warehouse
-      const whName = row.warehouse_name || row['Kho Lưu Giữ'] || row['Kho'];
-      const matchedWh = whName ? warehouses.find((w: any) => w.name.toLowerCase() === whName.toString().trim().toLowerCase()) : null;
-
-      const businessProjName = row.business_project_name || row['Tên Dự Án Kinh Doanh'] || row['Tên dự án kinh doanh'];
-      const businessPlot = row.business_plot_code || row['Mã Lô Kinh Doanh'] || row['Mã lô kinh doanh'];
-      // Mã Lô Pháp Lý: nay là 1 cột duy nhất; vẫn chấp nhận file cũ còn tách Phân Khu/Số Lô -> nối lại bằng "-"
-      const maLoPhapLyRaw = row.legal_lot_code || row['Mã lô đất (Mã Lô Pháp Lý)'] || row['Mã Lô Đất (Mã Lô Pháp Lý)'] || row['Mã Lô Pháp Lý'];
-      const legacySubdivision = row['Phân Khu'] || row['Phân khu'];
-      const legacyLotNo = row['Số Lô / Thửa (Mã Lô Pháp Lý)'] || row['Số Lô'] || row['Mã lô'];
-      let legalLotCode: string | undefined = maLoPhapLyRaw !== undefined ? String(maLoPhapLyRaw).trim() : undefined;
-      if (!legalLotCode && (legacySubdivision || legacyLotNo)) {
-        legalLotCode = [legacySubdivision, legacyLotNo].filter(Boolean).map(v => String(v).trim()).join('-');
-      }
-
-      const landLotNo = row.land_lot_no || row['Số Thửa Bản Đồ'] || row['Số Thửa'] || row['Số thửa'];
-      const mapSheetNo = row.map_sheet_no || row['Số Tờ Bản Đồ'] || row['Số Tờ'] || row['Số tờ'];
-      const rawArea = row.area !== undefined ? row.area : (row['Diện Tích (m²)'] !== undefined ? row['Diện Tích (m²)'] : row['Diện tích (m2)']);
-      const area = rawArea !== undefined && rawArea !== '' ? Number(rawArea) : undefined;
-      const assetType = row.asset_type || row['Loại Tài Sản'] || row['Loại tài sản'];
-      const usagePurpose = row.usage_purpose || row['Mục Đích Sử Dụng'] || row['Mục đích sử dụng'];
-
-      // Ngân hàng thế chấp / Đơn vị vay: cột đơn, nhiều giá trị nối sẵn bằng ";" trong file Excel
-      const mortgageBankRaw = row['Ngân Hàng Thế Chấp'] || row['Ngân hàng thế chấp'];
-      const mortgageBank: string | undefined = mortgageBankRaw !== undefined && mortgageBankRaw !== '' ? String(mortgageBankRaw).trim() : undefined;
-
-      const mortgageUnitRaw = row['Đơn vị vay'] || row['Đơn Vị Vay'];
-      const mortgageUnit: string | undefined = mortgageUnitRaw !== undefined && mortgageUnitRaw !== '' ? String(mortgageUnitRaw).trim() : undefined;
-
-      const registryNo = row['Số vào sổ cấp'] || row['Số vào sổ'];
-      const managingUnit = row['Đơn vị quản lý sổ'] || row['Đơn vị quản lý'];
-      const notes = row['Ghi chú'] || row['Ghi Chú'];
-
-      const companyCode = (row.company_code || row['Mã công ty sở hữu'] || '').toString().trim().toUpperCase();
-      const rawRole = (row.role || row['Phân loại'] || '').toString().trim().toLowerCase();
-      const rawTransferDate = row.transfer_date || row['Ngày chuyển nhượng'] || row['Ngày Chuyển Nhượng'];
-
-      // Validate link bản scan từ Excel
-      const rawScan = row.scan_file_url || row['Link bản scan'] || row['Link scan'] || row['Đường dẫn scan'] || row['scan_url'];
-      let validatedScanUrl: string | null | undefined = undefined;
-      if (rawScan !== undefined && rawScan !== null && String(rawScan).trim() !== '') {
-        const scanVal = validateScanLink(String(rawScan));
-        if (!scanVal.ok) {
-          errors.push(`Dòng "${matchCertNo || matchId || 'N/A'}": ${scanVal.error || 'Link bản scan không hợp lệ'}`);
-          continue;
-        }
-        validatedScanUrl = scanVal.url || null;
-      }
-
-      let targetEntityId: string | null = null;
-      let targetRole: 'cdt' | 'ndt' | null = null;
-
-      if (companyCode) {
-        const matchedEntity = investorEntities.find(e => e.company_code === companyCode);
-        if (!matchedEntity) {
-          errors.push(`Dòng "${matchCertNo || matchId || 'N/A'}": Không tìm thấy mã công ty sở hữu "${companyCode}". Vui lòng tạo pháp nhân trước.`);
-          continue; // Skip this row as per requirement "đưa dòng đó vào danh sách cần xử lý thủ công"
-        }
-        
-        if (rawRole === 'ndt' || rawRole === 'nhà đầu tư') {
-          targetRole = 'ndt';
-        } else if (rawRole === 'cdt' || rawRole === 'chủ đầu tư') {
-          targetRole = 'cdt';
-        } else {
-          errors.push(`Dòng "${matchCertNo || matchId || 'N/A'}": Thiếu hoặc sai Phân loại (phải là CĐT/NĐT) khi đã điền Mã công ty sở hữu.`);
-          continue;
-        }
-
-        targetEntityId = matchedEntity.id;
-      } else if (matchedProj && matchedProj.default_owner_entity_id) {
-        targetEntityId = matchedProj.default_owner_entity_id;
-        targetRole = 'cdt';
-      }
-
-      // Parse transfer date if present
-      let transferDateStr = new Date().toISOString();
-      if (rawTransferDate) {
-        // Simple attempt to parse date, depending on Excel format it could be a number (Excel serial date) or string
-        const parsedDate = new Date(rawTransferDate);
-        if (!isNaN(parsedDate.getTime())) {
-          transferDateStr = parsedDate.toISOString();
-        } else if (typeof rawTransferDate === 'number') {
-          // Excel serial date (days since 1900-01-01)
-          const excelDate = new Date((rawTransferDate - (25567 + 2)) * 86400 * 1000); // adjust for timezone issues later, but simplified for now
-          if (!isNaN(excelDate.getTime())) {
-            transferDateStr = excelDate.toISOString();
-          }
-        }
-      }
-
-      if (existing && mode !== 'create_only') {
-        const updates: Partial<Asset> = {
-          updated_at: new Date().toISOString(),
-          updated_by: user?.id || null,
-        };
-        if (businessProjName !== undefined && businessProjName !== '') updates.business_project_name = String(businessProjName).trim();
-        if (businessPlot !== undefined && businessPlot !== '') updates.business_plot_code = String(businessPlot).trim();
-        if (legalLotCode !== undefined && legalLotCode !== '') updates.legal_lot_code = legalLotCode;
-        if (landLotNo !== undefined && landLotNo !== '') updates.land_lot_no = String(landLotNo).trim();
-        if (mapSheetNo !== undefined && mapSheetNo !== '') updates.map_sheet_no = String(mapSheetNo).trim();
-        if (area !== undefined && !isNaN(area)) updates.area = area;
-        if (assetType !== undefined && assetType !== '') updates.asset_type = String(assetType).trim();
-        if (usagePurpose !== undefined && usagePurpose !== '') updates.usage_purpose = String(usagePurpose).trim();
-        if (mortgageBank !== undefined) updates.mortgage_bank = mortgageBank || null;
-        if (mortgageUnit !== undefined) updates.mortgage_unit = mortgageUnit || null;
-        if (registryNo !== undefined && registryNo !== '') updates.registry_no = String(registryNo).trim();
-        if (managingUnit !== undefined && managingUnit !== '') updates.managing_unit = String(managingUnit).trim();
-        if (notes !== undefined && notes !== '') updates.notes = String(notes).trim();
-        if (validatedScanUrl !== undefined) updates.scan_file_url = validatedScanUrl;
-        if (mortgageBank || mortgageUnit) {
-          updates.mortgage_status = 'mortgaged';
-        }
-        if (matchedProj) updates.project_id = matchedProj.id;
-        if (matchedWh) updates.warehouse_id = matchedWh.id;
-
-        // Apply ownership
-        if (targetEntityId) {
-          updates.current_owner_entity_id = targetEntityId;
-          updates.current_owner_role = targetRole;
-        }
-
-        const { oldDiff, newDiff } = getDifferences(existing, updates);
-
-        if (Object.keys(newDiff).length > 0) {
-          if (!isSupabaseConfigured) {
-            const current = mockStore.getAssets();
-            mockStore.saveAssets(current.map(a => a.id === existing.id ? { ...a, ...updates } : a));
-          } else {
-            const { error } = await withTimeout(supabase.from('assets').update(updates).eq('id', existing.id), DEFAULT_WRITE_TIMEOUT);
-            if (error) throw error;
-          }
-
-          // Handle backfill history
-          if (recordHistory && updates.current_owner_entity_id && matchedProj && updates.current_owner_entity_id !== matchedProj.default_owner_entity_id) {
-             const transferData = {
-                asset_id: existing.id,
-                from_entity_id: matchedProj.default_owner_entity_id || existing.current_owner_entity_id,
-                from_role: 'cdt', // Assuming original role was cdt
-                to_entity_id: updates.current_owner_entity_id,
-                to_role: updates.current_owner_role,
-                transferred_by: null,
-                transferred_at: transferDateStr,
-                note: 'Dữ liệu lịch sử, nhập bổ sung khi triển khai hệ thống'
-             };
-             
-             if (isSupabaseConfigured) {
-                 await supabase.from('asset_ownership_transfers').insert([transferData]);
-             } else {
-                 mockStore.addAssetOwnershipTransfer({
-                     ...transferData,
-                     id: 'trf-' + Date.now(),
-                     created_at: new Date().toISOString()
-                 } as any);
-             }
-          }
-
-          await createAuditLog({
-            record_id: existing.id,
-            action: 'IMPORT',
-            old_data: oldDiff,
-            new_data: newDiff,
-            changed_by: user?.id || null,
-            changed_by_name: user?.full_name || user?.email || 'Người dùng hệ thống',
-            notes: `Cập nhật thông tin từ file Excel (Khớp: ${matchCertNo || existing.certificate_no})`,
-          });
-          updatedCount++;
-        }
-      } else if (!existing && mode !== 'update_only') {
-        if (!matchCertNo) {
-          errors.push(`Bỏ qua dòng thiếu Số GCN QSDĐ`);
-          continue;
-        }
-
-        const newAssetData: Partial<Asset> = {
-          certificate_no: matchCertNo,
-          project_id: matchedProj?.id || null,
-          warehouse_id: matchedWh?.id || null,
-          business_project_name: businessProjName ? String(businessProjName).trim() : null,
-          business_plot_code: businessPlot ? String(businessPlot).trim() : null,
-          legal_lot_code: legalLotCode ? String(legalLotCode).trim() : null,
-          land_lot_no: landLotNo ? String(landLotNo).trim() : null,
-          map_sheet_no: mapSheetNo ? String(mapSheetNo).trim() : null,
-          area: area && !isNaN(area) ? area : null,
-          asset_type: assetType ? String(assetType).trim() : 'Đất nền',
-          usage_purpose: usagePurpose ? String(usagePurpose).trim() : null,
-          mortgage_bank: mortgageBank || null,
-          mortgage_unit: mortgageUnit || null,
-          registry_no: registryNo ? String(registryNo).trim() : null,
-          managing_unit: managingUnit ? String(managingUnit).trim() : null,
-          notes: notes ? String(notes).trim() : null,
-          scan_file_url: validatedScanUrl || null,
-          current_owner_entity_id: targetEntityId,
-          current_owner_role: targetRole,
-          // GCN đã thế chấp: bản gốc thường đang giữ tại ngân hàng, không nằm tại kho công ty
-          // -> đánh dấu Đã xuất kho ngay khi nhập liệu ban đầu, thay vì mặc định Trong kho.
-          custody_status: (mortgageBank || mortgageUnit) ? 'checked_out' : 'in_stock',
-          lifecycle_status: 'active',
-          sale_status: 'not_ready',
-          mortgage_status: (mortgageBank || mortgageUnit) ? 'mortgaged' : 'none',
-          updated_at: new Date().toISOString(),
-          updated_by: user?.id || null,
-        };
-
-        const created = await createAsset(newAssetData);
-
-        if (recordHistory && created.current_owner_entity_id && matchedProj && created.current_owner_entity_id !== matchedProj.default_owner_entity_id) {
-           const transferData = {
-              asset_id: created.id,
-              from_entity_id: matchedProj.default_owner_entity_id,
-              from_role: 'cdt',
-              to_entity_id: created.current_owner_entity_id,
-              to_role: created.current_owner_role,
-              transferred_by: null,
-              transferred_at: transferDateStr,
-              note: 'Dữ liệu lịch sử, nhập bổ sung khi triển khai hệ thống'
-           };
-           
-           if (isSupabaseConfigured) {
-               await supabase.from('asset_ownership_transfers').insert([transferData]);
-           } else {
-               mockStore.addAssetOwnershipTransfer({
-                   ...transferData,
-                   id: 'trf-' + Date.now(),
-                   created_at: new Date().toISOString()
-               } as any);
-           }
-        }
-
-        await createAuditLog({
-          record_id: created.id,
-          action: 'CREATE',
-          old_data: null,
-          new_data: newAssetData,
-          changed_by: user?.id || null,
-          changed_by_name: user?.full_name || user?.email || 'Người dùng hệ thống',
-          notes: 'Khởi tạo mới từ file Excel',
-        });
-        createdCount++;
-      }
-    } catch (err: any) {
-      errors.push(`Dòng "${row['Số GCN QSDĐ'] || row.id || 'N/A'}": ${err.message}`);
-    }
-  }
-
-  return { updatedCount, createdCount, errors };
-}
-
 export async function checkDuplicateAssets(certificateNos: string[]): Promise<string[]> {
   if (!certificateNos.length) return [];
   
@@ -1158,124 +941,6 @@ export async function checkDuplicateAssets(certificateNos: string[]): Promise<st
   }
   
   return duplicates;
-}
-
-export async function importAssets(assetsData: any[]) {
-  const current = mockStore.getAssets();
-  const [projects, warehouses] = await Promise.all([
-    fetchProjects(),
-    fetchWarehouses(),
-  ]);
-
-  let accumulatedAssets = [...current];
-  const newAssets: Asset[] = assetsData.map((a, idx) => {
-    const selectedWh = warehouses.find((w: any) => w.id === a.warehouse_id);
-    const regionCode = resolveRegionCode(a.project_id, projects, selectedWh?.region_code);
-    const colType = a.collateral_type || 'BDS';
-    const code = a.asset_code || generateNextAssetCode(regionCode, a.provinceCodeHint || a.province, colType, accumulatedAssets);
-
-    const assetItem: Asset = {
-      id: generateUuid(),
-      asset_code: code,
-      collateral_type: colType,
-      certificate_no: a.certificate_no || `GCN-IMPORT-${idx + 1}`,
-      project_id: sanitizeUuid(a.project_id),
-      legal_lot_code: a.legal_lot_code || null,
-      business_project_name: a.business_project_name || null,
-      business_plot_code: a.business_plot_code || null,
-      area: Number(a.area) || 0,
-      asset_type: a.asset_type || 'Đất nền',
-      certificate_group: a.certificate_group || null,
-      land_lot_no: a.land_lot_no || null,
-      map_sheet_no: a.map_sheet_no || null,
-      registry_no: a.registry_no || null,
-      usage_purpose: a.usage_purpose || null,
-      mortgage_bank: a.mortgage_bank || null,
-      mortgage_unit: a.mortgage_unit || null,
-      mortgage_status: a.mortgage_bank ? 'mortgaged' : 'none',
-      custody_status: a.custody_status || 'in_stock',
-      lifecycle_status: a.lifecycle_status || 'active',
-      sale_status: a.sale_status || 'not_ready',
-      warehouse_id: sanitizeUuid(a.warehouse_id),
-      current_holder_dept: a.current_holder_dept || null,
-      current_owner_entity_id: sanitizeUuid(a.current_owner_entity_id),
-      current_owner_role: a.current_owner_role || null,
-      scan_file_url: a.scan_file_url || null,
-      notes: a.notes || null,
-      created_at: new Date().toISOString(),
-    };
-
-    accumulatedAssets.push(assetItem);
-    return assetItem;
-  });
-
-  if (!isSupabaseConfigured) {
-    mockStore.saveAssets([...newAssets, ...current]);
-    try {
-      for (const ast of newAssets) {
-        logActivity({
-          assetId: ast.id,
-          actionType: 'Nhập sổ (Import Excel)',
-          documentNo: ast.asset_code || ast.certificate_no,
-          description: `Import Excel GCN: ${ast.certificate_no || ''} (Mã: ${ast.asset_code || ''})`,
-          warehouseId: ast.warehouse_id,
-          notes: 'Nhập hàng loạt qua file Excel',
-        });
-      }
-    } catch {}
-    return newAssets;
-  }
-  try {
-    // Khi insert lên Supabase: bỏ trường id để PostgreSQL tự sinh UUID chuẩn
-    const assetsForSupabase = newAssets.map(item => {
-      const { id: _id, ...rest } = item;
-      return {
-        ...rest,
-        project_id: sanitizeUuid(rest.project_id),
-        warehouse_id: sanitizeUuid(rest.warehouse_id),
-        parent_asset_id: sanitizeUuid((rest as any).parent_asset_id),
-        current_owner_entity_id: sanitizeUuid(rest.current_owner_entity_id),
-      };
-    });
-
-    const { data, error } = await withTimeout(
-      supabase
-        .from('assets')
-        .insert(assetsForSupabase)
-        .select(),
-      DEFAULT_WRITE_TIMEOUT
-    );
-
-    if (error) {
-      console.error('Lỗi khi import danh sách GCN vào Supabase:', error);
-      throw new Error(`Không thể nhập danh sách GCN vào cơ sở dữ liệu: ${error.message || 'Lỗi lưu trữ'}.`);
-    }
-
-    try {
-      mockStore.saveAssets([...(data || []), ...current]);
-    } catch {}
-
-    const insertedAssets = data || [];
-    try {
-      for (const ast of insertedAssets) {
-        await logActivity({
-          assetId: ast.id,
-          actionType: 'Nhập sổ (Import Excel)',
-          documentNo: ast.asset_code || ast.certificate_no,
-          description: `Import Excel GCN: ${ast.certificate_no || ''} (Mã: ${ast.asset_code || ''})`,
-          warehouseId: ast.warehouse_id,
-          notes: 'Nhập hàng loạt qua file Excel',
-        });
-      }
-    } catch (logErr) {
-      console.warn('Không thể ghi log activity khi import Excel:', logErr);
-    }
-
-    return data || [];
-  } catch (err: any) {
-    console.error('Lỗi trong hàm importAssets:', err);
-    throw new Error(err.message || 'Lỗi khi nhập danh sách GCN vào cơ sở dữ liệu.');
-  }
 }
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -1427,20 +1092,43 @@ export async function fetchRegions(): Promise<Region[]> {
   }
 }
 
-export async function createRegion(name: string): Promise<Region> {
+export async function createRegion(name: string, code?: string | null): Promise<Region> {
+  const cleanName = name.trim();
+  const cleanCode = code?.trim().toUpperCase() || null;
+
+  if (cleanCode && !/^[A-Z0-9]{2,8}$/.test(cleanCode)) {
+    throw new Error('Mã vùng không hợp lệ (phải từ 2-8 ký tự chữ hoặc số in hoa, ví dụ: VMB, VMT, VMN).');
+  }
+
   if (!isSupabaseConfigured) {
     const current = mockStore.getRegions();
-    const newR: Region = { id: 'reg-' + Date.now(), name };
+    const newR: Region = { id: 'reg-' + Date.now(), name: cleanName, code: cleanCode };
     mockStore.saveRegions([...current, newR]);
     return newR;
   }
   try {
+    const payload: { name: string; code: string | null } = { name: cleanName, code: cleanCode };
     const { data, error } = await withTimeout(
-      supabase.from('regions').insert([{ name }]).select().single(),
+      supabase.from('regions').insert([payload]).select().single(),
       DEFAULT_WRITE_TIMEOUT
     );
     if (error) {
-      console.error('Lỗi khi tạo vùng miền trên Supabase:', error);
+      if (error.code === '23505' || String(error.message).includes('regions_code_key')) {
+        throw new Error('Mã vùng đã được vùng khác sử dụng.');
+      }
+      if (error.code === '23514' || String(error.message).includes('chk_regions_code_format')) {
+        throw new Error('Mã vùng không hợp lệ (phải từ 2-8 ký tự chữ hoặc số in hoa, ví dụ: VMB, VMT, VMN).');
+      }
+      if (
+        isSchemaMissingError(error) ||
+        error.code === 'PGRST204' ||
+        error.message?.includes('code')
+      ) {
+        throw new Error(
+          `Cơ sở dữ liệu Supabase chưa cập nhật cột 'code' cho bảng 'regions' (Mã lỗi: ${error.code || 'PGRST204'}). ` +
+          `Vui lòng thực thi migration 'supabase/migrations/0095_region_code_config_fix_allocate_and_import.sql' trên Supabase SQL Editor.`
+        );
+      }
       throw new Error(`Không thể tạo vùng miền: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
 
@@ -1451,36 +1139,57 @@ export async function createRegion(name: string): Promise<Region> {
 
     return data;
   } catch (err: any) {
-    console.error('Lỗi trong hàm createRegion:', err);
-    throw new Error(err.message || 'Không thể tạo vùng miền, vui lòng thử lại.');
+    throw err instanceof Error ? err : new Error('Không thể tạo vùng miền: ' + String(err));
   }
 }
 
-export async function updateRegion(id: string, name: string) {
+export async function updateRegion(id: string, name: string, code?: string | null) {
+  const cleanName = name.trim();
+  const cleanCode = code?.trim().toUpperCase() || null;
+
+  if (cleanCode && !/^[A-Z0-9]{2,8}$/.test(cleanCode)) {
+    throw new Error('Mã vùng không hợp lệ (phải từ 2-8 ký tự chữ hoặc số in hoa, ví dụ: VMB, VMT, VMN).');
+  }
+
   if (!isSupabaseConfigured) {
     const current = mockStore.getRegions();
-    mockStore.saveRegions(current.map(r => r.id === id ? { ...r, name } : r));
+    mockStore.saveRegions(current.map(r => r.id === id ? { ...r, name: cleanName, code: cleanCode } : r));
     return;
   }
   try {
+    const payload: { name: string; code: string | null } = { name: cleanName, code: cleanCode };
     const { data, error } = await withTimeout(
-      supabase.from('regions').update({ name }).eq('id', id).select().single(),
+      supabase.from('regions').update(payload).eq('id', id).select().single(),
       DEFAULT_WRITE_TIMEOUT
     );
     if (error) {
-      console.error('Lỗi khi cập nhật vùng miền trên Supabase:', error);
+      if (error.code === '23505' || String(error.message).includes('regions_code_key')) {
+        throw new Error('Mã vùng đã được vùng khác sử dụng.');
+      }
+      if (error.code === '23514' || String(error.message).includes('chk_regions_code_format')) {
+        throw new Error('Mã vùng không hợp lệ (phải từ 2-8 ký tự chữ hoặc số in hoa, ví dụ: VMB, VMT, VMN).');
+      }
+      if (
+        isSchemaMissingError(error) ||
+        error.code === 'PGRST204' ||
+        error.message?.includes('code')
+      ) {
+        throw new Error(
+          `Cơ sở dữ liệu Supabase chưa cập nhật cột 'code' cho bảng 'regions' (Mã lỗi: ${error.code || 'PGRST204'}). ` +
+          `Vui lòng thực thi migration 'supabase/migrations/0095_region_code_config_fix_allocate_and_import.sql' trên Supabase SQL Editor.`
+        );
+      }
       throw new Error(`Không thể cập nhật vùng miền: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
 
     try {
       const current = mockStore.getRegions();
-      mockStore.saveRegions(current.map(r => r.id === id ? { ...r, name } : r));
+      mockStore.saveRegions(current.map(r => r.id === id ? { ...r, name: cleanName, code: cleanCode } : r));
     } catch {}
 
     return data;
   } catch (err: any) {
-    console.error('Lỗi trong hàm updateRegion:', err);
-    throw new Error(err.message || 'Không thể cập nhật vùng miền, vui lòng thử lại.');
+    throw err instanceof Error ? err : new Error('Không thể cập nhật vùng miền: ' + String(err));
   }
 }
 
@@ -1636,7 +1345,7 @@ export async function createWarehouse(warehouse: { name: string; code?: string |
       id: 'wh-' + Date.now(),
       name: warehouse.name,
       code: warehouse.code || String(current.length + 1).padStart(3, '0'),
-      region_code: warehouse.region_code || 'VMT',
+      region_code: warehouse.region_code || null,
       region_id: warehouse.region_id || null,
       is_central: warehouse.is_central || false,
     };
@@ -1806,7 +1515,15 @@ export const deleteMultipleAssets = async (ids: string[]): Promise<void> => {
 
 export async function createMultipleAssets(assetsData: Partial<Asset>[]): Promise<Asset[]> {
   if (!isSupabaseConfigured) {
-    return importAssets(assetsData);
+    const current = mockStore.getAssets();
+    const newItems = assetsData.map((a, idx) => ({
+      ...a,
+      id: a.id || generateUuid(),
+      certificate_no: a.certificate_no || `GCN-${idx + 1}`,
+      created_at: a.created_at || new Date().toISOString(),
+    })) as Asset[];
+    mockStore.saveAssets([...newItems, ...current]);
+    return newItems;
   }
   try {
     const assetsForSupabase = assetsData.map(item => {
@@ -1912,5 +1629,85 @@ export async function fetchOverdueAssets(): Promise<Asset[]> {
   );
 
   if (error) throw error;
+  return data || [];
+}
+
+export interface ReassignAssetCodeParams {
+  assetId: string;
+  reason: string;
+  newProjectId?: string | null;
+  newCollateralType?: string | null;
+  confirmHistory?: boolean;
+  apply?: boolean;
+}
+
+/**
+ * Tái cấp mã tài sản qua RPC máy chủ `reassign_asset_code` (Migration 0097)
+ * - apply=false: xem trước tiền tố mới & kiểm tra lịch sử đã phát sinh
+ * - apply=true: cấp mã mới nguyên tử, lưu former_asset_codes, ghi asset_code_history & audit_logs
+ */
+export async function reassignAssetCode(params: ReassignAssetCodeParams): Promise<ReassignAssetCodeResult> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Hệ thống chưa kết nối cơ sở dữ liệu Supabase.');
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('reassign_asset_code', {
+      p_asset_id: params.assetId,
+      p_reason: params.reason,
+      p_new_project_id: params.newProjectId || null,
+      p_new_collateral_type: params.newCollateralType || null,
+      p_confirm_history: Boolean(params.confirmHistory),
+      p_apply: Boolean(params.apply),
+    }),
+    params.apply ? DEFAULT_WRITE_TIMEOUT : DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) {
+    const err: any = new Error(error.message || 'Lỗi khi tái cấp mã tài sản');
+    err.code = error.code;
+    err.details = error.details;
+    err.hint = error.hint;
+    throw err;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error('Máy chủ không trả về kết quả tái cấp mã.');
+  }
+
+  return {
+    oldCode: row.r_old_code ?? null,
+    newPrefix: row.r_new_prefix ?? null,
+    newCode: row.r_new_code ?? null,
+    hasHistory: Boolean(row.r_has_history),
+    history: row.r_history ?? null,
+    requiresConfirm: Boolean(row.r_requires_confirm),
+    applied: Boolean(row.r_applied),
+  };
+}
+
+/**
+ * Lấy lịch sử các lần tái cấp mã của một tài sản từ bảng `asset_code_history`
+ */
+export async function fetchAssetCodeHistory(assetId: string): Promise<AssetCodeHistoryEntry[]> {
+  if (!isSupabaseConfigured) {
+    return [];
+  }
+
+  const { data, error } = await withTimeout(
+    supabase
+      .from('asset_code_history')
+      .select('*')
+      .eq('asset_id', assetId)
+      .order('changed_at', { ascending: false }),
+    DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) {
+    console.warn('Không thể tải lịch sử tái cấp mã:', error.message);
+    return [];
+  }
+
   return data || [];
 }

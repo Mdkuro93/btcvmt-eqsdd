@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Asset } from '../types';
+import { Asset, AssetCodeHistoryEntry } from '../types';
 import { fetchLatestCheckinScanUrl } from '../api/transactions';
+import { fetchAssetCodeHistory, fetchAssetById } from '../api/assets';
+import { useAuth } from '../contexts/AuthContext';
 import { StatusBadges } from './StatusBadges';
 import { formatPlotCode } from '../lib/assetIdentifier';
 import { getAreaLabel, getAreaSubLabel } from '../constants/assetTypes';
 import { AssetTransferHistory } from './AssetTransferHistory';
+import { ReassignAssetCodeModal } from './ReassignAssetCodeModal';
 import { 
   X, 
   FileText, 
@@ -16,23 +19,56 @@ import {
   Layers, 
   Info,
   ShieldCheck,
-  AlertTriangle 
+  AlertTriangle,
+  RefreshCw,
+  ArrowRight,
+  UserCheck,
 } from 'lucide-react';
 
 interface AssetDetailProps {
   asset: Asset;
   onClose?: () => void;
   onPreviewScan?: (url: string) => void;
+  onAssetUpdated?: (updatedAsset: Asset) => void;
 }
 
 export const AssetDetail: React.FC<AssetDetailProps> = ({
-  asset,
+  asset: initialAsset,
   onClose,
   onPreviewScan,
+  onAssetUpdated,
 }) => {
+  const { profile } = useAuth();
+  const [asset, setAsset] = useState<Asset>(initialAsset);
   const [latestScanUrl, setLatestScanUrl] = useState<string | null>(null);
   const [loadingScanUrl, setLoadingScanUrl] = useState(false);
-  const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'history' | 'code_history'>('info');
+
+  const [codeHistory, setCodeHistory] = useState<AssetCodeHistoryEntry[]>([]);
+  const [loadingCodeHistory, setLoadingCodeHistory] = useState(false);
+  const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+
+  useEffect(() => {
+    setAsset(initialAsset);
+  }, [initialAsset]);
+
+  const canReassignCode =
+    ['super_admin', 'admin', 'btc_manager'].includes(profile?.role || '') ||
+    (profile?.role === 'warehouse_manager' &&
+      Boolean(asset.warehouse_id && profile?.managed_warehouse_ids?.includes(asset.warehouse_id)));
+
+  const loadCodeHistory = async () => {
+    if (!asset?.id) return;
+    setLoadingCodeHistory(true);
+    try {
+      const hist = await fetchAssetCodeHistory(asset.id);
+      setCodeHistory(hist);
+    } catch (err) {
+      console.warn('Lỗi tải lịch sử cấp mã:', err);
+    } finally {
+      setLoadingCodeHistory(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -49,6 +85,8 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
         .finally(() => {
           if (isMounted) setLoadingScanUrl(false);
         });
+
+      loadCodeHistory();
     }
     return () => {
       isMounted = false;
@@ -95,17 +133,43 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
             <p className="text-xs text-slate-500">
               Mã định danh hệ thống: <span className="font-mono font-medium">{asset.asset_code || '-'}</span>
             </p>
+            {asset.former_asset_codes && asset.former_asset_codes.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs">
+                <span className="font-semibold text-amber-700">Mã cũ (đã tái cấp):</span>
+                {asset.former_asset_codes.map((c, idx) => (
+                  <span
+                    key={idx}
+                    className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 line-through font-semibold"
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {canReassignCode && (
+            <button
+              type="button"
+              onClick={() => setIsReassignModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+              title="Tái cấp mã định danh qua RPC máy chủ"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Tái cấp mã</span>
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Navigation Tabs */}
@@ -130,6 +194,22 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
         >
           <Clock className="w-3.5 h-3.5" />
           Lịch sử giao dịch & Chuyển nhượng
+        </button>
+        <button
+          onClick={() => setActiveTab('code_history')}
+          className={`py-3 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
+            activeTab === 'code_history'
+              ? 'border-[#1E3A8A] text-[#1E3A8A]'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Lịch sử cấp mã</span>
+          {codeHistory.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-bold">
+              {codeHistory.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -244,6 +324,84 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
               </div>
             </div>
           </>
+        ) : activeTab === 'code_history' ? (
+          <div className="space-y-4">
+            <div className="p-3 bg-amber-50/70 rounded-lg border border-amber-200 flex items-start justify-between gap-3 text-xs text-amber-900">
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p>
+                  Nhật ký các lần tái cấp mã định danh tài sản từ bảng <code>asset_code_history</code>. Mỗi lần cấp mã mới được ghi nhận nguyên tử kèm lý do và thông tin người thực hiện.
+                </p>
+              </div>
+              {canReassignCode && (
+                <button
+                  type="button"
+                  onClick={() => setIsReassignModalOpen(true)}
+                  className="shrink-0 px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md text-[11px] transition-colors cursor-pointer"
+                >
+                  Tái cấp mã
+                </button>
+              )}
+            </div>
+
+            {loadingCodeHistory ? (
+              <div className="text-center py-8 text-slate-500 text-xs">
+                Đang tải nhật ký tái cấp mã...
+              </div>
+            ) : codeHistory.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                GCN này chưa từng qua lần tái cấp mã nào. Mã tài sản vẫn giữ nguyên bản ban đầu.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {codeHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-slate-500 line-through">
+                          {item.old_code || '(Chưa có mã)'}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          {item.new_code}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(item.changed_at).toLocaleString('vi-VN')}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600">
+                      <div>
+                        <span className="font-semibold text-slate-700">Người thực hiện: </span>
+                        <span>{item.changed_by_name || 'Hệ thống'}</span>
+                        {item.changed_by_role && (
+                          <span className="ml-1 px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px]">
+                            {item.changed_by_role}
+                          </span>
+                        )}
+                      </div>
+                      {item.had_history && (
+                        <div className="text-amber-700 font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Đã phát sinh lịch sử trước khi cấp lại</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-semibold text-slate-800">Lý do: </span>
+                      <span>{item.reason}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="p-3 bg-blue-50/60 rounded-lg border border-blue-200 flex items-center justify-between">
@@ -280,6 +438,28 @@ export const AssetDetail: React.FC<AssetDetailProps> = ({
           </button>
         )}
       </div>
+
+      {/* Reassign Asset Code Modal */}
+      {isReassignModalOpen && (
+        <ReassignAssetCodeModal
+          isOpen={isReassignModalOpen}
+          onClose={() => setIsReassignModalOpen(false)}
+          asset={asset}
+          onSuccess={async () => {
+            try {
+              const freshAsset = await fetchAssetById(asset.id);
+              if (freshAsset) {
+                setAsset(freshAsset);
+                if (onAssetUpdated) onAssetUpdated(freshAsset);
+              }
+            } catch (err) {
+              console.warn('Không thể tải lại chi tiết GCN sau tái cấp mã:', err);
+            }
+            setIsReassignModalOpen(false);
+            loadCodeHistory();
+          }}
+        />
+      )}
     </div>
   );
 };

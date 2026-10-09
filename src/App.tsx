@@ -20,7 +20,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   name?: string
 ) {
   return lazy(async () => {
-    const maxRetries = 3;
+    const maxRetries = 4;
     let lastError: any;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -35,8 +35,8 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
         console.warn(`Lỗi tải module động (lần ${attempt}/${maxRetries}):`, error);
 
         if (attempt < maxRetries) {
-          // Chờ một chút trước khi thử lại để dev server hoặc kết nối mạng ổn định
-          await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+          const delay = attempt === 1 ? 300 : attempt === 2 ? 600 : 1200;
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
     }
@@ -44,14 +44,14 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
     const isFetchError =
       lastError?.message?.includes('Failed to fetch dynamically imported module') ||
       lastError?.name === 'ChunkLoadError' ||
-      lastError?.message?.includes('dynamically imported module');
+      lastError?.message?.includes('dynamically imported module') ||
+      lastError?.message?.includes('Loading chunk');
 
     if (isFetchError && typeof window !== 'undefined') {
       const retryKey = `chunk_retry_${window.location.pathname}`;
       const now = Date.now();
       const lastRetry = Number(sessionStorage.getItem(retryKey) || '0');
-      // Tránh reload loop vô tận: chỉ cho phép reload tự động nếu cách lần trước tối thiểu 8 giây
-      if (now - lastRetry > 8000) {
+      if (now - lastRetry > 5000) {
         sessionStorage.setItem(retryKey, String(now));
         window.location.reload();
       }
@@ -69,7 +69,6 @@ const Assets = lazyWithRetry(() => import('./pages/Assets'), 'Assets');
 const Requests = lazyWithRetry(() => import('./pages/Requests'), 'Requests');
 const Reports = lazyWithRetry(() => import('./pages/Reports'), 'Reports');
 const ActivityLogs = lazyWithRetry(() => import('./pages/ActivityLogs'), 'ActivityLogs');
-const Import = lazyWithRetry(() => import('./pages/Import'), 'Import');
 const BulkUpdate = lazyWithRetry(() => import('./pages/BulkUpdate'), 'BulkUpdate');
 const Admin = lazyWithRetry(() => import('./pages/Admin'), 'Admin');
 const Lookup = lazyWithRetry(() => import('./pages/Lookup'), 'Lookup');
@@ -146,10 +145,10 @@ export default function App() {
                     <Route path="/categories" element={<Navigate to="/admin" replace />} />
                   </Route>
 
-                  {/* Data Operations / Import: BTC Manager, Warehouse Manager & Admin */}
+                  {/* Data Operations / Import & Bulk Update: BTC Manager, Warehouse Manager & Admin */}
                   <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'admin', 'super_admin']} />}>
-                    <Route path="/import" element={<Import />} />
                     <Route path="/bulk-update" element={<BulkUpdate />} />
+                    <Route path="/import" element={<Navigate to="/bulk-update?mode=create" replace />} />
                   </Route>
                 </Route>
               </Route>

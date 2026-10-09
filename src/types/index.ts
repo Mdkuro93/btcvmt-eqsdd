@@ -3,6 +3,7 @@ export type Role = 'btc_manager' | 'capital_dept' | 'project_dept' | 're_dept' |
 export interface Region {
   id: string;
   name: string;
+  code?: string | null;
 }
 
 export interface Area {
@@ -10,7 +11,7 @@ export interface Area {
   region_id: string;
   name: string;
   province_code?: string | null;
-  regions?: { name: string };
+  regions?: { name: string; code?: string };
 }
 
 
@@ -31,7 +32,7 @@ export interface Warehouse {
   code?: string | null;         // e.g. "001", "002"
   region_code?: string | null;  // e.g. "VMB", "VMT", "VMN"
   is_central: boolean;
-  regions?: { name: string };
+  regions?: { name: string; code?: string };
 }
 
 export interface Project {
@@ -40,7 +41,7 @@ export interface Project {
   name: string;
   project_code?: string | null;
   default_owner_entity_id?: string | null;
-  areas?: { name: string; region_id?: string; regions?: { name: string }; province_code?: string | null };
+  areas?: { name: string; region_id?: string; regions?: { name: string; code?: string }; province_code?: string | null };
 }
 
 export interface AppUser {
@@ -130,6 +131,7 @@ export type InvalidationType = 'NONE' | 'PARTIAL' | 'FULL';
 export interface Asset {
   id: string;
   asset_code?: string | null;         // Mã định danh tự sinh: VMT_BDS_00001
+  former_asset_codes?: string[];      // Các mã tài sản trước đây (đã tái cấp mã)
   import_receipt_number?: string | null; // Số Phiếu Nhập Kho (e.g. PNK-2026/05-012, VMT-001-PN-0001/2026)
   collateral_type?: string | null;     // Loại TSĐB (BDS, TSCD, VONGOP, COPHAN...)
   certificate_no: string;
@@ -221,6 +223,51 @@ export interface Asset {
     };
   };
   warehouses?: { name: string; is_central: boolean; code?: string; region_code?: string };
+}
+
+export interface AssetCodeHistoryEntry {
+  id: string;
+  asset_id: string;
+  old_code?: string | null;
+  new_code: string;
+  old_project_id?: string | null;
+  new_project_id?: string | null;
+  old_collateral_type?: string | null;
+  new_collateral_type?: string | null;
+  warehouse_id?: string | null;
+  had_history: boolean;
+  history?: {
+    transactions?: number;
+    inventory_audits?: number;
+    lineage?: number;
+    declaration_requests?: number;
+    ownership_transfers?: number;
+    mortgaged?: boolean;
+    checked_out?: boolean;
+  } | null;
+  reason: string;
+  changed_by?: string | null;
+  changed_by_name?: string | null;
+  changed_by_role?: string | null;
+  changed_at: string;
+}
+
+export interface ReassignAssetCodeResult {
+  oldCode: string | null;
+  newPrefix: string | null;
+  newCode: string | null;
+  hasHistory: boolean;
+  history: {
+    transactions?: number;
+    inventory_audits?: number;
+    lineage?: number;
+    declaration_requests?: number;
+    ownership_transfers?: number;
+    mortgaged?: boolean;
+    checked_out?: boolean;
+  } | null;
+  requiresConfirm: boolean;
+  applied: boolean;
 }
 
 export interface AuditLog {

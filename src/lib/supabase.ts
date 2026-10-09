@@ -196,8 +196,8 @@ export async function testSupabaseConnection(): Promise<{ ok: boolean; message: 
   }
 }
 
-export const DEFAULT_READ_TIMEOUT = 5000;
-export const DEFAULT_WRITE_TIMEOUT = 8000;
+export const DEFAULT_READ_TIMEOUT = 15000;
+export const DEFAULT_WRITE_TIMEOUT = 25000;
 
 /**
  * Checks if a Supabase error is caused by a missing table, column, relation or missing schema cache.

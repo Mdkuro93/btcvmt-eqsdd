@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Warehouse, Region } from '../../types';
 import { fetchWarehouses, createWarehouse, updateWarehouse, deleteWarehouse, fetchRegions } from '../../api/assets';
-import { resolveRegionCode } from '../../lib/assetIdentifier';
 import { Warehouse as WarehouseIcon, Plus, Edit2, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../ConfirmModal';
@@ -15,7 +14,7 @@ export const AdminWarehouses: React.FC = () => {
   // Form states
   const [newWarehouseName, setNewWarehouseName] = useState('');
   const [newWarehouseCode, setNewWarehouseCode] = useState('');
-  const [newWarehouseRegionCode, setNewWarehouseRegionCode] = useState('VMN');
+  const [newWarehouseRegionCode, setNewWarehouseRegionCode] = useState('');
   const [newWarehouseRegionId, setNewWarehouseRegionId] = useState('');
   const [newWarehouseIsCentral, setNewWarehouseIsCentral] = useState(false);
   const [editingWarehouse, setEditingWarehouse] = useState<{
@@ -40,10 +39,6 @@ export const AdminWarehouses: React.FC = () => {
       ]);
       setWarehouses(w || []);
       setRegions(r || []);
-      if (r && r.length > 0 && !newWarehouseRegionId) {
-        setNewWarehouseRegionId(r[0].id);
-        setNewWarehouseRegionCode(resolveRegionCode(r[0].name));
-      }
     } catch (err: any) {
       console.error(err);
       toast.error('Lỗi tải dữ liệu kho lưu trữ: ' + (err.message || 'Không thể kết nối CSDL'));
@@ -66,7 +61,7 @@ export const AdminWarehouses: React.FC = () => {
       await createWarehouse({
         name: newWarehouseName.trim(),
         code: newWarehouseCode.trim() || undefined,
-        region_code: newWarehouseRegionCode || 'VMN',
+        region_code: newWarehouseRegionCode.trim().toUpperCase() || undefined,
         region_id: newWarehouseRegionId || null,
         is_central: newWarehouseIsCentral,
       });
@@ -86,7 +81,7 @@ export const AdminWarehouses: React.FC = () => {
       await updateWarehouse(editingWarehouse.id, {
         name: editingWarehouse.name.trim(),
         code: editingWarehouse.code?.trim() || undefined,
-        region_code: editingWarehouse.region_code || 'VMN',
+        region_code: editingWarehouse.region_code?.trim().toUpperCase() || undefined,
         region_id: editingWarehouse.region_id || null,
         is_central: editingWarehouse.is_central,
       });
@@ -155,20 +150,14 @@ export const AdminWarehouses: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Vùng</label>
-              <select
+              <input
+                type="text"
+                maxLength={8}
                 value={newWarehouseRegionCode}
-                onChange={(e) => setNewWarehouseRegionCode(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-              >
-                {regions.map((r) => {
-                  const code = resolveRegionCode(r.name);
-                  return (
-                    <option key={r.id} value={code}>
-                      {code} ({r.name})
-                    </option>
-                  );
-                })}
-              </select>
+                onChange={(e) => setNewWarehouseRegionCode(e.target.value.toUpperCase())}
+                placeholder="VD: VMB, VMT..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-mono uppercase"
+              />
             </div>
           </div>
 
@@ -180,15 +169,17 @@ export const AdminWarehouses: React.FC = () => {
                   const regId = e.target.value;
                   setNewWarehouseRegionId(regId);
                   const selectedReg = regions.find(r => r.id === regId);
-                  if (selectedReg) {
-                    setNewWarehouseRegionCode(resolveRegionCode(selectedReg.name));
+                  if (selectedReg && selectedReg.code) {
+                    setNewWarehouseRegionCode(selectedReg.code);
                   }
                 }}
                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white"
               >
                 <option value="">-- Liên kết Vùng --</option>
                 {regions.map((r) => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
+                  <option key={r.id} value={r.id}>
+                    {r.name} {r.code ? `(${r.code})` : ''}
+                  </option>
                 ))}
               </select>
 
@@ -219,7 +210,7 @@ export const AdminWarehouses: React.FC = () => {
           <div className="p-4 text-sm text-gray-500 text-center">Chưa có kho nào.</div>
         ) : (
           warehouses.map((w) => {
-            const rCode = w.region_code || resolveRegionCode(w.regions?.name);
+            const rCode = w.region_code || w.regions?.code || 'Chưa cấu hình';
             const wCode = w.code || '001';
             return (
               <div key={w.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -308,20 +299,14 @@ export const AdminWarehouses: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Mã Vùng</label>
-                  <select
-                    value={editingWarehouse.region_code || (regions[0] ? resolveRegionCode(regions[0].name) : 'VMT')}
-                    onChange={(e) => setEditingWarehouse({ ...editingWarehouse, region_code: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                  >
-                    {regions.map((r) => {
-                      const code = resolveRegionCode(r.name);
-                      return (
-                        <option key={r.id} value={code}>
-                          {code} ({r.name})
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <input
+                    type="text"
+                    maxLength={8}
+                    value={editingWarehouse.region_code || ''}
+                    onChange={(e) => setEditingWarehouse({ ...editingWarehouse, region_code: e.target.value.toUpperCase() })}
+                    placeholder="VD: VMB, VMT..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white font-mono uppercase"
+                  />
                 </div>
               </div>
               <div>
@@ -334,14 +319,16 @@ export const AdminWarehouses: React.FC = () => {
                     setEditingWarehouse({
                       ...editingWarehouse,
                       region_id: regId,
-                      region_code: selectedReg ? resolveRegionCode(selectedReg.name) : editingWarehouse.region_code
+                      region_code: selectedReg?.code || editingWarehouse.region_code || ''
                     });
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
                 >
                   <option value="">-- Không liên kết --</option>
                   {regions.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
+                    <option key={r.id} value={r.id}>
+                      {r.name} {r.code ? `(${r.code})` : ''}
+                    </option>
                   ))}
                 </select>
               </div>

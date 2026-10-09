@@ -125,7 +125,7 @@ export const PROVINCE_CODES: Array<{ name: string; code: string }> = [
  * Trích xuất / tra cứu mã tỉnh 3 ký tự từ tên hoặc mã tỉnh đã nhập
  */
 export function getProvinceCode(provinceNameOrCode?: string | null): string {
-  if (!provinceNameOrCode) return 'DNG';
+  if (!provinceNameOrCode) return '';
   const clean = provinceNameOrCode.trim();
   
   // Kiểm tra nếu đã truyền trực tiếp mã tỉnh 3 ký tự (ví dụ DNG, QTR, QNG, HCM, HAN)
@@ -151,38 +151,159 @@ export function getProvinceCode(provinceNameOrCode?: string | null): string {
     return clean.toUpperCase();
   }
 
-  return 'DNG'; // Mặc định vùng miền trung / Đà Nẵng
+  return ''; // Không có mã tỉnh mặc định; trả chuỗi rỗng khi không nhận diện được
 }
 
 /**
- * Deterministically find region code (VMB, VMT, VMN) for a given project or warehouse
+ * Lấy mã vùng (regions.code) của Dự án.
+ * Chỉ đọc project.areas.regions.code. Thiếu mã thì trả về null. Không đoán từ tên, không mặc định VMT.
  */
 export function resolveRegionCode(
   projectId?: string | null,
-  projects: Project[] = [],
-  warehouseRegionCode?: string | null
-): string {
-  if (warehouseRegionCode && ['VMB', 'VMT', 'VMN'].includes(warehouseRegionCode)) {
-    return warehouseRegionCode;
+  projects: Project[] = []
+): string | null {
+  if (!projectId || projects.length === 0) return null;
+  const project = projects.find(p => p.id === projectId);
+  if (project?.areas?.regions?.code) {
+    const c = project.areas.regions.code.trim().toUpperCase();
+    if (/^[A-Z0-9]{2,8}$/.test(c)) return c;
+  }
+  return null;
+}
+
+export interface ResolvedAssetCodePrefix {
+  prefix: string;
+  regionCode: string;
+  provinceCode: string;
+  collateralType: string;
+  source: 'project' | 'none';
+  isValid: boolean;
+  error?: string;
+}
+
+/**
+ * Nội suy toàn diện tiền tố Mã Tài Sản từ Dự án -> Địa bàn -> Vùng miền:
+ * Format tiền tố: [MÃ_VÙNG]_[MÃ_ĐỊA_BÀN]_[LOẠI_TS]_
+ * Mã vùng = regions.code của vùng chứa địa bàn của DỰ ÁN; mã tỉnh = areas.province_code.
+ * Thiếu một trong hai thì isValid:false với thông báo đúng chữ:
+ * Vùng "X" chưa có mã vùng: cấu hình tại Danh mục > Vùng
+ * Địa bàn "Y" chưa có mã tỉnh: cấu hình tại Danh mục > Địa bàn
+ * KHÔNG fallback sang kho.
+ */
+export function resolveAssetCodePrefix(options: {
+  projectId?: string | null;
+  projectName?: string | null;
+  projects?: Project[];
+  collateralType?: string;
+}): ResolvedAssetCodePrefix {
+  const {
+    projectId,
+    projectName,
+    projects = [],
+    collateralType = 'BDS',
+  } = options;
+
+  const cType = (collateralType || 'BDS').trim().toUpperCase();
+
+  // 1. Dò Dự án
+  let matchedProject: Project | undefined;
+  if (projectId) {
+    matchedProject = projects.find(p => p.id === projectId);
+  }
+  if (!matchedProject && projectName) {
+    const cleanPName = projectName.trim().toLowerCase();
+    matchedProject = projects.find(p => p.name.trim().toLowerCase() === cleanPName);
   }
 
-  if (projectId && projects.length > 0) {
-    const project = projects.find(p => p.id === projectId);
-    if (project) {
-      const regionName = (project.areas?.regions?.name || project.areas?.name || '').toLowerCase();
-      if (regionName.includes('bắc') || regionName.includes('hà nội') || regionName.includes('vmb')) {
-        return 'VMB';
-      }
-      if (regionName.includes('trung') || regionName.includes('đà nẵng') || regionName.includes('vmt')) {
-        return 'VMT';
-      }
-      if (regionName.includes('nam') || regionName.includes('hồ chí minh') || regionName.includes('bình dương') || regionName.includes('đồng nai') || regionName.includes('vmn')) {
-        return 'VMN';
-      }
-    }
+  if (!matchedProject) {
+    return {
+      prefix: '',
+      regionCode: '',
+      provinceCode: '',
+      collateralType: cType,
+      source: 'none',
+      isValid: false,
+      error: 'Chưa chọn Dự án hoặc không tìm thấy thông tin Dự án để nội suy mã vùng và mã tỉnh.',
+    };
   }
 
-  return 'VMT'; // Default fallback
+  const projName = matchedProject.name;
+  const area = matchedProject.areas;
+  if (!area) {
+    return {
+      prefix: '',
+      regionCode: '',
+      provinceCode: '',
+      collateralType: cType,
+      source: 'none',
+      isValid: false,
+      error: `Dự án "${projName}" chưa gắn địa bàn: cấu hình tại Danh mục > Dự án.`,
+    };
+  }
+
+  const areaName = area.name || 'Chưa đặt tên';
+  const region = area.regions;
+  const regionName = region?.name || 'Chưa gắn vùng';
+  const rawRegionCode = region?.code ? String(region.code).trim().toUpperCase() : '';
+  const rawProvinceCode = area.province_code ? String(area.province_code).trim().toUpperCase() : '';
+
+  if (!region || !rawRegionCode) {
+    return {
+      prefix: '',
+      regionCode: '',
+      provinceCode: '',
+      collateralType: cType,
+      source: 'none',
+      isValid: false,
+      error: `Vùng "${regionName}" chưa có mã vùng: cấu hình tại Danh mục > Vùng`,
+    };
+  }
+
+  if (!rawProvinceCode) {
+    return {
+      prefix: '',
+      regionCode: '',
+      provinceCode: '',
+      collateralType: cType,
+      source: 'none',
+      isValid: false,
+      error: `Địa bàn "${areaName}" chưa có mã tỉnh: cấu hình tại Danh mục > Địa bàn`,
+    };
+  }
+
+  if (!/^[A-Z0-9]{2,8}$/.test(rawRegionCode)) {
+    return {
+      prefix: '',
+      regionCode: '',
+      provinceCode: '',
+      collateralType: cType,
+      source: 'none',
+      isValid: false,
+      error: `Mã vùng "${rawRegionCode}" của vùng "${regionName}" không hợp lệ (2-8 ký tự chữ/số).`,
+    };
+  }
+
+  if (!/^[A-Z0-9]{2,8}$/.test(rawProvinceCode)) {
+    return {
+      prefix: '',
+      regionCode: '',
+      provinceCode: '',
+      collateralType: cType,
+      source: 'none',
+      isValid: false,
+      error: `Mã tỉnh "${rawProvinceCode}" của địa bàn "${areaName}" không hợp lệ (2-8 ký tự chữ/số).`,
+    };
+  }
+
+  const prefix = `${rawRegionCode}_${rawProvinceCode}_${cType}_`;
+  return {
+    prefix,
+    regionCode: rawRegionCode,
+    provinceCode: rawProvinceCode,
+    collateralType: cType,
+    source: 'project',
+    isValid: true,
+  };
 }
 
 /**
@@ -195,13 +316,22 @@ export function resolveRegionCode(
  * - VMT_DNG_TSCD_00000001...
  */
 export function generateNextAssetCode(
-  regionCode: string = 'VMT',
-  provinceCodeOrName: string = 'DNG',
+  regionCode: string,
+  provinceCodeOrName: string,
   collateralType: string = 'BDS',
   existingAssets: Asset[] = []
 ): string {
-  const cleanRegion = (regionCode || 'VMT').toUpperCase().trim();
+  const cleanRegion = (regionCode || '').toUpperCase().trim();
+  if (!cleanRegion) {
+    throw new Error('Thiếu mã vùng để sinh mã tài sản.');
+  }
+  if (!provinceCodeOrName || !provinceCodeOrName.trim()) {
+    throw new Error('Thiếu mã tỉnh hoặc địa bàn để sinh mã tài sản.');
+  }
   const cleanProvince = getProvinceCode(provinceCodeOrName);
+  if (!cleanProvince) {
+    throw new Error(`Không xác định được mã tỉnh từ "${provinceCodeOrName}".`);
+  }
   const cleanType = (collateralType || 'BDS').toUpperCase().trim();
   const prefix = `${cleanRegion}_${cleanProvince}_${cleanType}_`;
 

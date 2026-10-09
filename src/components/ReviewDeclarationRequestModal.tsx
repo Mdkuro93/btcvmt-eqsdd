@@ -21,7 +21,7 @@ import { fetchProjects, fetchWarehouses, fetchAssets, fetchAssetById, checkAsset
 import { updateDeclarationRequest, approveDeclarationRequest, isDuplicateUnconfirmed } from '../api/assetDeclarationRequests';
 import { DuplicateCertificateAckDialog } from './DuplicateCertificateAckDialog';
 import { fetchInvestorEntities } from '../api/investorEntities';
-import { COLLATERAL_TYPES, resolveRegionCode, getProvinceCode } from '../lib/assetIdentifier';
+import { COLLATERAL_TYPES, resolveAssetCodePrefix } from '../lib/assetIdentifier';
 import { DocumentUploadField } from './DocumentUploadField';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import {
@@ -480,15 +480,21 @@ export const ReviewDeclarationRequestModal: React.FC<Props> = ({
       const payload = buildPayload();
       await updateDeclarationRequest(request.id, payload);
 
-      // 2. Tính tiền tố mã tài sản (nếu cấp mới hoặc tách sổ) qua peekNextAssetCode trên server
+      // 2. Tính tiền tố mã tài sản (nếu cấp mới hoặc tách sổ)
       let prefix = null;
       if (requestType === 'cap_moi' || requestType === 'tach_so') {
-        const selectedProj = projects.find(p => p.id === projectId);
-        const wh = warehouses.find(w => w.id === warehouseId);
-        const regCode = resolveRegionCode(projectId, projects, wh?.region_code);
-        const provCode = getProvinceCode(selectedProj?.areas?.province_code || selectedProj?.areas?.name || 'DNG');
-        const codePreview = await peekNextAssetCode(regCode, provCode, collateralType);
-        prefix = codePreview.substring(0, codePreview.lastIndexOf('_') + 1);
+        const resolved = resolveAssetCodePrefix({
+          projectId,
+          projects,
+          collateralType,
+        });
+        if (resolved.isValid) {
+          prefix = resolved.prefix;
+        } else {
+          toast.error(resolved.error || 'Dự án hoặc địa bàn chưa cấu hình mã vùng/mã tỉnh.');
+          setApproving(false);
+          return;
+        }
       }
 
       // 3. Gọi RPC duyệt và sinh phiếu nhập kho (PN)

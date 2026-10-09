@@ -141,13 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       roles: ['admin', 'super_admin', 'project_dept', 'btc_manager', 'warehouse_manager'] 
     },
     { 
-      name: 'Import dữ liệu', 
-      href: '/import', 
-      icon: Upload, 
-      roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
-    },
-    { 
-      name: 'Cập nhật hàng loạt', 
+      name: 'Nhập & cập nhật hàng loạt', 
       href: '/bulk-update', 
       icon: Layers, 
       roles: ['warehouse_manager', 'btc_manager', 'admin', 'super_admin'] 
