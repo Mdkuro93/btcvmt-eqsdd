@@ -33,19 +33,19 @@ export const PlannedLotsCountBanner: React.FC = () => {
   if (totalOpen === 0 && (stats.total_count || 0) === 0) return null;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-sm transition-colors">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-amber-950 dark:text-amber-200">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-amber-50  border border-amber-200  rounded-xl text-sm transition-colors">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-amber-950 ">
         <span className="flex items-center gap-2 font-bold">
-          <LandPlot className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+          <LandPlot className="w-4 h-4 text-amber-700  shrink-0" />
           Còn <strong>{totalOpen}</strong> lô quy hoạch chưa có sổ riêng:
         </span>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 font-semibold border border-rose-300 dark:border-rose-800">
-            <FileClock className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-100  text-rose-800  font-semibold border border-rose-300 ">
+            <FileClock className="w-3.5 h-3.5 text-rose-600 " />
             Lô chưa có sổ nào (Q/R): <strong>{stats.unregistered_count}</strong>
           </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300 dark:border-amber-700">
-            <Layers className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100  text-amber-900  font-semibold border border-amber-300 ">
+            <Layers className="w-3.5 h-3.5 text-amber-700 " />
             Lô trong sổ lớn chưa tách (O/P): <strong>{stats.in_master_count}</strong>
           </span>
         </div>
@@ -54,13 +54,13 @@ export const PlannedLotsCountBanner: React.FC = () => {
       <div className="flex items-center gap-2 shrink-0">
         <Link
           to="/reports"
-          className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-all"
+          className="inline-flex items-center gap-1 text-xs font-bold text-blue-700  hover:text-blue-900  px-2.5 py-1 rounded-lg bg-surface  border border-slate-200  shadow-2xs hover:shadow-xs transition-all"
         >
           Báo cáo theo dự án <ArrowRight className="w-3.5 h-3.5" />
         </Link>
         <Link
           to="/admin?tab=projects"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 dark:text-amber-300 hover:text-amber-950 dark:hover:text-white px-2 py-1 rounded-lg hover:bg-amber-100/60 dark:hover:bg-slate-800 transition-colors"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800  hover:text-amber-950  px-2 py-1 rounded-lg hover:bg-amber-100/60  transition-colors"
         >
           Quản lý lô
         </Link>

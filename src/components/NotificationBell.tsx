@@ -116,7 +116,7 @@ export const NotificationBell: React.FC = () => {
         type="button"
         id="btn-notification-bell"
         onClick={handleToggle}
-        className="relative p-2 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer outline-none focus:ring-2 focus:ring-blue-500/30"
+        className="relative p-2 text-gray-500  hover:text-gray-700  hover:bg-gray-100  rounded-full transition-colors cursor-pointer outline-none focus:ring-2 focus:ring-blue-500/30"
         title="Thông báo hệ thống"
         aria-label="Thông báo"
         aria-expanded={isOpen}
@@ -125,7 +125,7 @@ export const NotificationBell: React.FC = () => {
         {unreadCount > 0 && (
           <span
             id="notification-unread-badge"
-            className="absolute top-1 right-1 flex min-w-4 h-4 px-1 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-900 animate-pulse"
+            className="absolute top-1 right-1 flex min-w-4 h-4 px-1 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white ring-2 ring-white  animate-pulse"
           >
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
@@ -136,20 +136,20 @@ export const NotificationBell: React.FC = () => {
       {isOpen && (
         <div
           id="notification-popover-menu"
-          className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 z-50 border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+          className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-surface  shadow-2xl ring-1 ring-black/5  z-50 border border-slate-200  overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         >
           {/* Header Popover */}
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-50/90 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-50/90  border-b border-slate-200 ">
             <div className="flex items-center gap-2">
-              <span className="p-1.5 bg-blue-100/70 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 rounded-lg">
+              <span className="p-1.5 bg-blue-100/70  text-blue-800  rounded-lg">
                 <Bell className="w-3.5 h-3.5" />
               </span>
               <div>
-                <span className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                <span className="font-bold text-xs text-slate-800  uppercase tracking-wide">
                   Thông báo
                 </span>
                 {unreadCount > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 rounded-full">
+                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold bg-red-100  text-red-700  rounded-full">
                     {unreadCount} chưa đọc
                   </span>
                 )}
@@ -161,7 +161,7 @@ export const NotificationBell: React.FC = () => {
                 id="btn-mark-all-notifications-read"
                 onClick={handleMarkAllRead}
                 disabled={markingAll}
-                className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                className="text-[11px] font-medium text-blue-600  hover:text-blue-800  transition-colors inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                 title="Đánh dấu tất cả là đã đọc"
               >
                 <CheckCheck className="w-3 h-3" />
@@ -171,12 +171,12 @@ export const NotificationBell: React.FC = () => {
           </div>
 
           {/* Danh sách Thông báo */}
-          <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 ">
             {notifications.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
-                <Bell className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2 opacity-50" />
-                <p className="font-medium text-slate-500 dark:text-slate-400">Chưa có thông báo nào</p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Các thông báo chuyển kho, phân quyền sẽ xuất hiện ở đây.</p>
+              <div className="p-8 text-center text-xs text-slate-400 ">
+                <Bell className="w-8 h-8 text-slate-300  mx-auto mb-2 opacity-50" />
+                <p className="font-medium text-slate-500 ">Chưa có thông báo nào</p>
+                <p className="text-[11px] text-slate-400  mt-0.5">Các thông báo chuyển kho, phân quyền sẽ xuất hiện ở đây.</p>
               </div>
             ) : (
               notifications.map((n) => {
@@ -189,14 +189,14 @@ export const NotificationBell: React.FC = () => {
                     onClick={() => handleNotificationClick(n)}
                     className={`p-3 text-xs transition-colors flex items-start gap-2.5 cursor-pointer group ${
                       isUnread
-                        ? 'bg-blue-50/50 dark:bg-blue-950/30 hover:bg-blue-50 dark:hover:bg-blue-950/50'
-                        : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/80 bg-white dark:bg-slate-900'
+                        ? 'bg-blue-50/50  hover:bg-blue-50 '
+                        : 'hover:bg-slate-50/80  bg-surface '
                     }`}
                   >
                     {/* Chấm tròn chưa đọc */}
                     <div
                       className={`w-2 h-2 rounded-full mt-1.5 shrink-0 transition-colors ${
-                        isUnread ? 'bg-blue-600 dark:bg-blue-400' : 'bg-transparent'
+                        isUnread ? 'bg-blue-600 ' : 'bg-transparent'
                       }`}
                     />
 
@@ -204,23 +204,23 @@ export const NotificationBell: React.FC = () => {
                       <div className="flex items-start justify-between gap-1">
                         <div
                           className={`font-semibold leading-tight line-clamp-2 ${
-                            isUnread ? 'text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'
+                            isUnread ? 'text-slate-900 ' : 'text-slate-700 '
                           }`}
                         >
                           {n.title}
                         </div>
                         {hasLink && (
-                          <ExternalLink className="w-3 h-3 text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0 mt-0.5 transition-colors" />
+                          <ExternalLink className="w-3 h-3 text-slate-400  group-hover:text-blue-600  shrink-0 mt-0.5 transition-colors" />
                         )}
                       </div>
 
-                      <div className="text-slate-600 dark:text-slate-400 text-[11px] mt-1 line-clamp-2 leading-relaxed">
+                      <div className="text-slate-600  text-[11px] mt-1 line-clamp-2 leading-relaxed">
                         {n.message || n.body}
                       </div>
 
-                      <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+                      <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400 ">
                         <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                          <Clock className="w-3 h-3 text-slate-400 " />
                           {n.created_at
                             ? format(new Date(n.created_at), 'dd/MM/yyyy HH:mm')
                             : '-'}
@@ -230,7 +230,7 @@ export const NotificationBell: React.FC = () => {
                           <button
                             type="button"
                             onClick={(e) => handleMarkOneRead(n.id, e)}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium inline-flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-blue-100/50 dark:hover:bg-blue-900/50 transition-colors cursor-pointer"
+                            className="text-blue-600  hover:text-blue-800  font-medium inline-flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-blue-100/50  transition-colors cursor-pointer"
                             title="Đánh dấu đã đọc"
                           >
                             <Check className="w-3 h-3" /> Đã đọc
@@ -245,8 +245,8 @@ export const NotificationBell: React.FC = () => {
           </div>
 
           {/* Footer Popover */}
-          <div className="p-2.5 bg-slate-50 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-800 text-center">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="p-2.5 bg-slate-50  border-t border-slate-200  text-center">
+            <span className="text-[11px] text-slate-500 ">
               Hệ thống tự động lưu trữ thông báo tối đa 90 ngày
             </span>
           </div>

@@ -216,17 +216,17 @@ export const WarehouseTransfers: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-surface  p-5 rounded-2xl border border-gray-200  shadow-xs">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-[#1E3A8A] text-white rounded-xl shadow-xs">
+            <div className="p-2 bg-accent text-accent-ink rounded-xl shadow-xs">
               <ArrowLeftRight className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">
+            <h1 className="text-xl font-bold text-gray-900 ">
               Luân chuyển kho
             </h1>
           </div>
-          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+          <p className="text-xs text-gray-500  mt-1">
             Quy trình điều chuyển GCN hai bước nguyên tử: kho xuất lập lệnh xuất và kho đích đối chiếu xác nhận nhận.
           </p>
         </div>
@@ -236,7 +236,7 @@ export const WarehouseTransfers: React.FC = () => {
             type="button"
             onClick={loadData}
             disabled={isLoading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl border border-gray-300 dark:border-slate-700 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-gray-700  bg-surface  hover:bg-gray-50  rounded-xl border border-gray-300  transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
             title="Tải lại dữ liệu mới nhất"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -246,7 +246,7 @@ export const WarehouseTransfers: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-900 rounded-xl shadow-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-accent-ink bg-accent hover:brightness-95 rounded-xl shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Tạo lệnh luân chuyển</span>
@@ -255,19 +255,19 @@ export const WarehouseTransfers: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-slate-800 gap-2">
+      <div className="flex border-b border-gray-200  gap-2">
         <button
           type="button"
           onClick={() => handleTabChange('action_needed')}
           className={`pb-3 px-4 text-xs font-bold transition-all relative cursor-pointer flex items-center gap-2 ${
             activeTab === 'action_needed'
-              ? 'text-[#1E3A8A] dark:text-blue-400 border-b-2 border-[#1E3A8A] dark:border-blue-400'
-              : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
+              ? 'text-blue-700  border-b-2 border-blue-500 '
+              : 'text-gray-500  hover:text-gray-700 '
           }`}
         >
           <span>Cần tôi xử lý</span>
           {actionNeededItems.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800  ">
               {actionNeededItems.length}
             </span>
           )}
@@ -278,12 +278,12 @@ export const WarehouseTransfers: React.FC = () => {
           onClick={() => handleTabChange('in_transit')}
           className={`pb-3 px-4 text-xs font-bold transition-all relative cursor-pointer flex items-center gap-2 ${
             activeTab === 'in_transit'
-              ? 'text-[#1E3A8A] dark:text-blue-400 border-b-2 border-[#1E3A8A] dark:border-blue-400'
-              : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
+              ? 'text-blue-700  border-b-2 border-blue-500 '
+              : 'text-gray-500  hover:text-gray-700 '
           }`}
         >
           <span>Đang luân chuyển</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800  ">
             {inTransitItems.length}
           </span>
         </button>
@@ -293,19 +293,19 @@ export const WarehouseTransfers: React.FC = () => {
           onClick={() => handleTabChange('history')}
           className={`pb-3 px-4 text-xs font-bold transition-all relative cursor-pointer flex items-center gap-2 ${
             activeTab === 'history'
-              ? 'text-[#1E3A8A] dark:text-blue-400 border-b-2 border-[#1E3A8A] dark:border-blue-400'
-              : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
+              ? 'text-blue-700  border-b-2 border-blue-500 '
+              : 'text-gray-500  hover:text-gray-700 '
           }`}
         >
           <span>Lịch sử luân chuyển</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-300">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700  ">
             {historyItems.length}
           </span>
         </button>
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div className="bg-surface  p-4 rounded-xl border border-gray-200  shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -316,12 +316,12 @@ export const WarehouseTransfers: React.FC = () => {
               setPage(1);
             }}
             placeholder="Tìm theo số GCN, mã tài sản, mã lô, mã phiếu PX/PN..."
-            className="w-full pl-9 pr-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-9 pr-3 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-slate-400">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600 ">
             <Filter className="w-3.5 h-3.5" />
             <span>Kho xuất:</span>
           </div>
@@ -331,7 +331,7 @@ export const WarehouseTransfers: React.FC = () => {
               setSourceFilter(e.target.value);
               setPage(1);
             }}
-            className="px-2.5 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-2.5 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Tất cả kho xuất</option>
             {warehouses.map((w) => (
@@ -341,7 +341,7 @@ export const WarehouseTransfers: React.FC = () => {
             ))}
           </select>
 
-          <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-slate-400 ml-2">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600  ml-2">
             <span>Kho đích:</span>
           </div>
           <select
@@ -350,7 +350,7 @@ export const WarehouseTransfers: React.FC = () => {
               setTargetFilter(e.target.value);
               setPage(1);
             }}
-            className="px-2.5 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-2.5 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Tất cả kho đích</option>
             {warehouses.map((w) => (
@@ -363,15 +363,15 @@ export const WarehouseTransfers: React.FC = () => {
       </div>
 
       {/* Main Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      <div className="bg-surface  rounded-2xl border border-gray-200  shadow-xs overflow-hidden">
         {isLoading ? (
-          <div className="py-16 text-center text-gray-500 dark:text-slate-400 space-y-2">
-            <Loader2 className="w-7 h-7 animate-spin mx-auto text-[#1E3A8A]" />
+          <div className="py-16 text-center text-gray-500  space-y-2">
+            <Loader2 className="w-7 h-7 animate-spin mx-auto text-blue-700" />
             <p className="text-xs">Đang tải danh sách luân chuyển kho...</p>
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="py-16 text-center text-gray-500 dark:text-slate-400 space-y-2">
-            <FileText className="w-8 h-8 mx-auto text-gray-300 dark:text-slate-600" />
+          <div className="py-16 text-center text-gray-500  space-y-2">
+            <FileText className="w-8 h-8 mx-auto text-gray-300 " />
             <p className="text-xs font-medium">Không tìm thấy bản ghi luân chuyển nào.</p>
             {activeTab === 'action_needed' && (
               <p className="text-[11px] text-gray-400">Hiện tại bạn không có phiếu nào cần xử lý.</p>
@@ -380,7 +380,7 @@ export const WarehouseTransfers: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
-              <thead className="bg-gray-50 dark:bg-slate-800/80 text-gray-600 dark:text-slate-400 border-b border-gray-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
+              <thead className="bg-gray-50  text-gray-600  border-b border-gray-200  uppercase tracking-wider text-[11px]">
                 <tr>
                   <th className="py-3 px-3.5">STT</th>
                   <th className="py-3 px-3.5">Số GCN / Mã TS</th>
@@ -392,7 +392,7 @@ export const WarehouseTransfers: React.FC = () => {
                   <th className="py-3 px-3.5 text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-gray-100 ">
                 {paginatedItems.map((t, idx) => {
                   const stage = t.details?.transfer?.stage || 'awaiting_receipt';
                   const srcWhId = t.details?.transfer?.source_warehouse_id;
@@ -417,33 +417,33 @@ export const WarehouseTransfers: React.FC = () => {
                   return (
                     <tr
                       key={t.id}
-                      className="hover:bg-gray-50/70 dark:hover:bg-slate-800/50 transition-colors"
+                      className="hover:bg-gray-50/70  transition-colors"
                     >
                       <td className="py-3 px-3.5 text-gray-500 font-mono">{rowNumber}</td>
 
                       <td className="py-3 px-3.5">
-                        <div className="font-mono font-bold text-gray-900 dark:text-slate-100 text-xs">
+                        <div className="font-mono font-bold text-gray-900  text-xs">
                           {t.asset?.certificate_no || t.details?.transfer?.snapshot?.certificate_no || '-'}
                         </div>
-                        <div className="font-mono text-[11px] text-blue-700 dark:text-blue-400">
+                        <div className="font-mono text-[11px] text-blue-700 ">
                           {t.asset?.asset_code || 'Chưa cấp mã'}
                         </div>
                       </td>
 
                       <td className="py-3 px-3.5">
-                        <div className="font-medium text-gray-800 dark:text-slate-200">
+                        <div className="font-medium text-gray-800 ">
                           {t.asset?.projects?.name || '-'}
                         </div>
-                        <div className="text-[11px] text-gray-500 dark:text-slate-400">
+                        <div className="text-[11px] text-gray-500 ">
                           {t.asset?.legal_lot_code || t.details?.transfer?.snapshot?.legal_lot_code ? `Lô: ${t.asset?.legal_lot_code || t.details?.transfer?.snapshot?.legal_lot_code}` : ''}
                         </div>
                       </td>
 
                       <td className="py-3 px-3.5">
-                        <div className="flex items-center gap-1.5 font-medium text-gray-800 dark:text-slate-200">
+                        <div className="flex items-center gap-1.5 font-medium text-gray-800 ">
                           <span className="truncate max-w-[110px]">{sourceWh?.name || 'Kho xuất'}</span>
                           <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
-                          <span className="truncate max-w-[110px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                          <span className="truncate max-w-[110px] text-emerald-700  font-semibold">
                             {targetWh?.name || 'Kho đích'}
                           </span>
                         </div>
@@ -452,12 +452,12 @@ export const WarehouseTransfers: React.FC = () => {
                       <td className="py-3 px-3.5">
                         <div className="flex flex-col gap-0.5">
                           {t.details?.transfer?.out_voucher_code && (
-                            <span className="font-mono text-[11px] text-blue-700 dark:text-blue-400">
+                            <span className="font-mono text-[11px] text-blue-700 ">
                               PX: <strong>{t.details.transfer.out_voucher_code}</strong>
                             </span>
                           )}
                           {t.voucher_code ? (
-                            <span className="font-mono text-[11px] text-emerald-700 dark:text-emerald-400">
+                            <span className="font-mono text-[11px] text-emerald-700 ">
                               PN: <strong>{t.voucher_code}</strong>
                             </span>
                           ) : (
@@ -476,7 +476,7 @@ export const WarehouseTransfers: React.FC = () => {
                         </span>
                       </td>
 
-                      <td className="py-3 px-3.5 text-gray-600 dark:text-slate-400">
+                      <td className="py-3 px-3.5 text-gray-600 ">
                         <div>
                           {t.created_at ? new Date(t.created_at).toLocaleDateString('vi-VN') : '-'}
                         </div>
@@ -520,7 +520,7 @@ export const WarehouseTransfers: React.FC = () => {
                                   item: t,
                                 })
                               }
-                              className="px-2 py-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
+                              className="px-2 py-1 text-rose-600 hover:bg-rose-50  border border-rose-200  rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
                             >
                               Từ chối nhận
                             </button>
@@ -537,7 +537,7 @@ export const WarehouseTransfers: React.FC = () => {
                                   item: t,
                                 })
                               }
-                              className="px-2 py-1 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
+                              className="px-2 py-1 text-gray-600  hover:bg-gray-100  border border-gray-200  rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
                             >
                               Thu hồi lệnh
                             </button>
@@ -547,7 +547,7 @@ export const WarehouseTransfers: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setDetailItem(t)}
-                            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            className="p-1 text-gray-400 hover:text-gray-700  hover:bg-gray-100  rounded-lg transition-colors cursor-pointer"
                             title="Xem chi tiết"
                           >
                             <Eye className="w-4 h-4" />
@@ -564,7 +564,7 @@ export const WarehouseTransfers: React.FC = () => {
 
         {/* Pagination Footer */}
         {filteredItems.length > pageSize && (
-          <div className="px-5 py-3 border-t border-gray-200 dark:border-slate-800 flex items-center justify-between text-xs text-gray-600 dark:text-slate-400">
+          <div className="px-5 py-3 border-t border-gray-200  flex items-center justify-between text-xs text-gray-600 ">
             <div>
               Hiển thị {(page - 1) * pageSize + 1} -{' '}
               {Math.min(page * pageSize, filteredItems.length)} trên tổng số {filteredItems.length} dòng
@@ -574,7 +574,7 @@ export const WarehouseTransfers: React.FC = () => {
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="p-1.5 border border-gray-300 dark:border-slate-700 rounded-lg disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                className="p-1.5 border border-gray-300  rounded-lg disabled:opacity-40 hover:bg-gray-50  transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -585,7 +585,7 @@ export const WarehouseTransfers: React.FC = () => {
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1.5 border border-gray-300 dark:border-slate-700 rounded-lg disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                className="p-1.5 border border-gray-300  rounded-lg disabled:opacity-40 hover:bg-gray-50  transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

@@ -545,3 +545,7 @@
   :root[data-theme="dark"] .bg-white { background-color: #fff; }
   :root[data-theme="dark"] body { background: #fff; color: #231E1A; }
 }
+
+/* Lưới an toàn: file cũ còn bg-white/NN (nền trắng trong suốt) sẽ không bị xám sáng ở giao diện tối */
+:root[data-theme="dark"] [class*="bg-white/"] { background-color: color-mix(in srgb, var(--surface) 70%, transparent); }
+:root[data-theme="dark"] [class*="border-white/"] { border-color: var(--border); }

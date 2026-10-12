@@ -216,18 +216,18 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
         }
       }}
     >
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+      <div className="bg-surface  rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col border border-gray-200  animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 border-b border-emerald-100 dark:border-emerald-900/60 flex items-center justify-between">
+        <div className="px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50   border-b border-emerald-100  flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs">
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">
+              <h2 className="text-base font-bold text-gray-900 ">
                 Xác nhận nhận GCN luân chuyển
               </h2>
-              <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-gray-600  mt-0.5">
                 Kho đích đối chiếu thông tin thực tế với lệnh xuất trước khi nhập kho.
               </p>
             </div>
@@ -236,7 +236,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 rounded-lg transition-colors disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-700  rounded-lg transition-colors disabled:opacity-50"
             title="Đóng (Esc)"
           >
             <X className="w-5 h-5" />
@@ -247,8 +247,8 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Cảnh báo từ chối trước đó nếu có */}
           {isRejectedBefore && (
-            <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
-              <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+            <div className="p-4 bg-amber-50  border border-amber-200  rounded-xl space-y-1.5 text-xs text-amber-900 ">
+              <div className="flex items-center gap-2 font-bold text-amber-800 ">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>Kho xuất đã từ chối đề xuất điều chỉnh trước đó</span>
               </div>
@@ -256,62 +256,62 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
                 <strong>Lý do từ chối:</strong> {previousReview?.notes || '(Không có ghi chú)'}
               </p>
               {previousProposal?.discrepancy_note && (
-                <p className="pl-6 text-gray-600 dark:text-slate-400">
+                <p className="pl-6 text-gray-600 ">
                   Ghi chú đề xuất cũ của bạn: {previousProposal.discrepancy_note}
                 </p>
               )}
-              <p className="pl-6 text-[11px] text-amber-700 dark:text-amber-400 italic">
+              <p className="pl-6 text-[11px] text-amber-700  italic">
                 Bạn có thể nhận đúng như lệnh xuất ban đầu, đề xuất lại với ghi chú chi tiết hơn, hoặc bấm nút &quot;Từ chối nhận&quot; ở danh sách bên ngoài để trả GCN về kho xuất.
               </p>
             </div>
           )}
 
           {/* Phần 1: Thông tin cố định (Readonly) */}
-          <div className="p-4 bg-gray-50 dark:bg-slate-800/60 rounded-xl border border-gray-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="p-4 bg-gray-50  rounded-xl border border-gray-200  grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div>
-              <span className="text-gray-500 dark:text-slate-400 block">Số GCN:</span>
-              <span className="font-mono font-bold text-gray-900 dark:text-slate-100 text-sm">
+              <span className="text-gray-500  block">Số GCN:</span>
+              <span className="font-mono font-bold text-gray-900  text-sm">
                 {transfer.asset?.certificate_no || snapshot.certificate_no || '-'}
               </span>
             </div>
             <div>
-              <span className="text-gray-500 dark:text-slate-400 block">Mã tài sản:</span>
-              <span className="font-mono font-bold text-blue-700 dark:text-blue-400">
+              <span className="text-gray-500  block">Mã tài sản:</span>
+              <span className="font-mono font-bold text-blue-700 ">
                 {transfer.asset?.asset_code || '-'}
               </span>
             </div>
             <div>
-              <span className="text-gray-500 dark:text-slate-400 block">Mã lô pháp lý:</span>
-              <span className="font-medium text-gray-800 dark:text-slate-200">
+              <span className="text-gray-500  block">Mã lô pháp lý:</span>
+              <span className="font-medium text-gray-800 ">
                 {transfer.asset?.legal_lot_code || snapshot.legal_lot_code || '-'}
               </span>
             </div>
             <div>
-              <span className="text-gray-500 dark:text-slate-400 block">Dự án:</span>
-              <span className="font-medium text-gray-800 dark:text-slate-200 truncate block">
+              <span className="text-gray-500  block">Dự án:</span>
+              <span className="font-medium text-gray-800  truncate block">
                 {transfer.asset?.projects?.name || '-'}
               </span>
             </div>
-            <div className="sm:col-span-2 flex items-center gap-2 pt-1 border-t border-gray-200 dark:border-slate-700">
-              <span className="text-gray-500 dark:text-slate-400">Tuyến luân chuyển:</span>
-              <span className="font-semibold text-gray-900 dark:text-slate-100">
+            <div className="sm:col-span-2 flex items-center gap-2 pt-1 border-t border-gray-200 ">
+              <span className="text-gray-500 ">Tuyến luân chuyển:</span>
+              <span className="font-semibold text-gray-900 ">
                 {sourceWh?.name || 'Kho xuất'}
               </span>
               <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
-              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+              <span className="font-semibold text-emerald-700 ">
                 {targetWh?.name || 'Kho đích'}
               </span>
             </div>
-            <div className="sm:col-span-2 pt-1 border-t border-gray-200 dark:border-slate-700">
-              <span className="text-gray-500 dark:text-slate-400">Mã phiếu xuất (PX): </span>
-              <span className="font-mono font-bold text-blue-700 dark:text-blue-400">
+            <div className="sm:col-span-2 pt-1 border-t border-gray-200 ">
+              <span className="text-gray-500 ">Mã phiếu xuất (PX): </span>
+              <span className="font-mono font-bold text-blue-700 ">
                 {transfer.details?.transfer?.out_voucher_code || '-'}
               </span>
             </div>
           </div>
 
           {/* Hướng dẫn trường không sửa */}
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
+          <div className="p-3 bg-slate-50  border border-slate-200  rounded-xl text-xs text-slate-600  flex items-start gap-2">
             <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
             <p>
               <strong>Lưu ý:</strong> Số GCN, mã lô và dự án <em>không được chỉnh sửa</em> tại đây. Nếu số GCN hoặc mã lô trên bản gốc khác hệ thống, vui lòng ghi vào ô chênh lệch và bấm <strong>Từ chối nhận</strong>, hoặc báo kho xuất sửa bằng chức năng <strong>Cập nhật hàng loạt – Sửa sai số GCN</strong>.
@@ -319,18 +319,18 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
           </div>
 
           {/* Toggle Chế độ đối chiếu */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-blue-50/60 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-900/60">
-            <label className="text-xs font-bold text-blue-900 dark:text-blue-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-blue-50/60  rounded-xl border border-blue-200 ">
+            <label className="text-xs font-bold text-blue-900 ">
               Kết quả đối chiếu hồ sơ:
             </label>
-            <div className="inline-flex rounded-lg p-1 bg-white dark:bg-slate-800 border border-blue-200 dark:border-slate-700">
+            <div className="inline-flex rounded-lg p-1 bg-surface  border border-blue-200 ">
               <button
                 type="button"
                 onClick={() => setMode('match')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                   mode === 'match'
                     ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900'
+                    : 'text-gray-600  hover:text-gray-900'
                 }`}
               >
                 ✓ Đã đối chiếu, đúng như lệnh xuất
@@ -341,7 +341,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                   mode === 'discrepancy'
                     ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900'
+                    : 'text-gray-600  hover:text-gray-900'
                 }`}
               >
                 ⚠ Có chênh lệch / Đề xuất điều chỉnh
@@ -350,16 +350,16 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
           </div>
 
           {/* Bảng đối chiếu 10 trường */}
-          <div className="border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-2xs">
+          <div className="border border-gray-200  rounded-xl overflow-hidden shadow-2xs">
             <table className="w-full text-xs text-left">
-              <thead className="bg-gray-50 dark:bg-slate-800/80 text-gray-600 dark:text-slate-400 border-b border-gray-200 dark:border-slate-800">
+              <thead className="bg-gray-50  text-gray-600  border-b border-gray-200 ">
                 <tr>
                   <th className="py-2.5 px-3 w-1/4">Thuộc tính</th>
                   <th className="py-2.5 px-3 w-1/3">Theo lệnh xuất (Snapshot)</th>
                   <th className="py-2.5 px-3">Thực tế nhận (Kho đích)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-gray-100 ">
                 {TRANSFER_FIELDS.map((f) => {
                   const snapVal = (snapshot as any)[f.key];
                   const currentVal = formData[f.key] || '';
@@ -375,26 +375,26 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
                   return (
                     <tr
                       key={f.key}
-                      className={`hover:bg-gray-50/50 dark:hover:bg-slate-800/50 ${
-                        isModified ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
+                      className={`hover:bg-gray-50/50  ${
+                        isModified ? 'bg-amber-50/50 ' : ''
                       }`}
                     >
-                      <td className="py-2 px-3 font-semibold text-gray-700 dark:text-slate-300">
+                      <td className="py-2 px-3 font-semibold text-gray-700 ">
                         {f.label}
                       </td>
-                      <td className="py-2 px-3 font-mono text-gray-600 dark:text-slate-400">
+                      <td className="py-2 px-3 font-mono text-gray-600 ">
                         {snapDisplay}
                       </td>
                       <td className="py-2 px-3">
                         {mode === 'match' ? (
-                          <span className="text-gray-500 dark:text-slate-400 italic">
+                          <span className="text-gray-500  italic">
                             (Giữ nguyên theo lệnh xuất)
                           </span>
                         ) : f.type === 'select' && f.key === 'usage_term_type' ? (
                           <select
                             value={currentVal}
                             onChange={(e) => handleFieldChange(f.key, e.target.value)}
-                            className="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-md text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            className="w-full px-2.5 py-1 text-xs bg-surface  border border-gray-300  rounded-md text-gray-900  focus:outline-none focus:ring-1 focus:ring-amber-500"
                           >
                             <option value="long_term">Lâu dài</option>
                             <option value="fixed_date">Có thời hạn cụ thể</option>
@@ -404,7 +404,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
                             type="date"
                             value={currentVal}
                             onChange={(e) => handleFieldChange(f.key, e.target.value)}
-                            className="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-md text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            className="w-full px-2.5 py-1 text-xs bg-surface  border border-gray-300  rounded-md text-gray-900  focus:outline-none focus:ring-1 focus:ring-amber-500"
                           />
                         ) : (
                           <input
@@ -412,7 +412,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
                             value={currentVal}
                             onChange={(e) => handleFieldChange(f.key, e.target.value)}
                             placeholder={`Nhập ${f.label.toLowerCase()}...`}
-                            className="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-md text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            className="w-full px-2.5 py-1 text-xs bg-surface  border border-gray-300  rounded-md text-gray-900  focus:outline-none focus:ring-1 focus:ring-amber-500"
                           />
                         )}
                       </td>
@@ -425,14 +425,14 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
 
           {/* Ô nhập ghi chú chênh lệch (BẮT BUỘC khi ở chế độ discrepancy) */}
           {mode === 'discrepancy' && (
-            <div className="space-y-1.5 p-4 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-xl">
+            <div className="space-y-1.5 p-4 bg-amber-50/70  border border-amber-200  rounded-xl">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                <label className="text-xs font-bold text-amber-900 ">
                   Ghi chú chênh lệch / Lý do điều chỉnh <span className="text-rose-600">*</span>:
                 </label>
                 <span
                   className={`text-[11px] font-mono ${
-                    isDiscrepancyValid ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-rose-600'
+                    isDiscrepancyValid ? 'text-emerald-600  font-semibold' : 'text-rose-600'
                   }`}
                 >
                   {isDiscrepancyValid
@@ -448,7 +448,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
                 value={discrepancyNote}
                 onChange={(e) => setDiscrepancyNote(e.target.value)}
                 placeholder="Mô tả cụ thể chênh lệch thực tế khi nhận hồ sơ (ví dụ: Diện tích trên bản gốc là 123.5 m2, số thửa 45...)"
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-800 rounded-lg text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full px-3 py-2 text-xs bg-surface  border border-amber-300  rounded-lg text-gray-900  placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
               {validationErrors.length > 0 && (
                 <p className="text-[11px] text-rose-600 mt-1">{validationErrors[0]}</p>
@@ -458,7 +458,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
 
           {/* Ô nhập ghi chú nhận chung (Tùy chọn) */}
           <div className="space-y-1">
-            <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
+            <label className="block text-xs font-semibold text-gray-700 ">
               Ghi chú nhận kho (tùy chọn):
             </label>
             <input
@@ -466,17 +466,17 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
               value={receiveNotes}
               onChange={(e) => setReceiveNotes(e.target.value)}
               placeholder="Ghi chú thêm cho phiếu nhập kho..."
-              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           {/* Footer actions */}
-          <div className="pt-4 border-t border-gray-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="pt-4 border-t border-gray-200  flex items-center justify-between">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+              className="px-4 py-2 border border-gray-300  hover:bg-gray-50  text-gray-700  rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
             >
               Hủy
             </button>
@@ -489,7 +489,7 @@ export const ReceiveTransferModal: React.FC<ReceiveTransferModalProps> = ({
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
                   : isDiscrepancyValid && !isSubmitting
                   ? 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer'
-                  : 'bg-gray-200 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed'
+                  : 'bg-gray-200  text-gray-400  cursor-not-allowed'
               }`}
             >
               {isSubmitting ? (

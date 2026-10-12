@@ -214,11 +214,11 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="bg-surface  rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200  flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-amber-600 to-[#1E3A8A] text-white flex items-center justify-between shrink-0">
+        <div className="px-6 py-4 bg-brand text-brand-fg flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/10 rounded-lg">
+            <div className="p-2 bg-surface/10 rounded-lg">
               <RefreshCw className="w-5 h-5 text-amber-200" />
             </div>
             <div>
@@ -232,22 +232,22 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-surface/10 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700 dark:text-slate-300">
+        <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700 ">
           {/* Màn hình thành công */}
           {successInfo ? (
             <div className="py-6 px-4 text-center space-y-4">
-              <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+              <div className="w-14 h-14 bg-emerald-100  text-emerald-600  rounded-full flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <h4 className="text-base font-bold text-slate-900 ">
                   Tái cấp mã tài sản thành công!
                 </h4>
                 <p className="text-xs text-slate-500 mt-1">
@@ -255,10 +255,10 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
                 </p>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-3 font-mono text-sm">
+              <div className="bg-slate-50  p-4 rounded-xl border border-slate-200  flex items-center justify-center gap-3 font-mono text-sm">
                 <span className="text-slate-500 line-through">{successInfo.oldCode}</span>
                 <ArrowRight className="w-4 h-4 text-emerald-600" />
-                <span className="font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-700">
+                <span className="font-bold text-emerald-700  bg-emerald-50  px-3 py-1 rounded-lg border border-emerald-300 ">
                   {successInfo.newCode}
                 </span>
               </div>
@@ -267,7 +267,7 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2 bg-[#1E3A8A] text-white rounded-lg font-semibold hover:bg-blue-800 transition-colors"
+                  className="px-6 py-2 bg-accent text-accent-ink rounded-lg font-semibold hover:brightness-95 transition-colors"
                 >
                   Đóng hộp thoại
                 </button>
@@ -276,23 +276,23 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
           ) : (
             <>
               {/* Thông tin GCN hiện tại */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50  rounded-xl border border-slate-200 ">
                 <div>
                   <span className="text-slate-500 block mb-0.5">Số GCN QSDĐ:</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                  <span className="font-bold text-slate-900  text-sm">
                     {asset.certificate_no || 'Chưa có số GCN'}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-500 block mb-0.5">Mã tài sản hiện tại:</span>
-                  <span className="font-mono font-bold text-[#1E3A8A] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
+                  <span className="font-mono font-bold text-blue-700  bg-blue-50  px-2 py-0.5 rounded border border-blue-200 ">
                     {asset.asset_code || 'Chưa gán mã'}
                   </span>
                 </div>
               </div>
 
               {/* Chú thích quan trọng về kho */}
-              <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+              <div className="flex items-start gap-2 p-3 bg-amber-50  rounded-lg border border-amber-200  text-amber-900 ">
                 <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
                   <strong>Lưu ý:</strong> Kho lưu trữ không ảnh hưởng đến cấu trúc mã tài sản (mã phụ thuộc vào Vùng miền, Địa bàn tỉnh của Dự án và Loại TSĐB). Nếu GCN nhập sai kho, vui lòng dùng tính năng <strong>Luân chuyển kho</strong> thay vì tái cấp mã.
@@ -302,14 +302,14 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
               {/* Form chọn Dự án và Loại TSĐB */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1 flex items-center gap-1.5">
+                  <label className="block font-semibold text-slate-800  mb-1 flex items-center gap-1.5">
                     <Building2 className="w-3.5 h-3.5 text-blue-600" />
                     Dự án gắn với GCN <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={selectedProjectId}
                     onChange={e => handleProjectChange(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg border-slate-300  bg-surface  text-slate-900  focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">-- Chọn Dự án --</option>
                     {projectList.map(p => (
@@ -321,14 +321,14 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1 flex items-center gap-1.5">
+                  <label className="block font-semibold text-slate-800  mb-1 flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-blue-600" />
                     Loại Tài Sản Đảm Bảo (TSĐB) <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={selectedCollateralType}
                     onChange={e => handleCollateralTypeChange(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg border-slate-300  bg-surface  text-slate-900  focus:ring-2 focus:ring-blue-500"
                   >
                     {COLLATERAL_TYPES.map(ct => (
                       <option key={ct.code} value={ct.code}>
@@ -342,7 +342,7 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
               {/* Lý do tái cấp mã (bắt buộc >= 10 ký tự) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-800 dark:text-slate-200">
+                  <label className="font-semibold text-slate-800 ">
                     Lý do tái cấp mã <span className="text-red-500">*</span>
                   </label>
                   <span
@@ -361,7 +361,7 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
                     setErrorMessage(null);
                   }}
                   placeholder="Nhập lý do chi tiết (VD: Chọn nhầm dự án khi nhập kho đợt 1 / Cấu hình mã vùng mới cập nhật...)"
-                  className="w-full px-3 py-2 border rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
+                  className="w-full px-3 py-2 border rounded-lg border-slate-300  bg-surface  text-slate-900  focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
                 />
               </div>
 
@@ -371,7 +371,7 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
                   type="button"
                   onClick={handlePreview}
                   disabled={loadingPreview || loadingApply || reason.trim().length < 10}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg font-semibold border border-slate-300 dark:border-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200   text-slate-800  rounded-lg font-semibold border border-slate-300  transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {loadingPreview ? (
                     <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
@@ -387,7 +387,7 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
 
               {/* Báo lỗi nếu có */}
               {errorMessage && (
-                <div className="p-3.5 bg-rose-50 dark:bg-rose-950/50 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200 flex items-start gap-2.5">
+                <div className="p-3.5 bg-rose-50  rounded-xl border border-rose-200  text-rose-900  flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <p className="font-bold">Không thể tái cấp mã</p>
@@ -398,47 +398,47 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
 
               {/* Kết quả Xem trước */}
               {previewResult && (
-                <div className="space-y-3.5 p-4 bg-blue-50/60 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center justify-between border-b border-blue-200 dark:border-blue-800 pb-2">
-                    <span className="font-bold text-[#1E3A8A] dark:text-blue-300 flex items-center gap-1.5">
+                <div className="space-y-3.5 p-4 bg-blue-50/60  rounded-xl border border-blue-200 ">
+                  <div className="flex items-center justify-between border-b border-blue-200  pb-2">
+                    <span className="font-bold text-blue-700  flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       Kết quả kiểm tra tiền tố mới
                     </span>
-                    <span className="font-mono text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      Tiền tố dự kiến: <strong className="text-blue-700 dark:text-blue-300">{previewResult.newPrefix}</strong>
+                    <span className="font-mono text-xs font-semibold text-slate-600 ">
+                      Tiền tố dự kiến: <strong className="text-blue-700 ">{previewResult.newPrefix}</strong>
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2 font-mono text-xs">
-                    <span className="px-2.5 py-1 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                    <span className="px-2.5 py-1 bg-surface  rounded border border-slate-200  text-slate-700 ">
                       Mã cũ: {previewResult.oldCode || '(Chưa có)'}
                     </span>
                     <ArrowRight className="w-4 h-4 text-blue-600 shrink-0" />
-                    <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/80 rounded border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-bold">
+                    <span className="px-2.5 py-1 bg-emerald-50  rounded border border-emerald-300  text-emerald-800  font-bold">
                       Tiền tố mới: {previewResult.newPrefix}xxxxxxxx
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                  <p className="text-[11px] text-slate-600 ">
                     * Lưu ý: 8 chữ số thứ tự chính xác sẽ được máy chủ cấp nguyên tử ngay khi bấm "Tái cấp mã" để đảm bảo không trùng lặp số giữa các người dùng.
                   </p>
 
                   {/* Cảnh báo đỏ nếu GCN đã phát sinh lịch sử */}
                   {previewResult.hasHistory && (
-                    <div className="p-3.5 bg-rose-50 dark:bg-rose-950/60 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 space-y-2.5">
-                      <div className="flex items-center gap-2 font-bold text-rose-950 dark:text-rose-100">
+                    <div className="p-3.5 bg-rose-50  rounded-xl border border-rose-300  text-rose-900  space-y-2.5">
+                      <div className="flex items-center gap-2 font-bold text-rose-950 ">
                         <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
                         <span>CẢNH BÁO: GCN đã phát sinh lịch sử dữ liệu trong hệ thống</span>
                       </div>
 
-                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-rose-800 dark:text-rose-300">
+                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-rose-800 ">
                         {historyItems.map((item, idx) => (
                           <li key={idx}>{item}</li>
                         ))}
                       </ul>
 
                       {!isAdmin ? (
-                        <div className="p-2.5 bg-white/70 dark:bg-slate-900/70 rounded-lg border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 font-semibold text-center">
+                        <div className="p-2.5 bg-surface/70  rounded-lg border border-rose-300  text-rose-700  font-semibold text-center">
                           ⚠️ Chỉ quản trị viên (Admin / Super Admin) mới có quyền tái cấp mã cho GCN đã phát sinh giao dịch/lịch sử.
                         </div>
                       ) : (
@@ -449,7 +449,7 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
                             onChange={e => setConfirmHistory(e.target.checked)}
                             className="mt-0.5 rounded border-rose-400 text-rose-600 focus:ring-rose-500 cursor-pointer"
                           />
-                          <span className="text-xs font-semibold text-rose-950 dark:text-rose-100 leading-relaxed">
+                          <span className="text-xs font-semibold text-rose-950  leading-relaxed">
                             Tôi xác nhận GCN này đã phát sinh giao dịch/lịch sử và hiểu việc tái cấp mã làm thay đổi mã trên hệ thống; nhãn, hợp đồng, tài liệu ngoài hệ thống phải cập nhật theo.
                           </span>
                         </label>
@@ -464,12 +464,12 @@ export const ReassignAssetCodeModal: React.FC<ReassignAssetCodeModalProps> = ({
 
         {/* Footer */}
         {!successInfo && (
-          <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-end gap-2 shrink-0">
+          <div className="px-6 py-3 border-t border-slate-200  bg-slate-50  flex items-center justify-end gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
               disabled={loadingApply}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-slate-700  bg-surface  hover:bg-slate-100  rounded-lg border border-slate-300  transition-colors cursor-pointer"
             >
               Hủy bỏ
             </button>

@@ -238,18 +238,18 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         }
       }}
     >
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+      <div className="bg-surface  rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200  animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-b border-blue-100 dark:border-blue-900/60 flex items-center justify-between">
+        <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50   border-b border-blue-100  flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-[#1E3A8A] text-white rounded-xl shadow-xs">
+            <div className="p-2.5 bg-accent text-accent-ink rounded-xl shadow-xs">
               <ArrowLeftRight className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-slate-100">
+              <h2 className="text-base font-bold text-gray-900 ">
                 Tạo lệnh xuất luân chuyển kho
               </h2>
-              <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-gray-600  mt-0.5">
                 Luồng hai bước: kho xuất lập lệnh xuất (tự sinh mã PX), kho đích xác nhận nhận (sinh mã PN).
               </p>
             </div>
@@ -258,7 +258,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 rounded-lg transition-colors disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-700  rounded-lg transition-colors disabled:opacity-50"
             title="Đóng (Esc)"
           >
             <X className="w-5 h-5" />
@@ -268,7 +268,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         {/* Results Screen */}
         {results !== null ? (
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div className="p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl text-xs text-blue-900 dark:text-blue-300">
+            <div className="p-4 bg-blue-50  border border-blue-200  rounded-xl text-xs text-blue-900 ">
               <p className="font-semibold text-sm mb-1">Kết quả lập lệnh luân chuyển kho</p>
               <p>
                 Thành công: <strong>{results.filter((r) => r.result === 'created').length}</strong> · Bị lỗi:{' '}
@@ -276,9 +276,9 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
               </p>
             </div>
 
-            <div className="border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
+            <div className="border border-gray-200  rounded-xl overflow-hidden">
               <table className="w-full text-xs text-left">
-                <thead className="bg-gray-50 dark:bg-slate-800/80 text-gray-600 dark:text-slate-400 border-b border-gray-200 dark:border-slate-800">
+                <thead className="bg-gray-50  text-gray-600  border-b border-gray-200 ">
                   <tr>
                     <th className="py-2.5 px-3">STT</th>
                     <th className="py-2.5 px-3">Số GCN</th>
@@ -287,30 +287,30 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                     <th className="py-2.5 px-3">Thông điệp / Chi tiết</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-gray-100 ">
                   {results.map((r, idx) => {
                     const isSuccess = r.result === 'created';
                     return (
-                      <tr key={r.asset_id || idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/50">
+                      <tr key={r.asset_id || idx} className="hover:bg-gray-50/50 ">
                         <td className="py-2 px-3 text-gray-500">{idx + 1}</td>
-                        <td className="py-2 px-3 font-mono font-bold text-gray-900 dark:text-slate-100">
+                        <td className="py-2 px-3 font-mono font-bold text-gray-900 ">
                           {r.certificate_no || 'N/A'}
                         </td>
                         <td className="py-2 px-3">
                           {isSuccess ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 text-[11px]">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200    text-[11px]">
                               <Check className="w-3 h-3" /> Thành công
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800 text-[11px]">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold bg-rose-50 text-rose-700 border border-rose-200    text-[11px]">
                               <AlertCircle className="w-3 h-3" /> Lỗi
                             </span>
                           )}
                         </td>
-                        <td className="py-2 px-3 font-mono font-bold text-blue-700 dark:text-blue-400">
+                        <td className="py-2 px-3 font-mono font-bold text-blue-700 ">
                           {r.out_voucher || '-'}
                         </td>
-                        <td className="py-2 px-3 text-gray-600 dark:text-slate-300">
+                        <td className="py-2 px-3 text-gray-600 ">
                           {r.message || '-'}
                         </td>
                       </tr>
@@ -320,14 +320,14 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
               </table>
             </div>
 
-            <div className="pt-4 border-t border-gray-200 dark:border-slate-800 flex justify-end">
+            <div className="pt-4 border-t border-gray-200  flex justify-end">
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onSuccess();
                 }}
-                className="px-5 py-2 bg-[#1E3A8A] hover:bg-blue-900 text-white rounded-lg text-xs font-semibold shadow-xs cursor-pointer"
+                className="px-5 py-2 bg-accent hover:brightness-95 text-accent-ink rounded-lg text-xs font-semibold shadow-xs cursor-pointer"
               >
                 Đóng & Xem danh sách
               </button>
@@ -337,8 +337,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
           /* Form Screen */
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
             {/* Box nhắc nhở */}
-            <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl text-xs text-blue-900 dark:text-blue-300 flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <div className="p-3.5 bg-blue-50/70  border border-blue-200  rounded-xl text-xs text-blue-900  flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-blue-600  shrink-0 mt-0.5" />
               <p className="leading-relaxed">
                 Sau khi lập lệnh, GCN sẽ chuyển sang trạng thái <strong>Đang luân chuyển</strong> và vẫn thuộc kho xuất cho tới khi kho đích xác nhận nhận hoàn tất.
               </p>
@@ -346,14 +346,14 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
 
             {/* Bước 1: Chọn Kho đích */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-gray-800 dark:text-slate-200">
+              <label className="block text-xs font-semibold text-gray-800 ">
                 1. Kho nhận đích đến <span className="text-rose-600">*</span>:
               </label>
               <select
                 required
                 value={targetWarehouseId}
                 onChange={(e) => setTargetWarehouseId(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- Chọn kho tiếp nhận đích --</option>
                 {availableTargetWarehouses.map((w) => (
@@ -363,7 +363,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                 ))}
               </select>
               {hasSameWarehouseAsset && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1 mt-1">
+                <p className="text-[11px] text-rose-600  flex items-center gap-1 mt-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   Có GCN đã chọn đang thuộc chính kho này. Không thể luân chuyển sang cùng một kho.
                 </p>
@@ -373,7 +373,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
             {/* Bước 2: Chọn GCN */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-gray-800 dark:text-slate-200">
+                <label className="text-xs font-semibold text-gray-800 ">
                   2. Danh sách GCN cần luân chuyển <span className="text-rose-600">*</span> ({selectedAssets.length}/200 GCN):
                 </label>
                 {selectedAssets.length > 0 && (
@@ -395,7 +395,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Gõ số GCN, mã tài sản hoặc mã lô để tìm..."
-                  className="w-full pl-8 pr-8 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-8 pr-8 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 {isSearching && (
                   <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
@@ -404,8 +404,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
 
               {/* Danh sách kết quả tìm kiếm */}
               {searchedAssets.length > 0 && (
-                <div className="max-h-40 overflow-y-auto border border-blue-200 dark:border-blue-900/60 rounded-lg bg-blue-50/40 dark:bg-blue-950/20 p-2 space-y-1">
-                  <div className="text-[11px] text-gray-500 dark:text-slate-400 font-medium px-1">
+                <div className="max-h-40 overflow-y-auto border border-blue-200  rounded-lg bg-blue-50/40  p-2 space-y-1">
+                  <div className="text-[11px] text-gray-500  font-medium px-1">
                     Kết quả tìm thấy (bấm để thêm vào danh sách luân chuyển):
                   </div>
                   {searchedAssets.map((a) => {
@@ -417,22 +417,22 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                         onClick={() => !isSelected && handleAddAsset(a)}
                         className={`flex items-center justify-between p-2 rounded-md text-xs transition-colors ${
                           isSelected
-                            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 opacity-60 cursor-not-allowed'
-                            : 'bg-white dark:bg-slate-800 hover:bg-blue-100/70 dark:hover:bg-blue-900/50 cursor-pointer shadow-2xs'
+                            ? 'bg-blue-100  text-blue-800  opacity-60 cursor-not-allowed'
+                            : 'bg-surface  hover:bg-blue-100/70  cursor-pointer shadow-2xs'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-gray-900 dark:text-slate-100">
+                          <span className="font-mono font-bold text-gray-900 ">
                             {a.certificate_no}
                           </span>
-                          <span className="text-[11px] text-gray-500 dark:text-slate-400 font-mono">
+                          <span className="text-[11px] text-gray-500  font-mono">
                             [{a.asset_code || 'Chưa có mã'}]
                           </span>
-                          <span className="text-[11px] text-gray-600 dark:text-slate-400">
+                          <span className="text-[11px] text-gray-600 ">
                             · Kho xuất: <strong>{whName}</strong>
                           </span>
                         </div>
-                        <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                        <span className="text-[11px] text-blue-600  font-medium">
                           {isSelected ? 'Đã chọn' : '+ Thêm'}
                         </span>
                       </div>
@@ -443,7 +443,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
 
               {/* Danh sách GCN đã chọn */}
               {selectedAssets.length > 0 ? (
-                <div className="max-h-44 overflow-y-auto border border-gray-200 dark:border-slate-700 rounded-lg p-2 space-y-1.5 bg-gray-50/50 dark:bg-slate-800/40">
+                <div className="max-h-44 overflow-y-auto border border-gray-200  rounded-lg p-2 space-y-1.5 bg-gray-50/50 ">
                   {selectedAssets.map((a, idx) => {
                     const wh = warehouses.find((w) => w.id === a.warehouse_id);
                     const isConflict = targetWarehouseId && a.warehouse_id === targetWarehouseId;
@@ -452,21 +452,21 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                         key={a.id}
                         className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${
                           isConflict
-                            ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-900 dark:text-rose-200'
-                            : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-800 dark:text-slate-200'
+                            ? 'bg-rose-50  border-rose-300 text-rose-900 '
+                            : 'bg-surface  border-gray-200  text-gray-800 '
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="w-4 text-[10px] text-gray-400 font-mono">{idx + 1}.</span>
                           <span className="font-mono font-bold">{a.certificate_no}</span>
-                          <span className="text-[11px] text-gray-500 dark:text-slate-400 font-mono truncate">
+                          <span className="text-[11px] text-gray-500  font-mono truncate">
                             [{a.asset_code || 'Chưa cấp mã'}]
                           </span>
-                          <span className="text-[11px] text-gray-600 dark:text-slate-400 truncate">
+                          <span className="text-[11px] text-gray-600  truncate">
                             · Kho xuất: <strong>{wh?.name || 'N/A'}</strong>
                           </span>
                           {isConflict && (
-                            <span className="text-[10px] text-rose-600 font-bold bg-rose-100 dark:bg-rose-900/60 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] text-rose-600 font-bold bg-rose-100  px-1.5 py-0.5 rounded">
                               Trùng kho đích
                             </span>
                           )}
@@ -484,7 +484,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                   })}
                 </div>
               ) : (
-                <div className="text-center py-6 text-xs text-gray-400 dark:text-slate-500 border border-dashed border-gray-300 dark:border-slate-700 rounded-lg">
+                <div className="text-center py-6 text-xs text-gray-400  border border-dashed border-gray-300  rounded-lg">
                   Chưa chọn GCN nào. Hãy tìm kiếm ở trên hoặc chọn GCN từ màn hình Danh sách GCN.
                 </div>
               )}
@@ -493,7 +493,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
             {/* Bước 3: Ghi chú & Link bản scan */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
+                <label className="block text-xs font-semibold text-gray-700 ">
                   Ghi chú xuất luân chuyển (tùy chọn):
                 </label>
                 <input
@@ -501,12 +501,12 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Ví dụ: Bàn giao bảo quản cho dự án mới..."
-                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
+                <label className="block text-xs font-semibold text-gray-700 ">
                   Link bản scan OneDrive/SharePoint (tùy chọn):
                 </label>
                 <input
@@ -514,10 +514,10 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                   value={scanUrl}
                   onChange={(e) => handleScanChange(e.target.value)}
                   placeholder="https://...sharepoint.com/..."
-                  className={`w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border rounded-lg text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 ${
+                  className={`w-full px-3 py-2 text-xs bg-surface  border rounded-lg text-gray-900  placeholder-gray-400 focus:outline-none focus:ring-2 ${
                     scanError
                       ? 'border-rose-400 focus:ring-rose-500'
-                      : 'border-gray-300 dark:border-slate-700 focus:ring-blue-500'
+                      : 'border-gray-300  focus:ring-blue-500'
                   }`}
                 />
                 {scanError && <p className="text-[11px] text-rose-600 mt-0.5">{scanError}</p>}
@@ -525,12 +525,12 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
             </div>
 
             {/* Footer buttons */}
-            <div className="pt-4 border-t border-gray-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="pt-4 border-t border-gray-200  flex items-center justify-between">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="px-4 py-2 border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300  hover:bg-gray-50  text-gray-700  rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
               >
                 Hủy
               </button>
@@ -540,8 +540,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                 disabled={!canSubmit}
                 className={`px-5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors ${
                   canSubmit
-                    ? 'bg-[#1E3A8A] hover:bg-blue-900 text-white cursor-pointer'
-                    : 'bg-gray-200 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed'
+                    ? 'bg-accent hover:brightness-95 text-accent-ink cursor-pointer'
+                    : 'bg-gray-200  text-gray-400  cursor-not-allowed'
                 }`}
               >
                 {isSubmitting ? (

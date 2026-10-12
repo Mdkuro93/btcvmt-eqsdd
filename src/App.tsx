@@ -134,6 +134,11 @@ export default function App() {
                     <Route path="/warehouse-transfers" element={<WarehouseTransfers />} />
                     <Route path="/access-requests" element={<AccessRequests />} />
                     <Route path="/inventory-audits" element={<InventoryAudits />} />
+                  </Route>
+
+                  {/* Nhật ký biến động & Báo cáo: thêm vai trò supervisor (Quản lý - xem báo cáo/truy vấn).
+                      Menu và DB (audit_logs, report_snapshots) vốn đã cho phép supervisor; trước đây cổng này chặn nên bị đẩy về Tổng quan. */}
+                  <Route element={<ProtectedRoute allowedRoles={['btc_manager', 'warehouse_manager', 'supervisor', 'admin', 'super_admin']} />}>
                     <Route path="/activity-logs" element={<ActivityLogs />} />
                     <Route path="/reports" element={<Reports />} />
                   </Route>

@@ -420,20 +420,20 @@ export const Reports: React.FC = () => {
       <Toaster position="top-right" />
 
       {/* 1-ROW UNIFIED REPORT TAB NAVIGATION */}
-      <div className="bg-white dark:bg-slate-900 p-2 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-3 transition-colors">
+      <div className="bg-surface  p-2 rounded-2xl border border-gray-200  shadow-xs flex flex-wrap items-center justify-between gap-3 transition-colors">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveTab('inventory')}
             className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'inventory'
-                ? 'bg-[#1E3A8A] dark:bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800'
+                ? 'bg-accent  text-accent-ink shadow-sm'
+                : 'text-gray-600  hover:text-gray-900  hover:bg-gray-100 '
             }`}
           >
             <FileSpreadsheet className="w-4 h-4" />
             <span>📊 Báo Cáo Tồn Kho BĐS</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'inventory' ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200'}`}>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'inventory' ? 'bg-surface/20 text-white' : 'bg-gray-200  text-gray-700 '}`}>
               {totalAccessibleCount} GCN
             </span>
           </button>
@@ -443,13 +443,13 @@ export const Reports: React.FC = () => {
             onClick={() => setActiveTab('project')}
             className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'project'
-                ? 'bg-amber-600 dark:bg-amber-500 text-white shadow-sm'
-                : 'text-gray-600 dark:text-slate-300 hover:text-amber-900 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                ? 'bg-amber-600  text-white shadow-sm'
+                : 'text-gray-600  hover:text-amber-900  hover:bg-amber-50 '
             }`}
           >
             <Building2 className="w-4 h-4" />
             <span>🏢 Báo Cáo Theo Dự Án (MỚI)</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'project' ? 'bg-white/20 text-white' : 'bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300'}`}>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'project' ? 'bg-surface/20 text-white' : 'bg-amber-100  text-amber-900 '}`}>
               {projectReportRows.length} BĐS
             </span>
           </button>
@@ -460,16 +460,16 @@ export const Reports: React.FC = () => {
               onClick={() => setActiveTab('mortgaged_review')}
               className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'mortgaged_review'
-                  ? 'bg-red-800 dark:bg-rose-700 text-white shadow-sm'
-                  : 'text-gray-600 dark:text-slate-300 hover:text-red-900 dark:hover:text-rose-400 hover:bg-red-50 dark:hover:bg-rose-950/30'
+                  ? 'bg-red-800  text-white shadow-sm'
+                  : 'text-gray-600  hover:text-red-900  hover:bg-red-50 '
               }`}
             >
               <ShieldAlert className="w-4 h-4 text-rose-300" />
               <span>🚨 Rà Soát Thế Chấp</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'mortgaged_review' 
-                  ? 'bg-white/25 text-white' 
-                  : 'bg-red-100 dark:bg-rose-950/60 text-red-800 dark:text-rose-300 border border-red-200 dark:border-rose-800'
+                  ? 'bg-surface/25 text-white' 
+                  : 'bg-red-100  text-red-800  border border-red-200 '
               }`}>
                 {mortgagedCount} GCN
               </span>
@@ -477,9 +477,9 @@ export const Reports: React.FC = () => {
           )}
         </div>
 
-        <div className="text-[11px] text-gray-500 dark:text-slate-400 pr-3 hidden lg:flex items-center gap-1.5">
+        <div className="text-[11px] text-gray-500  pr-3 hidden lg:flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Chế độ quản trị: <strong className="text-slate-800 dark:text-slate-200">{profile?.full_name || 'Admin/Quản lý kho'}</strong></span>
+          <span>Chế độ quản trị: <strong className="text-slate-800 ">{profile?.full_name || 'Admin/Quản lý kho'}</strong></span>
         </div>
       </div>
 
@@ -496,20 +496,20 @@ export const Reports: React.FC = () => {
       ) : (
         <>
           {/* HEADER BANNER LIKE EXCEL SPREADSHEET */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm space-y-4 transition-colors">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 dark:border-slate-800 pb-4">
+          <div className="bg-surface  p-6 rounded-xl border border-gray-200  shadow-sm space-y-4 transition-colors">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100  pb-4">
           <div>
-            <div className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">TẬP ĐOÀN SUN GROUP</div>
-            <h1 className="text-xl sm:text-2xl font-black text-red-700 dark:text-rose-500 uppercase tracking-tight">
+            <div className="text-xs font-bold text-amber-700  uppercase tracking-widest">TẬP ĐOÀN SUN GROUP</div>
+            <h1 className="text-xl sm:text-2xl font-black text-red-700  uppercase tracking-tight">
               {activeTab === 'project' 
                 ? `BÁO CÁO TỔNG QUAN / THEO DÕI THEO DỰ ÁN ${selectedRegion.toUpperCase()}`
                 : `BÁO CÁO THEO DÕI CHI TIẾT TỒN KHO BẤT ĐỘNG SẢN ${selectedRegion.toUpperCase()}`
               }
             </h1>
-            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-slate-400">
-              <span>Kỳ báo cáo: <strong className="text-gray-800 dark:text-slate-200">{reportPeriod}</strong></span>
+            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 ">
+              <span>Kỳ báo cáo: <strong className="text-gray-800 ">{reportPeriod}</strong></span>
               <span>•</span>
-              <span>Ngày lập: <strong className="text-gray-800 dark:text-slate-200">{new Date().toLocaleDateString('vi-VN')}</strong></span>
+              <span>Ngày lập: <strong className="text-gray-800 ">{new Date().toLocaleDateString('vi-VN')}</strong></span>
             </div>
           </div>
 
@@ -527,7 +527,7 @@ export const Reports: React.FC = () => {
             <button
               onClick={exportExcel}
               disabled={loading || exporting || (activeTab === 'inventory' ? stats.totalCount === 0 : projectReportRows.length === 0)}
-              className="inline-flex items-center px-4 py-2.5 text-sm font-bold rounded-lg shadow-sm text-white bg-[#1E3A8A] hover:bg-blue-900 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-50 transition-all cursor-pointer"
+              className="inline-flex items-center px-4 py-2.5 text-sm font-bold rounded-lg shadow-sm text-accent-ink bg-accent hover:brightness-95   disabled:opacity-50 transition-all cursor-pointer"
             >
               {exporting ? (
                 <>
@@ -544,19 +544,19 @@ export const Reports: React.FC = () => {
 
         {/* WAREHOUSE SCOPE NOTICE FOR WAREHOUSE MANAGERS */}
         {isWarehouseManager && (
-          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
+          <div className="bg-amber-50  border border-amber-200  rounded-lg p-3 flex items-center justify-between gap-3 text-xs text-amber-900 ">
             <div className="flex items-center gap-2">
-              <WarehouseIcon className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+              <WarehouseIcon className="w-4 h-4 text-amber-700  shrink-0" />
               <span>
                 <strong>Phạm vi dữ liệu Quản lý kho:</strong> Báo cáo tự động giới hạn hiển thị các GCN thuộc các kho do bạn phụ trách{' '}
                 {availableWarehouses.length > 0 ? (
-                  <span className="font-bold text-amber-950 dark:text-amber-100">({availableWarehouses.map(w => w.name).join(', ')})</span>
+                  <span className="font-bold text-amber-950 ">({availableWarehouses.map(w => w.name).join(', ')})</span>
                 ) : (
                   <span className="italic">(Toàn bộ kho được phân công)</span>
                 )}
               </span>
             </div>
-            <span className="text-[11px] font-semibold bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+            <span className="text-[11px] font-semibold bg-amber-200/60  text-amber-800  px-2.5 py-0.5 rounded-full whitespace-nowrap">
               Quyền Quản Lý Kho
             </span>
           </div>
@@ -565,11 +565,11 @@ export const Reports: React.FC = () => {
         {/* CONTROLS & FILTERS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 pt-1">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1">Chọn Vùng Báo Cáo</label>
+            <label className="block text-xs font-semibold text-gray-600  mb-1">Chọn Vùng Báo Cáo</label>
             <select
               value={selectedRegion}
               onChange={(e) => setSelectedRegion(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 border border-amber-300 dark:border-amber-800 rounded-md bg-amber-50/50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full text-xs font-semibold px-3 py-2 border border-amber-300  rounded-md bg-amber-50/50  text-amber-900  focus:ring-amber-500 focus:border-amber-500"
             >
               <option value="Tất cả vùng">Tất cả các vùng miền</option>
               {regions.map((r) => (
@@ -579,11 +579,11 @@ export const Reports: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1">Kho Lưu Trữ</label>
+            <label className="block text-xs font-semibold text-gray-600  mb-1">Kho Lưu Trữ</label>
             <select
               value={selectedWarehouseId}
               onChange={(e) => setSelectedWarehouseId(e.target.value)}
-              className="w-full text-xs px-3 py-2 border border-blue-200 dark:border-slate-700 rounded-md bg-blue-50/40 dark:bg-slate-800 text-blue-900 dark:text-blue-300 font-medium"
+              className="w-full text-xs px-3 py-2 border border-blue-200  rounded-md bg-blue-50/40  text-blue-900  font-medium"
             >
               <option value="">-- {isWarehouseManager ? 'Tất cả kho phụ trách' : 'Tất cả các kho'} --</option>
               {availableWarehouses.map(w => (
@@ -593,11 +593,11 @@ export const Reports: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1">Dự án</label>
+            <label className="block text-xs font-semibold text-gray-600  mb-1">Dự án</label>
             <select
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200"
+              className="w-full text-xs px-3 py-2 border border-gray-300  rounded-md bg-surface  text-gray-800 "
             >
               <option value="">-- Tất cả dự án --</option>
               {projects.map(p => (
@@ -607,11 +607,11 @@ export const Reports: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1">Trạng thái Thế chấp</label>
+            <label className="block text-xs font-semibold text-gray-600  mb-1">Trạng thái Thế chấp</label>
             <select
               value={selectedMortgageStatus}
               onChange={(e) => setSelectedMortgageStatus(e.target.value)}
-              className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200"
+              className="w-full text-xs px-3 py-2 border border-gray-300  rounded-md bg-surface  text-gray-800 "
             >
               <option value="">-- Tất cả trạng thái thế chấp --</option>
               <option value="none">Chưa thế chấp</option>
@@ -620,24 +620,24 @@ export const Reports: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1">Kỳ báo cáo</label>
+            <label className="block text-xs font-semibold text-gray-600  mb-1">Kỳ báo cáo</label>
             <input
               type="text"
               value={reportPeriod}
               onChange={(e) => setReportPeriod(e.target.value)}
-              className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-medium"
+              className="w-full text-xs px-3 py-2 border border-gray-300  rounded-md bg-surface  text-gray-800  font-medium"
               placeholder="VD: Năm 2026, Quý 1/2026"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1">Tìm kiếm chi tiết</label>
+            <label className="block text-xs font-semibold text-gray-600  mb-1">Tìm kiếm chi tiết</label>
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Số GCN, CSH, số thửa..."
-              className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              className="w-full text-xs px-3 py-2 border border-gray-300  rounded-md bg-surface  text-gray-800  placeholder:text-gray-400 "
             />
           </div>
         </div>
@@ -660,43 +660,43 @@ export const Reports: React.FC = () => {
         <>
           {/* QUICK SUMMARY CARDS */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex items-center space-x-3 transition-colors">
-          <div className="p-3 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 rounded-lg">
+        <div className="bg-surface  p-4 rounded-xl border border-gray-200  shadow-sm flex items-center space-x-3 transition-colors">
+          <div className="p-3 bg-amber-100  text-amber-800  rounded-lg">
             <LandPlot className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-gray-500 dark:text-slate-400 font-medium">Tổng số GCN</div>
-            <div className="text-xl font-bold text-gray-900 dark:text-slate-100">{stats.totalCount} <span className="text-xs font-normal text-gray-500 dark:text-slate-400">sổ</span></div>
+            <div className="text-xs text-gray-500  font-medium">Tổng số GCN</div>
+            <div className="text-xl font-bold text-gray-900 ">{stats.totalCount} <span className="text-xs font-normal text-gray-500 ">sổ</span></div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex items-center space-x-3 transition-colors">
-          <div className="p-3 bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-400 rounded-lg">
+        <div className="bg-surface  p-4 rounded-xl border border-gray-200  shadow-sm flex items-center space-x-3 transition-colors">
+          <div className="p-3 bg-blue-100  text-blue-800  rounded-lg">
             <Building2 className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-gray-500 dark:text-slate-400 font-medium">Tổng diện tích đất</div>
-            <div className="text-xl font-bold text-gray-900 dark:text-slate-100">{stats.totalArea.toLocaleString('vi-VN')} <span className="text-xs font-normal text-gray-500 dark:text-slate-400">m²</span></div>
+            <div className="text-xs text-gray-500  font-medium">Tổng diện tích đất</div>
+            <div className="text-xl font-bold text-gray-900 ">{stats.totalArea.toLocaleString('vi-VN')} <span className="text-xs font-normal text-gray-500 ">m²</span></div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex items-center space-x-3 transition-colors">
-          <div className="p-3 bg-red-100 dark:bg-rose-950/60 text-red-800 dark:text-rose-400 rounded-lg">
+        <div className="bg-surface  p-4 rounded-xl border border-gray-200  shadow-sm flex items-center space-x-3 transition-colors">
+          <div className="p-3 bg-red-100  text-red-800  rounded-lg">
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-gray-500 dark:text-slate-400 font-medium">Đang thế chấp NH</div>
-            <div className="text-xl font-bold text-red-700 dark:text-rose-400">{stats.mortgagedCount} <span className="text-xs font-normal text-gray-500 dark:text-slate-400">sổ</span></div>
+            <div className="text-xs text-gray-500  font-medium">Đang thế chấp NH</div>
+            <div className="text-xl font-bold text-red-700 ">{stats.mortgagedCount} <span className="text-xs font-normal text-gray-500 ">sổ</span></div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex items-center space-x-3 transition-colors">
-          <div className="p-3 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 rounded-lg">
+        <div className="bg-surface  p-4 rounded-xl border border-gray-200  shadow-sm flex items-center space-x-3 transition-colors">
+          <div className="p-3 bg-emerald-100  text-emerald-800  rounded-lg">
             <FileSpreadsheet className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-gray-500 dark:text-slate-400 font-medium">Tổng định giá thế chấp</div>
-            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+            <div className="text-xs text-gray-500  font-medium">Tổng định giá thế chấp</div>
+            <div className="text-lg font-bold text-emerald-700 ">
               {stats.totalMortgageValuation ? (stats.totalMortgageValuation / 1e9).toFixed(1) + ' tỷ VNĐ' : '0 VNĐ'}
             </div>
           </div>
@@ -704,33 +704,33 @@ export const Reports: React.FC = () => {
       </div>
 
       {/* MATRIX EXCEL TABLE REPORT */}
-      <div className="bg-white dark:bg-slate-900 shadow-md border border-gray-300 dark:border-slate-800 rounded-xl overflow-hidden transition-colors">
+      <div className="bg-surface  shadow-md border border-gray-300  rounded-xl overflow-hidden transition-colors">
         {/* Matrix Table Toolbar */}
-        <div className="p-3.5 bg-gradient-to-r from-amber-50/90 via-slate-50 to-emerald-50/80 dark:from-slate-800 dark:via-slate-850 dark:to-slate-800 border-b border-gray-300 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="p-3.5 bg-gradient-to-r from-amber-50/90 via-slate-50 to-emerald-50/80    border-b border-gray-300  flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="font-black text-gray-900 dark:text-slate-100 text-xs sm:text-sm uppercase tracking-tight flex items-center gap-1.5">
-              <FileSpreadsheet className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+            <span className="font-black text-gray-900  text-xs sm:text-sm uppercase tracking-tight flex items-center gap-1.5">
+              <FileSpreadsheet className="w-4 h-4 text-amber-700 " />
               Ma Trận Chi Tiết (27 Cột Nghiệp Vụ)
             </span>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100  text-amber-900  border border-amber-300 ">
               {stats.totalCount} bản ghi
             </span>
-            <span className="text-xs text-gray-300 dark:text-slate-600 hidden md:inline">|</span>
-            <span className="text-[11px] text-gray-600 dark:text-slate-400 hidden lg:inline">
+            <span className="text-xs text-gray-300  hidden md:inline">|</span>
+            <span className="text-[11px] text-gray-600  hidden lg:inline">
               Cố định 2 cột <strong>[STT]</strong> và <strong>[Dự Án]</strong> giúp đối chiếu dễ dàng khi cuộn ngang 27 cột
             </span>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Density Selector */}
-            <div className="flex items-center bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-gray-300 dark:border-slate-700 shadow-2xs">
+            <div className="flex items-center bg-surface  p-0.5 rounded-lg border border-gray-300  shadow-2xs">
               <button
                 type="button"
                 onClick={() => setTableDensity('comfortable')}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                   tableDensity === 'comfortable'
-                    ? 'bg-[#1E3A8A] dark:bg-blue-600 text-white shadow-xs'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                    ? 'bg-accent  text-accent-ink shadow-xs'
+                    : 'text-gray-600  hover:text-gray-900 '
                 }`}
                 title="Chế độ dòng chi tiết, dễ đọc"
               >
@@ -741,8 +741,8 @@ export const Reports: React.FC = () => {
                 onClick={() => setTableDensity('compact')}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                   tableDensity === 'compact'
-                    ? 'bg-[#1E3A8A] dark:bg-blue-600 text-white shadow-xs'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                    ? 'bg-accent  text-accent-ink shadow-xs'
+                    : 'text-gray-600  hover:text-gray-900 '
                 }`}
                 title="Chế độ dòng thu gọn, tối đa hóa số dòng hiển thị"
               >
@@ -751,7 +751,7 @@ export const Reports: React.FC = () => {
             </div>
 
             {/* Page Size Selector */}
-            <div className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-slate-300 font-medium">
+            <div className="flex items-center gap-1.5 text-xs text-gray-700  font-medium">
               <span className="hidden sm:inline">Dòng/trang:</span>
               <select
                 value={pageSize}
@@ -759,7 +759,7 @@ export const Reports: React.FC = () => {
                   setPageSize(Number(e.target.value));
                   setPage(1);
                 }}
-                className="text-xs border border-gray-300 dark:border-slate-700 rounded-lg py-1 px-2 bg-white dark:bg-slate-800 font-semibold text-gray-800 dark:text-slate-200 focus:ring-1 focus:ring-amber-500"
+                className="text-xs border border-gray-300  rounded-lg py-1 px-2 bg-surface  font-semibold text-gray-800  focus:ring-1 focus:ring-amber-500"
               >
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -777,49 +777,49 @@ export const Reports: React.FC = () => {
             <thead className="sticky top-0 z-30 shadow-2xs">
               {/* TIER 1: 4 MAJOR GROUPS */}
               <tr className="text-center font-bold text-[11px] uppercase tracking-wider">
-                <th rowSpan={2} className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[50px] sticky left-0 z-40 bg-slate-200 dark:bg-slate-800 text-gray-800 dark:text-slate-200">STT</th>
-                <th rowSpan={2} className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[130px] sticky left-12 z-40 bg-slate-200 dark:bg-slate-800 text-gray-800 dark:text-slate-200">Mã Tài Sản / TSĐB</th>
-                <th colSpan={7} className="px-3 py-1.5 border border-amber-300 dark:border-amber-800 bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 font-bold">THÔNG TIN CHUNG</th>
-                <th colSpan={8} className="px-3 py-1.5 border border-emerald-300 dark:border-emerald-800 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-bold">THÔNG TIN PHÁP LÝ</th>
-                <th colSpan={6} className="px-3 py-1.5 border border-rose-300 dark:border-rose-800 bg-rose-100 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200 font-bold">THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG</th>
-                <th colSpan={5} className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold">TRẠNG THÁI TSĐB</th>
+                <th rowSpan={2} className="px-3 py-2 border border-gray-300  min-w-[50px] sticky left-0 z-40 bg-slate-200  text-gray-800 ">STT</th>
+                <th rowSpan={2} className="px-3 py-2 border border-gray-300  min-w-[130px] sticky left-12 z-40 bg-slate-200  text-gray-800 ">Mã Tài Sản / TSĐB</th>
+                <th colSpan={7} className="px-3 py-1.5 border border-amber-300  bg-amber-100  text-amber-900  font-bold">THÔNG TIN CHUNG</th>
+                <th colSpan={8} className="px-3 py-1.5 border border-emerald-300  bg-emerald-100  text-emerald-900  font-bold">THÔNG TIN PHÁP LÝ</th>
+                <th colSpan={6} className="px-3 py-1.5 border border-rose-300  bg-rose-100  text-rose-900  font-bold">THÔNG TIN TÀI SẢN CẦM CỐ, THẾ CHẤP CÁC TỔ CHỨC TÍN DỤNG</th>
+                <th colSpan={5} className="px-3 py-1.5 border border-slate-300  bg-slate-100  text-slate-800  font-bold">TRẠNG THÁI TSĐB</th>
               </tr>
               {/* TIER 2: 26 DETAILED COLUMN HEADERS */}
-              <tr className="text-center font-bold text-[10px] uppercase tracking-wider text-gray-800 dark:text-slate-300 border-b border-gray-400 dark:border-slate-700 bg-slate-50 dark:bg-slate-850">
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[150px] bg-amber-50 dark:bg-slate-800">Dự Án (Pháp lý)</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[150px] bg-amber-50 dark:bg-slate-800">Tên Dự Án Kinh Doanh</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[110px] bg-amber-50 dark:bg-slate-800">Loại Tài Sản</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[90px] bg-amber-50 dark:bg-slate-800">Nhóm Sổ</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[150px] bg-amber-100 dark:bg-slate-750 text-blue-950 dark:text-blue-300">Mã lô đất (Mã Lô Pháp Lý)</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[130px] bg-amber-100 dark:bg-slate-750 text-indigo-950 dark:text-indigo-300">Mã Lô Kinh Doanh</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[90px] bg-amber-50 dark:bg-slate-800">Diện Tích (m²)</th>
+              <tr className="text-center font-bold text-[10px] uppercase tracking-wider text-gray-800  border-b border-gray-400  bg-slate-50 ">
+                <th className="px-3 py-2 border border-gray-300  min-w-[150px] bg-amber-50 ">Dự Án (Pháp lý)</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[150px] bg-amber-50 ">Tên Dự Án Kinh Doanh</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[110px] bg-amber-50 ">Loại Tài Sản</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[90px] bg-amber-50 ">Nhóm Sổ</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[150px] bg-amber-100  text-blue-950 ">Mã lô đất (Mã Lô Pháp Lý)</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[130px] bg-amber-100  text-indigo-950 ">Mã Lô Kinh Doanh</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[90px] bg-amber-50 ">Diện Tích (m²)</th>
                 
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[160px] bg-emerald-50 dark:bg-slate-800">Chủ Sở Hữu</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[110px] bg-emerald-50 dark:bg-slate-800">Số Thửa Bản Đồ</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[110px] bg-emerald-50 dark:bg-slate-800">Số Tờ Bản Đồ</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[140px] bg-emerald-100 dark:bg-slate-750 font-bold text-[#1E3A8A] dark:text-blue-400">Số GCN QSDĐ</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[120px] bg-emerald-50 dark:bg-slate-800">Số vào sổ cấp</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[110px] bg-emerald-50 dark:bg-slate-800">Ngày vào sổ</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[150px] bg-emerald-50 dark:bg-slate-800">Mục Đích Sử Dụng</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[130px] bg-emerald-50 dark:bg-slate-800">Thời Hạn Sử Dụng</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[160px] bg-emerald-50 ">Chủ Sở Hữu</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[110px] bg-emerald-50 ">Số Thửa Bản Đồ</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[110px] bg-emerald-50 ">Số Tờ Bản Đồ</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[140px] bg-emerald-100  font-bold text-blue-700 ">Số GCN QSDĐ</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[120px] bg-emerald-50 ">Số vào sổ cấp</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[110px] bg-emerald-50 ">Ngày vào sổ</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[150px] bg-emerald-50 ">Mục Đích Sử Dụng</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[130px] bg-emerald-50 ">Thời Hạn Sử Dụng</th>
                 
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[120px] bg-rose-50 dark:bg-slate-800">Trạng Thái Thế Chấp</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[180px] bg-rose-100 dark:bg-slate-750 text-rose-950 dark:text-rose-300 font-bold">Ngân Hàng Thế Chấp</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[160px] bg-rose-100 dark:bg-slate-750 text-rose-950 dark:text-rose-300 font-bold">Đơn vị vay</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[110px] bg-rose-50 dark:bg-slate-800">Giá trị định giá</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[110px] bg-rose-50 dark:bg-slate-800">Tỷ lệ đảm bảo</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[110px] bg-rose-50 dark:bg-slate-800">Giá trị TSĐB</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[120px] bg-rose-50 ">Trạng Thái Thế Chấp</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[180px] bg-rose-100  text-rose-950  font-bold">Ngân Hàng Thế Chấp</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[160px] bg-rose-100  text-rose-950  font-bold">Đơn vị vay</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[110px] bg-rose-50 ">Giá trị định giá</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[110px] bg-rose-50 ">Tỷ lệ đảm bảo</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[110px] bg-rose-50 ">Giá trị TSĐB</th>
                 
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[130px] bg-slate-50 dark:bg-slate-800">Trạng Thái Pháp Lý</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[140px] bg-slate-50 dark:bg-slate-800">Trạng Thái Kinh Doanh</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[130px] bg-slate-50 dark:bg-slate-800">Trạng Thái Lưu Kho</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[140px] bg-slate-50 dark:bg-slate-800">Đơn vị quản lý sổ</th>
-                <th className="px-3 py-2 border border-gray-300 dark:border-slate-700 min-w-[150px] bg-slate-50 dark:bg-slate-800">Ghi chú</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[130px] bg-slate-50 ">Trạng Thái Pháp Lý</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[140px] bg-slate-50 ">Trạng Thái Kinh Doanh</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[130px] bg-slate-50 ">Trạng Thái Lưu Kho</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[140px] bg-slate-50 ">Đơn vị quản lý sổ</th>
+                <th className="px-3 py-2 border border-gray-300  min-w-[150px] bg-slate-50 ">Ghi chú</th>
               </tr>
             </thead>
 
             {/* TABLE DATA BODY */}
-            <tbody className="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
+            <tbody className="divide-y divide-gray-200  bg-surface ">
               {loading ? (
                 <tr>
                   <td colSpan={28} className="p-8">
@@ -837,7 +837,7 @@ export const Reports: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => loadData()}
-                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg text-white bg-[#1E3A8A] hover:bg-blue-900 transition-colors shadow-xs cursor-pointer"
+                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg text-accent-ink bg-accent hover:brightness-95 transition-colors shadow-xs cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       Tải lại dữ liệu
@@ -860,68 +860,68 @@ export const Reports: React.FC = () => {
                   const cellPadding = tableDensity === 'compact' ? 'py-1.5 px-2.5 text-[11px]' : 'py-2.5 px-3 text-xs';
 
                   return (
-                    <tr key={asset.id} className="hover:bg-amber-50/40 dark:hover:bg-slate-800/60 transition-colors">
-                      <td className={`${cellPadding} text-center font-bold text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-850 sticky left-0 z-10`}>
+                    <tr key={asset.id} className="hover:bg-amber-50/40  transition-colors">
+                      <td className={`${cellPadding} text-center font-bold text-gray-700  border-r border-gray-200  bg-gray-50  sticky left-0 z-10`}>
                         {(page - 1) * pageSize + index + 1}
                       </td>
-                      <td className={`${cellPadding} font-mono text-gray-800 dark:text-slate-200 border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky left-12 z-10`}>
+                      <td className={`${cellPadding} font-mono text-gray-800  border-r border-gray-200  bg-surface  sticky left-12 z-10`}>
                         {asset.asset_code || '-'}
                       </td>
-                      <td className={`${cellPadding} font-semibold text-gray-900 dark:text-slate-100 border-r border-gray-200 dark:border-slate-800`}>
+                      <td className={`${cellPadding} font-semibold text-gray-900  border-r border-gray-200 `}>
                         {asset.projects?.name || '-'}
                       </td>
-                      <td className={`${cellPadding} font-semibold text-emerald-700 dark:text-emerald-400 border-r border-gray-200 dark:border-slate-800`}>
+                      <td className={`${cellPadding} font-semibold text-emerald-700  border-r border-gray-200 `}>
                         {asset.business_project_name || '-'}
                       </td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{asset.asset_type || '-'}</td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>{asset.asset_type || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>
                         {asset.parent_asset_id ? 'Sổ con (Tách)' : (asset.lifecycle_status === 'invalidated' ? 'Sổ gốc (Đã tách)' : (asset.certificate_group === 'so_nho' ? 'Sổ nhỏ' : 'Sổ lớn'))}
                       </td>
-                      <td className={`${cellPadding} border-r border-gray-200 dark:border-slate-800 font-semibold text-blue-900 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30`}>
+                      <td className={`${cellPadding} border-r border-gray-200  font-semibold text-blue-900  bg-blue-50/50 `}>
                         {asset.legal_lot_code || '-'}
                       </td>
-                      <td className={`${cellPadding} font-bold text-indigo-700 dark:text-indigo-300 border-r border-gray-200 dark:border-slate-800 bg-indigo-50/50 dark:bg-indigo-950/30`}>
+                      <td className={`${cellPadding} font-bold text-indigo-700  border-r border-gray-200  bg-indigo-50/50 `}>
                         {asset.business_plot_code || '-'}
                       </td>
-                      <td className={`${cellPadding} font-bold text-gray-900 dark:text-slate-100 border-r border-gray-200 dark:border-slate-800 text-right`}>
+                      <td className={`${cellPadding} font-bold text-gray-900  border-r border-gray-200  text-right`}>
                         {asset.area ? `${asset.area.toLocaleString('vi-VN')}` : '-'}
                       </td>
 
-                      <td className={`${cellPadding} font-semibold text-gray-900 dark:text-slate-100 border-r border-gray-200 dark:border-slate-800`}>{asset.current_owner_entity?.name || asset.investor_entities?.name || '-'}</td>
-                      <td className={`${cellPadding} text-center font-semibold text-gray-800 dark:text-slate-200 border-r border-gray-200 dark:border-slate-800`}>{asset.land_lot_no || '-'}</td>
-                      <td className={`${cellPadding} text-center text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{asset.map_sheet_no || '-'}</td>
-                      <td className={`${cellPadding} font-bold text-[#1E3A8A] dark:text-blue-400 border-r border-gray-200 dark:border-slate-800`}>{asset.certificate_no}</td>
-                      <td className={`${cellPadding} text-gray-600 dark:text-slate-400 font-mono border-r border-gray-200 dark:border-slate-800`}>{asset.registry_no || '-'}</td>
-                      <td className={`${cellPadding} text-gray-600 dark:text-slate-400 border-r border-gray-200 dark:border-slate-800`}>
+                      <td className={`${cellPadding} font-semibold text-gray-900  border-r border-gray-200 `}>{asset.current_owner_entity?.name || asset.investor_entities?.name || '-'}</td>
+                      <td className={`${cellPadding} text-center font-semibold text-gray-800  border-r border-gray-200 `}>{asset.land_lot_no || '-'}</td>
+                      <td className={`${cellPadding} text-center text-gray-700  border-r border-gray-200 `}>{asset.map_sheet_no || '-'}</td>
+                      <td className={`${cellPadding} font-bold text-blue-700  border-r border-gray-200 `}>{asset.certificate_no}</td>
+                      <td className={`${cellPadding} text-gray-600  font-mono border-r border-gray-200 `}>{asset.registry_no || '-'}</td>
+                      <td className={`${cellPadding} text-gray-600  border-r border-gray-200 `}>
                         {asset.registry_date ? new Date(asset.registry_date).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}
                       </td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{asset.usage_purpose || '-'}</td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>{asset.usage_purpose || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>
                         {asset.usage_term_type === 'long_term' ? 'Lâu dài' : (asset.usage_term_date ? new Date(asset.usage_term_date).toLocaleDateString('vi-VN') : '-')}
                       </td>
 
-                      <td className={`${cellPadding} border-r border-gray-200 dark:border-slate-800 text-center font-bold`}>
+                      <td className={`${cellPadding} border-r border-gray-200  text-center font-bold`}>
                         {isMortgaged ? (
-                          <span className="text-red-700 dark:text-rose-300 bg-red-100 dark:bg-rose-950/60 px-2 py-0.5 rounded-full inline-block">Đã thế chấp</span>
+                          <span className="text-red-700  bg-red-100  px-2 py-0.5 rounded-full inline-block">Đã thế chấp</span>
                         ) : (
-                          <span className="text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full inline-block">Không</span>
+                          <span className="text-gray-500  bg-gray-100  px-2 py-0.5 rounded-full inline-block">Không</span>
                         )}
                       </td>
-                      <td className={`${cellPadding} font-semibold text-red-900 dark:text-rose-300 border-r border-gray-200 dark:border-slate-800`}>
+                      <td className={`${cellPadding} font-semibold text-red-900  border-r border-gray-200 `}>
                         {isMortgaged ? (asset.mortgage_bank || '-') : '-'}
                       </td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>
                         {isMortgaged ? (asset.mortgage_unit || '-') : '-'}
                       </td>
-                      <td className={`${cellPadding} text-right text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{valuation > 0 ? valuation.toLocaleString('vi-VN') : '-'}</td>
-                      <td className={`${cellPadding} text-center text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{guaranteeRatio > 0 ? `${guaranteeRatio}%` : '-'}</td>
-                      <td className={`${cellPadding} text-right text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{guaranteeVal > 0 ? guaranteeVal.toLocaleString('vi-VN') : '-'}</td>
+                      <td className={`${cellPadding} text-right text-gray-700  border-r border-gray-200 `}>{valuation > 0 ? valuation.toLocaleString('vi-VN') : '-'}</td>
+                      <td className={`${cellPadding} text-center text-gray-700  border-r border-gray-200 `}>{guaranteeRatio > 0 ? `${guaranteeRatio}%` : '-'}</td>
+                      <td className={`${cellPadding} text-right text-gray-700  border-r border-gray-200 `}>{guaranteeVal > 0 ? guaranteeVal.toLocaleString('vi-VN') : '-'}</td>
 
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{asset.lifecycle_status === 'invalidated' ? 'Vô hiệu lực' : 'Đang hiệu lực'}</td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{asset.sale_status === 'ready_for_sale' ? 'Sẵn sàng bán' : 'Chưa sẵn sàng'}</td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{asset.custody_status === 'in_stock' ? 'Lưu kho an toàn' : (asset.custody_status === 'checked_out' ? 'Đã xuất kho' : 'Báo mất')}</td>
-                      <td className={`${cellPadding} font-medium text-gray-800 dark:text-slate-200 border-r border-gray-200 dark:border-slate-800`}>{asset.managing_unit || '-'}</td>
-                      <td className={`${cellPadding} text-gray-700 dark:text-slate-300 border-r border-gray-200 dark:border-slate-800`}>{asset.notes || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>{asset.lifecycle_status === 'invalidated' ? 'Vô hiệu lực' : 'Đang hiệu lực'}</td>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>{asset.sale_status === 'ready_for_sale' ? 'Sẵn sàng bán' : 'Chưa sẵn sàng'}</td>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>{asset.custody_status === 'in_stock' ? 'Lưu kho an toàn' : (asset.custody_status === 'checked_out' ? 'Đã xuất kho' : 'Báo mất')}</td>
+                      <td className={`${cellPadding} font-medium text-gray-800  border-r border-gray-200 `}>{asset.managing_unit || '-'}</td>
+                      <td className={`${cellPadding} text-gray-700  border-r border-gray-200 `}>{asset.notes || '-'}</td>
                     </tr>
                   );
                 })
@@ -932,10 +932,10 @@ export const Reports: React.FC = () => {
         
         {/* Pagination Controls */}
         {stats.totalCount > 0 && (
-          <div className="bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-slate-800 sm:px-6 rounded-b-xl transition-colors">
+          <div className="bg-surface  px-4 py-3 flex items-center justify-between border-t border-gray-200  sm:px-6 rounded-b-xl transition-colors">
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm text-gray-700 dark:text-slate-300">
+                <p className="text-sm text-gray-700 ">
                   Hiển thị <span className="font-medium">{(page - 1) * pageSize + 1}</span> đến{' '}
                   <span className="font-medium">{Math.min(page * pageSize, stats.totalCount)}</span> trong{' '}
                   <span className="font-medium">{stats.totalCount}</span> kết quả
@@ -946,17 +946,17 @@ export const Reports: React.FC = () => {
                   <button
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 cursor-pointer"
+                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300  bg-surface  text-sm font-medium text-gray-500  hover:bg-gray-50  disabled:opacity-50 cursor-pointer"
                   >
                     Trước
                   </button>
-                  <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-gray-700 dark:text-slate-200">
+                  <span className="relative inline-flex items-center px-4 py-2 border border-gray-300  bg-surface  text-sm font-medium text-gray-700 ">
                     Trang {page} / {Math.ceil(stats.totalCount / pageSize) || 1}
                   </span>
                   <button
                     onClick={() => setPage(p => Math.min(Math.ceil(stats.totalCount / pageSize), p + 1))}
                     disabled={page >= Math.ceil(stats.totalCount / pageSize)}
-                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 cursor-pointer"
+                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300  bg-surface  text-sm font-medium text-gray-500  hover:bg-gray-50  disabled:opacity-50 cursor-pointer"
                   >
                     Tiếp
                   </button>

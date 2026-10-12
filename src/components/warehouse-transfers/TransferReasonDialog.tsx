@@ -60,28 +60,28 @@ export const TransferReasonDialog: React.FC<TransferReasonDialogProps> = ({
         }
       }}
     >
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-gray-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+      <div className="bg-surface  rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-gray-200  animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className={`px-5 py-4 border-b flex items-center justify-between ${
           isReject
-            ? 'bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-950/40 dark:to-orange-950/40 border-rose-200 dark:border-rose-900/60'
-            : 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-950/40 dark:to-yellow-950/40 border-amber-200 dark:border-amber-900/60'
+            ? 'bg-gradient-to-r from-rose-50 to-orange-50   border-rose-200 '
+            : 'bg-gradient-to-r from-amber-50 to-yellow-50   border-amber-200 '
         }`}>
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-xl ${
               isReject
-                ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300'
-                : 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300'
+                ? 'bg-rose-100  text-rose-700 '
+                : 'bg-amber-100  text-amber-700 '
             }`}>
               {isReject ? <XCircle className="w-5 h-5" /> : <Undo2 className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100">
+              <h3 className="text-sm font-bold text-gray-900 ">
                 {title}
               </h3>
               {certificateNo && (
-                <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
-                  Số GCN: <strong className="font-mono text-gray-800 dark:text-slate-200">{certificateNo}</strong>
+                <p className="text-xs text-gray-600  mt-0.5">
+                  Số GCN: <strong className="font-mono text-gray-800 ">{certificateNo}</strong>
                 </p>
               )}
             </div>
@@ -90,7 +90,7 @@ export const TransferReasonDialog: React.FC<TransferReasonDialogProps> = ({
             type="button"
             onClick={onCancel}
             disabled={isSubmitting}
-            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 rounded-lg transition-colors disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-700  rounded-lg transition-colors disabled:opacity-50"
             title="Đóng (Esc)"
           >
             <X className="w-5 h-5" />
@@ -99,8 +99,8 @@ export const TransferReasonDialog: React.FC<TransferReasonDialogProps> = ({
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+          <div className="p-3 bg-rose-50  border border-rose-200  rounded-xl text-xs text-rose-800  flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-600  shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               <strong>Lưu ý:</strong> Sau khi xác nhận, GCN sẽ trở về kho xuất với trạng thái trong kho (in_stock), phiếu xuất luân chuyển sẽ bị hủy.
             </p>
@@ -108,12 +108,12 @@ export const TransferReasonDialog: React.FC<TransferReasonDialogProps> = ({
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-800 dark:text-slate-200">
+              <label className="text-xs font-semibold text-gray-800 ">
                 Lý do {isReject ? 'từ chối nhận' : 'thu hồi lệnh'} <span className="text-rose-600">*</span>:
               </label>
               <span
                 className={`text-[11px] font-mono ${
-                  isValid ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-rose-600 dark:text-rose-400'
+                  isValid ? 'text-emerald-600  font-semibold' : 'text-rose-600 '
                 }`}
               >
                 {isValid ? `✓ ${trimmed.length} ký tự` : `${trimmed.length}/10 ký tự (cần thêm ${10 - trimmed.length})`}
@@ -129,21 +129,21 @@ export const TransferReasonDialog: React.FC<TransferReasonDialogProps> = ({
                   : 'Ví dụ: Nhập nhầm GCN / hủy kế hoạch luân chuyển sang kho khác...'
               }
               disabled={isSubmitting}
-              className={`w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border rounded-lg placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors ${
+              className={`w-full px-3 py-2 text-xs bg-surface  border rounded-lg placeholder-gray-400  focus:outline-none focus:ring-2 transition-colors ${
                 isValid
-                  ? 'border-emerald-300 dark:border-emerald-700 focus:ring-emerald-500 text-gray-900 dark:text-slate-100'
-                  : 'border-gray-300 dark:border-slate-700 focus:ring-amber-500 text-gray-900 dark:text-slate-100'
+                  ? 'border-emerald-300  focus:ring-emerald-500 text-gray-900 '
+                  : 'border-gray-300  focus:ring-amber-500 text-gray-900 '
               }`}
             />
           </div>
 
           {/* Footer */}
-          <div className="pt-3 border-t border-gray-200 dark:border-slate-800 flex items-center justify-end gap-2">
+          <div className="pt-3 border-t border-gray-200  flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onCancel}
               disabled={isSubmitting}
-              className="px-4 py-2 border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+              className="px-4 py-2 border border-gray-300  hover:bg-gray-50  text-gray-700  rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
             >
               Hủy
             </button>
@@ -155,7 +155,7 @@ export const TransferReasonDialog: React.FC<TransferReasonDialogProps> = ({
                   ? isReject
                     ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
                     : 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer'
-                  : 'bg-gray-200 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed'
+                  : 'bg-gray-200  text-gray-400  cursor-not-allowed'
               }`}
             >
               {isSubmitting ? (
