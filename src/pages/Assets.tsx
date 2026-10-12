@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   fetchAssets,
   fetchProjects,
@@ -22,12 +23,14 @@ import { BulkEditModal } from '../components/BulkEditModal';
 import { AssetAuditModal } from '../components/AssetAuditModal';
 import { DeleteAssetsModal } from '../components/DeleteAssetsModal';
 import { ReassignAssetCodeModal } from '../components/ReassignAssetCodeModal';
+import { ReassignByVoucherModal } from '../components/ReassignByVoucherModal';
 import { AssetTable } from '../components/AssetTable';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { CreateTransferModal } from '../components/warehouse-transfers/CreateTransferModal';
 import { exportAssetsToExcel } from '../lib/excelHelper';
 import { COLLATERAL_TYPES, formatPlotCode } from '../lib/assetIdentifier';
 import {
+  ChevronDown,
   Search,
   Loader2,
   AlertCircle,
@@ -195,9 +198,11 @@ export const Assets: React.FC = () => {
 
   // Reassign Asset Code Modal State
   const [reassignTargetAsset, setReassignTargetAsset] = useState<Asset | null>(null);
+  const [isReassignByVoucherOpen, setIsReassignByVoucherOpen] = useState(false);
 
   // Permissions helpers
   const userRole = profile?.role || '';
+  const canReassignByVoucher = ['super_admin', 'admin', 'btc_manager', 'warehouse_manager'].includes(userRole);
   const canWarehouseTransfer = ['super_admin', 'admin', 'btc_manager', 'warehouse_manager'].includes(userRole);
   const canCreate =
     ['super_admin', 'admin', 'btc_manager', 'warehouse_manager'].includes(userRole) ||
@@ -366,102 +371,118 @@ export const Assets: React.FC = () => {
     <div id="assets-page-container" className="space-y-6 pb-12">
       <Toaster position="top-right" />
 
-      {/* Header Bar */}
-      <div id="assets-header" className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 rounded-lg">
-            <FileText className="w-6 h-6" />
+      {/* Đầu trang */}
+      <div id="assets-header" className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex-1 min-w-[280px]">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-text">Quản Lý GCN QSDĐ &amp; TSĐB</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-bg text-neutral-fg">
+              {totalCount} tài sản
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                dataSource === 'supabase' ? 'bg-ok-bg text-ok-fg' : 'bg-warn-bg text-warn-fg'
+              }`}
+              title={dataSource === 'supabase' ? 'Dữ liệu kết nối trực tiếp Supabase' : 'Chế độ dữ liệu bộ nhớ cục bộ'}
+            >
+              <Database className="w-3 h-3" />
+              {dataSource === 'supabase' ? 'Supabase' : 'Local Store'}
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Quản Lý GCN QSDĐ & TSĐB</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                {totalCount} tài sản
-              </span>
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                  dataSource === 'supabase'
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                    : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                }`}
-                title={dataSource === 'supabase' ? 'Dữ liệu kết nối trực tiếp Supabase' : 'Chế độ dữ liệu bộ nhớ cục bộ'}
-              >
-                <Database className="w-3 h-3" />
-                {dataSource === 'supabase' ? 'Supabase' : 'Local Store'}
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Tra cứu, quản lý hồ sơ pháp lý, tình trạng lưu kho và biến động quyền sở hữu GCN
-            </p>
-          </div>
+          <p className="text-sm text-muted mt-1.5 max-w-[640px]">
+            Tra cứu, quản lý hồ sơ pháp lý, tình trạng lưu kho và biến động quyền sở hữu GCN
+          </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            id="btn-refresh-assets"
-            onClick={handleRefresh}
-            disabled={loading || isRetrying}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
-            title="Làm mới danh sách"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRetrying || loading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Làm mới</span>
-          </button>
-
-          <button
-            id="btn-export-excel"
-            onClick={handleExportExcel}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors shadow-2xs cursor-pointer"
-            title="Xuất Excel danh sách hiện tại"
-          >
-            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Xuất Excel {selectedAssetIds.length > 0 ? `(${selectedAssetIds.length})` : ''}</span>
-          </button>
-
-          {selectedAssetIds.length > 0 && canWarehouseTransfer && (
-            <button
-              id="btn-warehouse-transfer"
-              onClick={() => setIsWarehouseTransferModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors shadow-2xs cursor-pointer"
-              title="Lập lệnh xuất luân chuyển sang kho khác cho các GCN đã chọn"
-            >
-              <ArrowLeftRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Luân chuyển kho ({selectedAssetIds.length})</span>
-            </button>
-          )}
-
+        {/* Nút hành động: thao tác phụ gom vào menu, một nút chính */}
+        <div className="flex flex-wrap items-center gap-2.5">
           {canImport && (
             <Link
               id="btn-import-excel"
               to="/bulk-update?mode=create"
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors shadow-2xs"
+              className="inline-flex items-center gap-2 px-3.5 h-10 text-sm font-medium text-text bg-surface hover:bg-surface-2 rounded-[10px] border border-border-strong transition-colors"
               title="Nhập & cập nhật hàng loạt từ Excel"
             >
-              <Upload className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <Upload className="w-4 h-4" />
               <span>Nhập Excel</span>
             </Link>
           )}
 
-          {canDeclare && (
-            <button
-              id="btn-declare-asset"
-              onClick={() => setIsDeclareModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
-              title="Khai báo cấp mới, tách sổ hoặc cấp đổi GCN"
-            >
-              <FileText className="w-4 h-4" />
-              <span>Khai báo GCN</span>
-            </button>
-          )}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                id="btn-assets-actions"
+                type="button"
+                className="inline-flex items-center gap-2 px-3.5 h-10 text-sm font-medium text-text bg-surface hover:bg-surface-2 rounded-[10px] border border-border-strong transition-colors cursor-pointer data-[state=open]:border-blue-500 data-[state=open]:ring-[3px] data-[state=open]:ring-ring"
+              >
+                Thao tác
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="end"
+                sideOffset={8}
+                className="z-50 w-[280px] p-1.5 bg-raised border border-border rounded-xl shadow-[var(--shadow)] text-sm text-text"
+              >
+                <DropdownMenu.Item
+                  id="btn-refresh-assets"
+                  disabled={loading || isRetrying}
+                  onSelect={() => handleRefresh()}
+                  className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg outline-none cursor-pointer select-none data-[highlighted]:bg-surface-2 data-[disabled]:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 text-muted ${isRetrying || loading ? 'animate-spin' : ''}`} />
+                  Làm mới danh sách
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  id="btn-export-excel"
+                  onSelect={() => handleExportExcel()}
+                  className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg outline-none cursor-pointer select-none data-[highlighted]:bg-surface-2"
+                >
+                  <Download className="w-4 h-4 text-muted" />
+                  Xuất Excel {selectedAssetIds.length > 0 ? `(${selectedAssetIds.length})` : ''}
+                </DropdownMenu.Item>
+                {canDeclare && (
+                  <DropdownMenu.Item
+                    id="btn-declare-asset"
+                    onSelect={() => setIsDeclareModalOpen(true)}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg outline-none cursor-pointer select-none data-[highlighted]:bg-surface-2"
+                  >
+                    <FileText className="w-4 h-4 text-muted" />
+                    Khai báo GCN
+                  </DropdownMenu.Item>
+                )}
+                {selectedAssetIds.length > 0 && canWarehouseTransfer && (
+                  <DropdownMenu.Item
+                    id="btn-warehouse-transfer"
+                    onSelect={() => setIsWarehouseTransferModalOpen(true)}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg outline-none cursor-pointer select-none data-[highlighted]:bg-surface-2"
+                  >
+                    <ArrowLeftRight className="w-4 h-4 text-muted" />
+                    Luân chuyển kho ({selectedAssetIds.length})
+                  </DropdownMenu.Item>
+                )}
+                {canReassignByVoucher && (
+                  <DropdownMenu.Item
+                    id="btn-reassign-by-voucher"
+                    onSelect={() => setIsReassignByVoucherOpen(true)}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg outline-none cursor-pointer select-none data-[highlighted]:bg-surface-2"
+                  >
+                    <Tag className="w-4 h-4 text-muted" />
+                    Tái cấp mã theo phiếu nhập
+                  </DropdownMenu.Item>
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
 
           {canCreate && (
             <button
               id="btn-create-asset"
               onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 h-10 text-sm font-semibold text-accent-ink bg-accent hover:brightness-95 rounded-[10px] transition cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4" strokeWidth={2.2} />
               <span>Thêm mới GCN</span>
             </button>
           )}
@@ -470,12 +491,12 @@ export const Assets: React.FC = () => {
 
       {/* Error Alert if any */}
       {fetchError && (
-        <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 rounded-xl p-4 text-rose-800 dark:text-rose-300 flex items-start justify-between gap-3">
+        <div className="bg-rose-50  border border-rose-200  rounded-xl p-4 text-rose-800  flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-rose-600  shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-sm">Không thể đồng bộ dữ liệu từ máy chủ</p>
-              <p className="text-xs text-rose-700 dark:text-rose-400 mt-0.5">{fetchError}</p>
+              <p className="text-xs text-rose-700  mt-0.5">{fetchError}</p>
             </div>
           </div>
           <button
@@ -488,18 +509,18 @@ export const Assets: React.FC = () => {
       )}
 
       {/* Filter & Search Bar */}
-      <div id="assets-filter-card" className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
+      <div id="assets-filter-card" className="bg-surface  p-4 rounded-xl border border-slate-200  shadow-xs space-y-3 transition-colors">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {/* Search Input with Debounce feedback */}
           <div className="relative xl:col-span-2">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 " />
             <input
               id="filter-search-input"
               type="text"
               value={search}
               onChange={e => handleFilterChange(setSearch, e.target.value)}
               placeholder="Tìm theo Số GCN, Mã TSĐB, Mã Lô, DA..."
-              className="w-full pl-9 pr-9 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
+              className="w-full pl-9 pr-9 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-800  placeholder-slate-400  transition-all"
             />
             {search !== debouncedSearch ? (
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-blue-500" title="Đang chờ dừng gõ...">
@@ -508,7 +529,7 @@ export const Assets: React.FC = () => {
             ) : search ? (
               <button
                 onClick={() => handleFilterChange(setSearch, '')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600  cursor-pointer"
                 title="Xóa từ khóa tìm kiếm"
               >
                 <X className="w-4 h-4" />
@@ -522,11 +543,11 @@ export const Assets: React.FC = () => {
               id="filter-collateral-type"
               value={collateralType}
               onChange={e => handleFilterChange(setCollateralType, e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-700  cursor-pointer"
             >
               <option value="">Tất cả Loại TSĐB</option>
               {COLLATERAL_TYPES.map(ct => (
-                <option key={ct.code} value={ct.code} className="bg-white dark:bg-slate-900">
+                <option key={ct.code} value={ct.code} className="bg-surface ">
                   {ct.shortName} - {ct.name}
                 </option>
               ))}
@@ -539,11 +560,11 @@ export const Assets: React.FC = () => {
               id="filter-project"
               value={projectId}
               onChange={e => handleFilterChange(setProjectId, e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-700  cursor-pointer"
             >
               <option value="">Tất cả Dự án Pháp lý</option>
               {projects.map(p => (
-                <option key={p.id} value={p.id} className="bg-white dark:bg-slate-900">
+                <option key={p.id} value={p.id} className="bg-surface ">
                   {p.name}
                 </option>
               ))}
@@ -556,11 +577,11 @@ export const Assets: React.FC = () => {
               id="filter-warehouse"
               value={warehouseId}
               onChange={e => handleFilterChange(setWarehouseId, e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-700  cursor-pointer"
             >
               <option value="">Tất cả Kho lưu trữ</option>
               {warehouses.map(w => (
-                <option key={w.id} value={w.id} className="bg-white dark:bg-slate-900">
+                <option key={w.id} value={w.id} className="bg-surface ">
                   {w.name} {w.is_central ? '(Kho trung tâm)' : ''}
                 </option>
               ))}
@@ -573,12 +594,12 @@ export const Assets: React.FC = () => {
               id="filter-custody-status"
               value={custodyStatus}
               onChange={e => handleFilterChange(setCustodyStatus, e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-700  cursor-pointer"
             >
               <option value="">Trạng thái Kho (Tất cả)</option>
-              <option value="in_stock" className="bg-white dark:bg-slate-900">Trong kho</option>
-              <option value="checked_out" className="bg-white dark:bg-slate-900">Đang mượn/xuất</option>
-              <option value="in_transit" className="bg-white dark:bg-slate-900">Đang luân chuyển</option>
+              <option value="in_stock" className="bg-surface ">Trong kho</option>
+              <option value="checked_out" className="bg-surface ">Đang mượn/xuất</option>
+              <option value="in_transit" className="bg-surface ">Đang luân chuyển</option>
             </select>
           </div>
 
@@ -588,12 +609,12 @@ export const Assets: React.FC = () => {
               id="filter-lifecycle-status"
               value={lifecycleStatus}
               onChange={e => handleFilterChange(setLifecycleStatus, e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-700  cursor-pointer"
             >
               <option value="">Trạng thái Pháp lý (Tất cả)</option>
-              <option value="active" className="bg-white dark:bg-slate-900">Active (Có hiệu lực)</option>
-              <option value="split" className="bg-white dark:bg-slate-900">Đã tách sổ con</option>
-              <option value="invalidated" className="bg-white dark:bg-slate-900">Vô hiệu / Thu hồi</option>
+              <option value="active" className="bg-surface ">Active (Có hiệu lực)</option>
+              <option value="split" className="bg-surface ">Đã tách sổ con</option>
+              <option value="invalidated" className="bg-surface ">Vô hiệu / Thu hồi</option>
             </select>
           </div>
 
@@ -603,12 +624,12 @@ export const Assets: React.FC = () => {
               id="filter-sale-status"
               value={saleStatus}
               onChange={e => handleFilterChange(setSaleStatus, e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-700  cursor-pointer"
             >
               <option value="">Trạng thái Kinh doanh (Tất cả)</option>
-              <option value="not_ready" className="bg-white dark:bg-slate-900">Chưa sẵn sàng bán</option>
-              <option value="ready_for_sale" className="bg-white dark:bg-slate-900">Sẵn sàng bán</option>
-              <option value="sold" className="bg-white dark:bg-slate-900">Đã xuất bán</option>
+              <option value="not_ready" className="bg-surface ">Chưa sẵn sàng bán</option>
+              <option value="ready_for_sale" className="bg-surface ">Sẵn sàng bán</option>
+              <option value="sold" className="bg-surface ">Đã xuất bán</option>
             </select>
           </div>
 
@@ -618,11 +639,11 @@ export const Assets: React.FC = () => {
               id="filter-mortgage-status"
               value={mortgageStatus}
               onChange={e => handleFilterChange(setMortgageStatus, e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 text-sm bg-slate-50  border border-slate-200  rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-surface  text-slate-700  cursor-pointer"
             >
               <option value="">Thế chấp tín dụng (Tất cả)</option>
-              <option value="none" className="bg-white dark:bg-slate-900">Chưa thế chấp</option>
-              <option value="mortgaged" className="bg-white dark:bg-slate-900">Đang thế chấp ngân hàng</option>
+              <option value="none" className="bg-surface ">Chưa thế chấp</option>
+              <option value="mortgaged" className="bg-surface ">Đang thế chấp ngân hàng</option>
             </select>
           </div>
 
@@ -631,7 +652,7 @@ export const Assets: React.FC = () => {
             <button
               id="btn-reset-filters"
               onClick={handleResetFilters}
-              className="px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0 cursor-pointer"
+              className="px-3 py-2 text-xs font-medium text-slate-600  hover:text-slate-900  bg-slate-100  hover:bg-slate-200  rounded-lg transition-colors shrink-0 cursor-pointer"
               title="Đặt lại bộ lọc"
             >
               Đặt lại
@@ -642,12 +663,12 @@ export const Assets: React.FC = () => {
 
 
       {/* Main Asset Table */}
-      <div id="assets-table-container" className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
+      <div id="assets-table-container" className="bg-surface  rounded-xl border border-slate-200  overflow-hidden transition-colors">
         {/* Minimalist Enterprise Table Header Toolbar: Filter Chips & Density Toggle */}
-        <div id="assets-table-toolbar" className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div id="assets-table-toolbar" className="px-4 py-2.5 bg-slate-50  border-b border-slate-200  flex flex-wrap items-center justify-between gap-3">
           {/* 1-Click Quick Filter Chips */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mr-1">Bộ lọc:</span>
+            <span className="text-xs font-semibold text-slate-500  uppercase tracking-wider mr-1">Bộ lọc:</span>
 
             <button
               type="button"
@@ -655,8 +676,8 @@ export const Assets: React.FC = () => {
               onClick={() => handleQuickFilterClick('all')}
               className={`px-3 py-1.5 text-xs font-medium rounded border cursor-pointer transition-colors ${
                 quickFilter === 'all'
-                  ? 'bg-slate-900 dark:bg-blue-600 text-white border-slate-900 dark:border-blue-600 font-semibold'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border-slate-300 dark:border-slate-700'
+                  ? 'bg-slate-900  text-bg border-slate-900  font-semibold'
+                  : 'bg-surface  text-slate-700  hover:bg-slate-100  hover:text-slate-900  border-slate-300 '
               }`}
             >
               Tất cả
@@ -668,8 +689,8 @@ export const Assets: React.FC = () => {
               onClick={() => handleQuickFilterClick('in_stock')}
               className={`px-3 py-1.5 text-xs font-medium rounded border cursor-pointer transition-colors ${
                 quickFilter === 'in_stock'
-                  ? 'bg-slate-900 dark:bg-blue-600 text-white border-slate-900 dark:border-blue-600 font-semibold'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border-slate-300 dark:border-slate-700'
+                  ? 'bg-slate-900  text-bg border-slate-900  font-semibold'
+                  : 'bg-surface  text-slate-700  hover:bg-slate-100  hover:text-slate-900  border-slate-300 '
               }`}
             >
               Tồn kho vật lý
@@ -681,8 +702,8 @@ export const Assets: React.FC = () => {
               onClick={() => handleQuickFilterClick('mortgaged')}
               className={`px-3 py-1.5 text-xs font-medium rounded border cursor-pointer transition-colors ${
                 quickFilter === 'mortgaged'
-                  ? 'bg-slate-900 dark:bg-blue-600 text-white border-slate-900 dark:border-blue-600 font-semibold'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border-slate-300 dark:border-slate-700'
+                  ? 'bg-slate-900  text-bg border-slate-900  font-semibold'
+                  : 'bg-surface  text-slate-700  hover:bg-slate-100  hover:text-slate-900  border-slate-300 '
               }`}
             >
               Đã xuất thế chấp
@@ -694,8 +715,8 @@ export const Assets: React.FC = () => {
               onClick={() => handleQuickFilterClick('pending')}
               className={`px-3 py-1.5 text-xs font-medium rounded border cursor-pointer transition-colors ${
                 quickFilter === 'pending'
-                  ? 'bg-slate-900 dark:bg-blue-600 text-white border-slate-900 dark:border-blue-600 font-semibold'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border-slate-300 dark:border-slate-700'
+                  ? 'bg-slate-900  text-bg border-slate-900  font-semibold'
+                  : 'bg-surface  text-slate-700  hover:bg-slate-100  hover:text-slate-900  border-slate-300 '
               }`}
             >
               Chờ phê duyệt
@@ -704,28 +725,28 @@ export const Assets: React.FC = () => {
 
           {/* Density Toggle & Counter */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium hidden sm:flex">
+            <div className="flex items-center gap-1.5 text-xs text-slate-500  font-medium hidden sm:flex">
               {isFetching ? (
-                <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium">
+                <span className="inline-flex items-center gap-1 text-blue-600  font-medium">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Đang đồng bộ...
                 </span>
               ) : (
                 <span>
-                  Tổng cộng: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{totalCount}</strong> GCN
+                  Tổng cộng: <strong className="text-slate-800  font-semibold">{totalCount}</strong> GCN
                 </span>
               )}
             </div>
 
-            <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded p-0.5 text-xs">
+            <div className="flex items-center bg-surface  border border-slate-300  rounded p-0.5 text-xs">
               <button
                 type="button"
                 id="btn-density-compact"
                 onClick={() => handleDensityChange('compact')}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium cursor-pointer transition-colors ${
                   tableDensity === 'compact'
-                    ? 'bg-slate-900 dark:bg-slate-800 text-white'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-slate-900  text-bg'
+                    : 'text-slate-600  hover:text-slate-900 '
                 }`}
                 title="Chế độ Compact: Giảm khoảng cách dòng (py-1.5), font chữ text-xs"
               >
@@ -739,8 +760,8 @@ export const Assets: React.FC = () => {
                 onClick={() => handleDensityChange('normal')}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium cursor-pointer transition-colors ${
                   tableDensity === 'normal'
-                    ? 'bg-slate-900 dark:bg-slate-800 text-white'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-slate-900  text-bg'
+                    : 'text-slate-600  hover:text-slate-900 '
                 }`}
                 title="Chế độ Normal: Khoảng cách vừa phải (py-3), text-sm"
               >
@@ -756,16 +777,16 @@ export const Assets: React.FC = () => {
           <AssetTableSkeleton rowCount={Math.min(pageSize, 8)} tableDensity={tableDensity} />
         ) : assets.length === 0 ? (
           <div className="py-20 flex flex-col items-center justify-center text-center px-4">
-            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+            <div className="w-12 h-12 rounded-full bg-slate-100  flex items-center justify-center text-slate-400 mb-3">
               <Search className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Không tìm thấy tài sản nào</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mt-1">
+            <h3 className="text-base font-bold text-slate-800 ">Không tìm thấy tài sản nào</h3>
+            <p className="text-sm text-slate-500  max-w-md mt-1">
               Thử thay đổi bộ lọc tìm kiếm hoặc từ khóa tra cứu để tìm thấy kết quả phù hợp.
             </p>
             <button
               onClick={handleResetFilters}
-              className="mt-4 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg border border-blue-200 dark:border-slate-700 transition-colors cursor-pointer"
+              className="mt-4 px-4 py-2 text-sm font-medium text-blue-600  hover:bg-blue-50  rounded-lg border border-blue-200  transition-colors cursor-pointer"
             >
               Xóa bộ lọc
             </button>
@@ -804,6 +825,7 @@ export const Assets: React.FC = () => {
             canTransfer={(asset) => canTransferAsset(profile, asset)}
             onBulkEdit={() => setIsBulkEditOpen(true)}
             onBulkRequest={() => setIsModalOpen(true)}
+            onBulkTransferWarehouse={() => setIsWarehouseTransferModalOpen(true)}
             onBulkTransferOwnership={() => {
               setTransferTargetAssets(selectedAssetsList);
               setIsTransferModalOpen(true);
@@ -815,7 +837,7 @@ export const Assets: React.FC = () => {
 
         {/* Pagination Footer */}
         {totalCount > 0 && (
-          <div id="assets-pagination" className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400">
+          <div id="assets-pagination" className="p-4 border-t border-slate-200  bg-slate-50/50  flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 ">
             <div className="flex items-center gap-2">
               <span>Hiển thị</span>
               <select
@@ -824,14 +846,14 @@ export const Assets: React.FC = () => {
                   setPageSize(Number(e.target.value));
                   setPage(1);
                 }}
-                className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded font-medium focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                className="px-2 py-1 bg-surface  border border-slate-200  text-slate-800  rounded font-medium focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
                 <option value={100}>100</option>
               </select>
-              <span>trên tổng số <strong className="text-slate-900 dark:text-slate-100">{totalCount}</strong> tài sản</span>
+              <span>trên tổng số <strong className="text-slate-900 ">{totalCount}</strong> tài sản</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -842,7 +864,7 @@ export const Assets: React.FC = () => {
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors cursor-pointer"
+                  className="p-1.5 bg-surface  border border-slate-200  text-slate-700  rounded hover:bg-slate-100  disabled:opacity-40 transition-colors cursor-pointer"
                   title="Trang trước"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -850,7 +872,7 @@ export const Assets: React.FC = () => {
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors cursor-pointer"
+                  className="p-1.5 bg-surface  border border-slate-200  text-slate-700  rounded hover:bg-slate-100  disabled:opacity-40 transition-colors cursor-pointer"
                   title="Trang sau"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -864,7 +886,7 @@ export const Assets: React.FC = () => {
       {/* Asset Detail Drawer / Modal */}
       {detailAsset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="bg-surface rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
@@ -939,7 +961,7 @@ export const Assets: React.FC = () => {
               {/* Thông tin định danh & pháp lý */}
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Thông tin Thửa đất & Pháp lý</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-white p-4 rounded-lg border border-slate-200 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface p-4 rounded-lg border border-slate-200 text-xs">
                   <div>
                     <span className="text-slate-400 block">Số GCN QSDĐ</span>
                     <span className="font-bold text-slate-900 text-sm">{detailAsset.certificate_no}</span>
@@ -990,7 +1012,7 @@ export const Assets: React.FC = () => {
               {/* Thông tin Kinh Doanh & Thương Mại */}
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Thông tin Kinh doanh (Thương mại)</h4>
-                <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-lg border border-slate-200 text-xs">
+                <div className="grid grid-cols-2 gap-4 bg-surface p-4 rounded-lg border border-slate-200 text-xs">
                   <div>
                     <span className="text-slate-400 block">Tên Dự Án Kinh Doanh (Bán hàng)</span>
                     <span className="font-semibold text-slate-800">{detailAsset.business_project_name || 'Chưa cập nhật'}</span>
@@ -1028,7 +1050,7 @@ export const Assets: React.FC = () => {
               {detailAsset.mortgage_status === 'mortgaged' && (
                 <div>
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Thông tin Thế chấp & Tín dụng</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-white p-4 rounded-lg border border-slate-200 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface p-4 rounded-lg border border-slate-200 text-xs">
                     <div>
                       <span className="text-slate-400 block">Ngân hàng thế chấp</span>
                       <span className="font-semibold text-slate-800">{detailAsset.mortgage_bank || '-'}</span>
@@ -1115,7 +1137,7 @@ export const Assets: React.FC = () => {
             <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
               <button
                 onClick={() => setDetailAsset(null)}
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-surface hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
               >
                 Đóng
               </button>
@@ -1183,6 +1205,18 @@ export const Assets: React.FC = () => {
                 console.warn('Không thể tải lại chi tiết GCN sau tái cấp mã:', err);
               }
             }
+          }}
+        />
+      )}
+
+      {/* Reassign By Voucher Modal */}
+      {isReassignByVoucherOpen && (
+        <ReassignByVoucherModal
+          isOpen={isReassignByVoucherOpen}
+          onClose={() => setIsReassignByVoucherOpen(false)}
+          projects={projects}
+          onSuccess={() => {
+            loadAssets();
           }}
         />
       )}

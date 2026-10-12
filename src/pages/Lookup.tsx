@@ -548,7 +548,7 @@ Spana`;
 
           <button
             type="button"
-            onClick={signOut}
+            onClick={() => signOut()}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-slate-700 border border-red-200 dark:border-slate-700 rounded-lg transition cursor-pointer"
             title="Đăng xuất khỏi tài khoản"
           >

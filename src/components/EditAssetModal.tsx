@@ -254,7 +254,6 @@ export const EditAssetModal: React.FC<Props> = ({
         business_plot_code: businessPlotCode.trim() || null,
         area: area ? Number(area) : null,
         current_owner_entity_id: currentOwnerEntityId || null,
-        warehouse_id: warehouseId || null,
 
         map_sheet_no: mapSheetNo.trim() || null,
         land_lot_no: landLotNo.trim() || null,
@@ -758,12 +757,12 @@ export const EditAssetModal: React.FC<Props> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Kho Lưu Trữ GCN
+                  Kho Lưu Trữ GCN (Chỉ đọc)
                 </label>
                 <select
                   value={warehouseId}
-                  onChange={e => setWarehouseId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300"
+                  disabled
+                  className="w-full px-3 py-2 border rounded-md text-xs border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed"
                 >
                   <option value="">-- Chưa gán kho --</option>
                   {warehouses.map(w => (
@@ -772,6 +771,9 @@ export const EditAssetModal: React.FC<Props> = ({
                     </option>
                   ))}
                 </select>
+                <p className="text-[11px] text-amber-700 mt-1">
+                  Đổi kho: dùng Luân chuyển kho; nhập nhầm kho: quản trị dùng Sửa kho
+                </p>
               </div>
 
               <div className="md:col-span-2 flex items-center pt-5">

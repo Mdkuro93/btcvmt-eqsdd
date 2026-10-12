@@ -7,6 +7,13 @@ import {
 import { Profile, Role, AppUserSession } from '../types';
 import { mockStore } from '../lib/mockStore';
 import { logAccessEvent } from '../api/accessLogs';
+import {
+  AUTH_STORAGE_KEY,
+  SESSION_START_TIME_KEY,
+  EFFECTIVE_ROLE_KEY,
+  MOCK_USER_ID_KEY,
+} from '../constants/auth';
+import { broadcastLogout, subscribeAuthBroadcast } from '../lib/authBroadcast';
 
 export type { Role };
 
@@ -35,7 +42,7 @@ interface AuthContextType {
   signInWithPassword: (accountOrEmail: string, password: string) => Promise<{ success: boolean; profile: Profile }>;
   signInWithOtp: (accountOrEmail: string) => Promise<{ success: boolean; message?: string }>;
   verifyOtp: (accountOrEmail: string, token: string) => Promise<{ success: boolean; profile: Profile }>;
-  signOut: () => Promise<void>;
+  signOut: (reason?: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -64,7 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isUserAdmin = realRole === 'admin' || realRole === 'super_admin';
 
     if (isUserAdmin) {
-      const savedEffectiveRole = typeof window !== 'undefined' ? sessionStorage.getItem('btcvmt_effective_role') : null;
+      const savedEffectiveRole = typeof window !== 'undefined' ? sessionStorage.getItem(EFFECTIVE_ROLE_KEY) : null;
       if (savedEffectiveRole) {
         setEffectiveRoleState(savedEffectiveRole);
         if (profile.role !== savedEffectiveRole) {
@@ -79,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setEffectiveRoleState(realRole);
       if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('btcvmt_effective_role');
+        sessionStorage.removeItem(EFFECTIVE_ROLE_KEY);
       }
     }
   }, [profile?.id, profile?.originalRole]);
@@ -89,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target) return;
     setEffectiveRoleState(target);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('btcvmt_effective_role', target);
+      sessionStorage.setItem(EFFECTIVE_ROLE_KEY, target);
     }
     setProfile(prev => {
       if (!prev) return prev;
@@ -106,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = originalRole || 'admin';
     setEffectiveRoleState(target);
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('btcvmt_effective_role');
+      sessionStorage.removeItem(EFFECTIVE_ROLE_KEY);
     }
     setProfile(prev => {
       if (!prev) return prev;
@@ -252,6 +259,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const validProfile = await loadAndValidateProfile(session.user.id, email);
 
             if (validProfile && mounted) {
+              if (typeof window !== 'undefined' && !sessionStorage.getItem(SESSION_START_TIME_KEY)) {
+                sessionStorage.setItem(SESSION_START_TIME_KEY, String(Date.now()));
+              }
               setUser({ id: session.user.id, email, role: validProfile.role });
               setProfile(validProfile);
             } else if (mounted) {
@@ -275,11 +285,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         const isDevMode = import.meta.env.MODE !== 'production' || import.meta.env.VITE_ENABLE_DEMO_ACCOUNTS === 'true';
         if (isDevMode) {
-          const storedUserId = typeof window !== 'undefined' ? localStorage.getItem('btcvmt_auth_user_id') : null;
+          const storedUserId = typeof window !== 'undefined' ? sessionStorage.getItem(MOCK_USER_ID_KEY) : null;
           if (storedUserId) {
             const mockProfiles = mockStore.getProfiles();
             const p = mockProfiles.find(item => item.id === storedUserId && item.status === 'active');
             if (p && mounted) {
+              if (typeof window !== 'undefined' && !sessionStorage.getItem(SESSION_START_TIME_KEY)) {
+                sessionStorage.setItem(SESSION_START_TIME_KEY, String(Date.now()));
+              }
               setUser({ id: p.id, email: p.email || '', role: p.role });
               setProfile(p);
               setLoading(false);
@@ -293,6 +306,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initAuth();
 
+    // Đồng bộ đăng xuất giữa các tab cùng trình duyệt qua BroadcastChannel
+    const unsubscribeBroadcast = subscribeAuthBroadcast((msg) => {
+      if (!mounted) return;
+      if (msg.type === 'LOGOUT') {
+        signOut(msg.reason || 'Đã đăng xuất từ tab khác', false);
+      }
+    });
+
     let authListener: { subscription: { unsubscribe: () => void } } | null = null;
     if (isSupabaseConfigured) {
       const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -302,6 +323,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const email = session.user.email || '';
           const validProfile = await loadAndValidateProfile(session.user.id, email);
           if (validProfile && mounted) {
+            if (typeof window !== 'undefined' && !sessionStorage.getItem(SESSION_START_TIME_KEY)) {
+              sessionStorage.setItem(SESSION_START_TIME_KEY, String(Date.now()));
+            }
             setUser({ id: session.user.id, email, role: validProfile.role });
             setProfile(validProfile);
           } else if (mounted) {
@@ -320,6 +344,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       mounted = false;
       if (authListener) authListener.subscription.unsubscribe();
+      unsubscribeBroadcast();
     };
   }, []);
 
@@ -374,6 +399,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
       setProfile(validProfile);
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(SESSION_START_TIME_KEY, String(Date.now()));
+      }
 
       await logAccessEvent({
         userId: validProfile.id,
@@ -463,6 +492,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser({ id: data.user.id, email: resolvedEmail, role: validProfile.role });
       setProfile(validProfile);
 
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(SESSION_START_TIME_KEY, String(Date.now()));
+      }
+
       await logAccessEvent({
         userId: validProfile.id,
         action: 'login',
@@ -478,23 +511,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Đăng xuất an toàn
+   * Đăng xuất an toàn: thu hồi phiên trên máy chủ (scope: 'global'),
+   * xóa toàn bộ phiên trong sessionStorage và localStorage,
+   * đồng bộ đăng xuất đa tab qua BroadcastChannel.
    */
-  const signOut = async () => {
+  const signOut = async (reasonOrEvent?: string | unknown, isBroadcastOrigin = true) => {
+    const reason = typeof reasonOrEvent === 'string' ? reasonOrEvent : undefined;
     if (isSupabaseConfigured) {
       try {
-        await supabase.auth.signOut();
-      } catch {
-        // ignore
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        console.warn('Lỗi thu hồi phiên Supabase (vẫn tiếp tục dọn dẹp client):', err);
       }
     }
+
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('btcvmt_auth_user_id');
-      sessionStorage.removeItem('btcvmt_effective_role');
+      // 1. Xóa sessionStorage của ứng dụng
+      sessionStorage.removeItem(EFFECTIVE_ROLE_KEY);
+      sessionStorage.removeItem(SESSION_START_TIME_KEY);
+      sessionStorage.removeItem(MOCK_USER_ID_KEY);
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+
+      // 2. Xóa các khóa xác thực cũ trong localStorage
+      localStorage.removeItem(MOCK_USER_ID_KEY);
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (
+            key &&
+            ((key.startsWith('sb-') && key.endsWith('-auth-token')) ||
+              key === 'supabase.auth.token' ||
+              key === AUTH_STORAGE_KEY)
+          ) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // Bỏ qua lỗi storage
+      }
     }
+
     setEffectiveRoleState('');
     setUser(null);
     setProfile(null);
+
+    // Đồng bộ đăng xuất tới các tab khác
+    if (isBroadcastOrigin) {
+      broadcastLogout(reason);
+    }
   };
 
   return (

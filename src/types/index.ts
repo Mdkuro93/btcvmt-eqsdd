@@ -270,6 +270,28 @@ export interface ReassignAssetCodeResult {
   applied: boolean;
 }
 
+export interface ReassignBulkRowResult {
+  assetId: string;
+  certificateNo: string;
+  oldCode: string | null;
+  newPrefix: string | null;
+  newCode: string | null;
+  status: 'ready' | 'skipped' | 'error' | 'applied';
+  message: string | null;
+  hasHistory: boolean;
+  applied: boolean;
+}
+
+export interface CorrectAssetWarehouseResult {
+  assetId: string;
+  certificateNo: string;
+  oldWarehouse: string | null;
+  newWarehouse: string | null;
+  status: 'ready' | 'skipped' | 'error' | 'applied' | string;
+  message: string | null;
+  applied: boolean;
+}
+
 export interface AuditLog {
   id: string;
   record_id: string;

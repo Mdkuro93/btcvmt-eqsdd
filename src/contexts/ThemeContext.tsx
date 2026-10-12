@@ -11,7 +11,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-const THEME_STORAGE_KEY = 'btcvmt_theme_mode';
+const THEME_STORAGE_KEY = 'eqsd.theme'; // trùng khóa với đoạn chặn nhấp nháy trong index.html
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -23,7 +23,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {
       console.warn('Cannot read theme from localStorage:', e);
     }
-    return 'system';
+    return 'light'; // mặc định giao diện sáng
   });
 
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {

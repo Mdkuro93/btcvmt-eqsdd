@@ -11,7 +11,6 @@ import {
   BookText, 
   FileSearch, 
   ShieldCheck, 
-  Landmark, 
   Users, 
   ClipboardCheck,
   KeyRound,
@@ -148,6 +147,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  const GROUPS: { label: string; hrefs: string[] }[] = [
+    { label: 'Nghiệp vụ', hrefs: ['/', '/lookup', '/my-access', '/assets', '/requests'] },
+    { label: 'Kho', hrefs: ['/warehouse-transfers', '/access-requests', '/inventory-audits'] },
+    { label: 'Báo cáo và dữ liệu', hrefs: ['/activity-logs', '/reports', '/bulk-update'] },
+    { label: 'Quản trị', hrefs: ['/user-management', '/admin'] },
+  ];
+
   const allowedNav = navigation.filter(item => {
     if (!profile) return false;
     // Tài khoản đang chờ duyệt chỉ thấy mục "Quyền truy cập của tôi"
@@ -165,44 +171,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return false;
   });
 
-  return (
-    <aside 
-      className={`${
-        isCollapsed ? 'w-20' : 'w-64'
-      } bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 flex flex-col shrink-0 transition-all duration-300 ease-in-out relative z-30 select-none`}
-    >
-      {/* Header & Logo */}
-      <div className={`h-16 flex items-center border-b border-gray-200 dark:border-slate-800 transition-all duration-300 relative ${
-        isCollapsed ? 'justify-center px-2' : 'justify-between px-4'
-      }`}>
-        <div className={`flex items-center gap-3 overflow-hidden ${isCollapsed ? 'justify-center' : 'min-w-0 flex-1'}`}>
-          {/* Icon Logo Badge - Banking & Corporate */}
-          <div 
-            className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-[#1E3A8A] to-slate-900 border border-white/10 flex items-center justify-center shadow-xs shrink-0"
-            title="eQSDĐ & TSĐB — Ban Tài chính"
-          >
-            <Landmark className="w-4.5 h-4.5 text-white stroke-[2]" />
-          </div>
+  const groupedNav = GROUPS
+    .map(g => ({ label: g.label, items: allowedNav.filter(i => g.hrefs.includes(i.href)) }))
+    .filter(g => g.items.length > 0);
+  // Mục chưa nằm trong nhóm nào (nếu sau này thêm menu mới) vẫn hiển thị, xếp vào nhóm cuối
+  const knownHrefs = GROUPS.flatMap(g => g.hrefs);
+  const orphanItems = allowedNav.filter(i => !knownHrefs.includes(i.href));
+  if (orphanItems.length > 0) {
+    const last = groupedNav[groupedNav.length - 1];
+    if (last) last.items = [...last.items, ...orphanItems];
+    else groupedNav.push({ label: 'Khác', items: orphanItems });
+  }
 
-          {/* Tên thương hiệu & Hệ thống (chỉ hiển thị khi mở rộng) */}
+  const activeStyle: React.CSSProperties = { background: 'var(--nav-bg)', color: 'var(--nav-fg)', boxShadow: 'var(--nav-bar)' };
+
+  return (
+    <aside
+      className={`${isCollapsed ? 'w-20' : 'w-[248px]'} bg-brand text-brand-fg flex flex-col shrink-0 transition-all duration-300 ease-in-out relative z-30 select-none`}
+      aria-label="Điều hướng chính"
+    >
+      {/* Đầu thanh bên: logo + tên hệ thống */}
+      <div className={`h-16 flex items-center transition-all duration-300 relative ${isCollapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+        <div className={`flex items-center gap-3 overflow-hidden ${isCollapsed ? 'justify-center' : 'min-w-0 flex-1'}`}>
+          <div
+            className="w-[34px] h-[34px] rounded-[9px] bg-accent text-accent-ink flex items-center justify-center font-bold text-[15px] shrink-0"
+            title="eQSDĐ & TSĐB — Ban Tài chính"
+            aria-hidden={!isCollapsed}
+          >
+            eQ
+          </div>
           {!isCollapsed && (
-            <div className="min-w-0 flex-1 overflow-hidden transition-opacity duration-200">
-              <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-none tracking-tight truncate">
-                eQSDĐ &amp; TSĐB
-              </h1>
-              <p className="text-[11px] font-medium tracking-wider uppercase text-slate-400 dark:text-slate-400 mt-1 truncate">
-                Ban Tài chính
-              </p>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <h1 className="text-[15px] font-bold text-brand-fg leading-tight tracking-[.2px] truncate">eQSDĐ &amp; TSĐB</h1>
+              <p className="text-[11px] uppercase tracking-[1.2px] text-brand-muted mt-0.5 truncate">Ban Tài chính</p>
             </div>
           )}
         </div>
 
-        {/* Nút chuyển đổi Thu gọn / Mở rộng ở viền phải Header/Logo */}
         {isCollapsed ? (
           <button
             type="button"
             onClick={toggleCollapse}
-            className="absolute -right-3.5 top-5 z-40 w-7 h-7 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-full flex items-center justify-center text-gray-500 dark:text-slate-400 hover:text-[#1E3A8A] dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700 hover:border-blue-300 dark:hover:border-blue-500 shadow-sm transition-all duration-200 cursor-pointer"
+            className="absolute -right-3.5 top-5 z-40 w-7 h-7 bg-raised border border-border rounded-full flex items-center justify-center text-muted hover:text-text shadow-[var(--shadow-sm)] transition-colors cursor-pointer"
             title="Mở rộng menu"
             aria-label="Mở rộng menu"
           >
@@ -212,7 +222,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={toggleCollapse}
-            className="p-1.5 text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+            className="p-1.5 text-brand-muted hover:text-brand-fg hover:bg-surface/10 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
             title="Thu gọn menu"
             aria-label="Thu gọn menu"
           >
@@ -221,74 +231,74 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Navigation List */}
-      <nav className={`flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden ${isCollapsed ? 'px-2' : 'px-3'}`}>
-        {allowedNav.map((item) => {
-          const isActive = location.pathname === item.href;
-          
-          if (isCollapsed) {
-            return (
-              <div key={item.name} className="relative group flex justify-center py-0.5">
-                <Link
-                  to={item.href}
-                  className={`flex items-center justify-center w-11 h-11 rounded-lg transition-colors relative ${
-                    isActive 
-                      ? 'bg-blue-50 dark:bg-slate-800 text-[#1E3A8A] dark:text-blue-400 font-semibold shadow-2xs' 
-                      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 dark:hover:text-white'
-                  }`}
-                  aria-label={item.name}
-                >
-                  <item.icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[#1E3A8A] dark:text-blue-400' : 'text-gray-400 dark:text-slate-400'}`} />
-                  
-                  {item.badge !== undefined && (
-                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-slate-950 border-2 border-white dark:border-slate-900 shadow-xs">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
+      {/* Danh sách menu theo nhóm */}
+      <nav className={`flex-1 pt-2 pb-4 overflow-y-auto overflow-x-hidden ${isCollapsed ? 'px-2' : 'px-3.5'}`}>
+        {groupedNav.map((group, gi) => (
+          <div key={group.label} className={gi === 0 ? '' : isCollapsed ? 'mt-3 pt-3 border-t border-white/10' : 'mt-5'}>
+            {!isCollapsed && (
+              <div className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[1.2px] text-brand-muted">{group.label}</div>
+            )}
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const isActive = location.pathname === item.href;
 
-                {/* Tooltip khi hover vào Icon ở trạng thái Thu gọn */}
-                <div 
-                  role="tooltip"
-                  className="opacity-0 invisible -translate-x-1 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-150 ease-out pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 whitespace-nowrap"
-                >
-                  <div className="bg-slate-900 dark:bg-slate-800 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-slate-700/80 backdrop-blur-xs">
-                    <span>{item.name}</span>
+                if (isCollapsed) {
+                  return (
+                    <div key={item.name} className="relative group flex justify-center py-0.5">
+                      <Link
+                        to={item.href}
+                        aria-label={item.name}
+                        aria-current={isActive ? 'page' : undefined}
+                        style={isActive ? activeStyle : undefined}
+                        className={`flex items-center justify-center w-11 h-10 rounded-lg transition-colors relative ${isActive ? '' : 'text-brand-fg hover:bg-surface/10'}`}
+                      >
+                        <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} />
+                        {item.badge !== undefined && (
+                          <span className="absolute -top-1 -right-1 px-1.5 rounded-full text-[9px] font-extrabold bg-accent text-accent-ink border-2 border-brand">
+                            {item.badge}
+                          </span>
+                        )}
+                      </Link>
+                      <div
+                        role="tooltip"
+                        className="opacity-0 invisible -translate-x-1 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-150 ease-out pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 whitespace-nowrap"
+                      >
+                        <div className="bg-raised text-text text-xs font-medium px-3 py-1.5 rounded-lg shadow-[var(--shadow)] flex items-center gap-2 border border-border">
+                          <span>{item.name}</span>
+                          {item.badge !== undefined && (
+                            <span className="px-1.5 rounded-full text-[9px] font-extrabold bg-accent text-accent-ink">{item.badge}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    aria-current={isActive ? 'page' : undefined}
+                    style={isActive ? activeStyle : undefined}
+                    className={`flex items-center justify-between px-2.5 py-[9px] text-sm rounded-lg transition-colors ${
+                      isActive ? 'font-semibold' : 'text-brand-fg hover:bg-surface/10'
+                    }`}
+                  >
+                    <div className="flex items-center min-w-0 gap-[11px]">
+                      <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} />
+                      <span className="truncate">{item.name}</span>
+                    </div>
                     {item.badge !== undefined && (
-                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-slate-950">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-accent text-accent-ink shrink-0 ml-2">
                         {item.badge}
                       </span>
                     )}
-                    {/* Mũi tên tooltip chỉ về phía icon */}
-                    <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-slate-900 dark:border-r-slate-800" />
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                isActive 
-                  ? 'bg-blue-50 dark:bg-slate-800 text-[#1E3A8A] dark:text-blue-400 font-semibold' 
-                  : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 dark:hover:text-white'
-              }`}
-            >
-              <div className="flex items-center min-w-0">
-                <item.icon className={`mr-3 h-5 w-5 shrink-0 ${isActive ? 'text-[#1E3A8A] dark:text-blue-400' : 'text-gray-400 dark:text-slate-400'}`} />
-                <span className="truncate">{item.name}</span>
-              </div>
-              {item.badge !== undefined && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-slate-950 shrink-0 ml-2">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
     </aside>
   );

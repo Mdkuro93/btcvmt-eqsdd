@@ -27,11 +27,13 @@ export interface CreateTransferModalProps {
   preSelectedAssets?: Asset[];
 }
 
+const EMPTY_ASSETS: Asset[] = [];
+
 export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  preSelectedAssets = [],
+  preSelectedAssets = EMPTY_ASSETS,
 }) => {
   const { profile } = useAuth();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -51,7 +53,10 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   const [results, setResults] = useState<TransferItemResult[] | null>(null);
 
   const isAdminOrBtc = ['admin', 'super_admin', 'btc_manager'].includes(profile?.role || '');
-  const managedWarehouseIds = profile?.managed_warehouse_ids || [];
+  const managedWarehouseIds = useMemo(
+    () => profile?.managed_warehouse_ids || [],
+    [profile?.managed_warehouse_ids]
+  );
 
   // Load warehouses
   useEffect(() => {
@@ -62,7 +67,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     }
   }, [isOpen]);
 
-  // Handle pre-selected assets
+  // Handle pre-selected assets & form reset on open
   useEffect(() => {
     if (isOpen) {
       setResults(null);
@@ -84,14 +89,14 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
         setSelectedAssets([]);
       }
     }
-  }, [isOpen, preSelectedAssets, isAdminOrBtc]);
+  }, [isOpen]);
 
   // Debounced search for assets
   useEffect(() => {
     if (!isOpen || results !== null) return;
     const query = searchQuery.trim();
     if (!query) {
-      setSearchedAssets([]);
+      setSearchedAssets((prev) => (prev.length === 0 ? prev : []));
       return;
     }
 
@@ -131,8 +136,6 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, isSubmitting, onClose]);
 
-  if (!isOpen) return null;
-
   // Validate Scan Link
   const handleScanChange = (val: string) => {
     setScanUrl(val);
@@ -162,6 +165,25 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
   };
 
   // Check if any selected asset is in the target warehouse
+  const sourceWarehouseIds = useMemo(() => {
+    return Array.from(new Set(selectedAssets.map((a) => a.warehouse_id).filter(Boolean)));
+  }, [selectedAssets]);
+
+  // If all selected assets belong to the same warehouse, hide that warehouse in the target dropdown
+  const availableTargetWarehouses = useMemo(() => {
+    if (selectedAssets.length > 0 && sourceWarehouseIds.length === 1) {
+      const singleSourceId = sourceWarehouseIds[0];
+      return warehouses.filter((w) => w.id !== singleSourceId);
+    }
+    return warehouses;
+  }, [warehouses, selectedAssets.length, sourceWarehouseIds]);
+
+  useEffect(() => {
+    if (selectedAssets.length > 0 && sourceWarehouseIds.length === 1 && targetWarehouseId === sourceWarehouseIds[0]) {
+      setTargetWarehouseId('');
+    }
+  }, [selectedAssets.length, sourceWarehouseIds, targetWarehouseId]);
+
   const hasSameWarehouseAsset = selectedAssets.some(
     (a) => a.warehouse_id && a.warehouse_id === targetWarehouseId
   );
@@ -204,6 +226,8 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div
@@ -332,7 +356,7 @@ export const CreateTransferModal: React.FC<CreateTransferModalProps> = ({
                 className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- Chọn kho tiếp nhận đích --</option>
-                {warehouses.map((w) => (
+                {availableTargetWarehouses.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name} {w.code ? `(${w.code})` : ''}
                   </option>

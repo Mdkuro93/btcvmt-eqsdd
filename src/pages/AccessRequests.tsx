@@ -252,14 +252,14 @@ export const AccessRequests: React.FC = () => {
       <Toaster position="top-right" />
 
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface  p-6 rounded-2xl border border-slate-200  shadow-sm transition-colors">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-[#1E3A8A] dark:bg-blue-600 text-white rounded-xl shadow-md shadow-blue-900/10">
+          <div className="p-3 bg-accent  text-accent-ink rounded-xl shadow-md shadow-blue-900/10">
             <WarehouseIcon className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Duyệt Quyền Xem Kho & Quản Lý Viewer</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <h1 className="text-xl font-bold text-slate-900 ">Duyệt Quyền Xem Kho & Quản Lý Viewer</h1>
+            <p className="text-xs text-slate-500  mt-0.5">
               Phê duyệt, gia hạn và thu hồi quyền xem Giấy chứng nhận QSDĐ theo từng kho lưu trữ
             </p>
           </div>
@@ -268,20 +268,20 @@ export const AccessRequests: React.FC = () => {
         <button
           onClick={loadData}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer"
+          className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100  hover:bg-slate-200  text-slate-700  text-xs font-semibold rounded-xl transition cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Làm mới
         </button>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+      <div className="flex flex-wrap gap-2 border-b border-slate-200  pb-2">
         <button
           onClick={() => setActiveTab('pending')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'pending'
-              ? 'bg-[#1E3A8A] dark:bg-blue-600 text-white shadow-sm'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-accent  text-accent-ink shadow-sm'
+              : 'bg-surface  text-slate-600  hover:bg-slate-100  border border-slate-200 '
           }`}
         >
           <Clock className="w-4 h-4" />
@@ -299,8 +299,8 @@ export const AccessRequests: React.FC = () => {
           onClick={() => setActiveTab('active_viewers')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'active_viewers'
-              ? 'bg-[#1E3A8A] dark:bg-blue-600 text-white shadow-sm'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-accent  text-accent-ink shadow-sm'
+              : 'bg-surface  text-slate-600  hover:bg-slate-100  border border-slate-200 '
           }`}
         >
           <UserCheck className="w-4 h-4" />
@@ -311,8 +311,8 @@ export const AccessRequests: React.FC = () => {
           onClick={() => setActiveTab('history')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'history'
-              ? 'bg-[#1E3A8A] dark:bg-blue-600 text-white shadow-sm'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              ? 'bg-accent  text-accent-ink shadow-sm'
+              : 'bg-surface  text-slate-600  hover:bg-slate-100  border border-slate-200 '
           }`}
         >
           <FileCheck className="w-4 h-4" />
@@ -321,28 +321,28 @@ export const AccessRequests: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-3 transition-colors">
+      <div className="bg-surface  p-4 rounded-xl border border-slate-200  shadow-sm flex flex-col sm:flex-row gap-3 transition-colors">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-3 pointer-events-none" />
+          <Search className="w-4 h-4 text-slate-400  absolute left-3 top-3 pointer-events-none" />
           <input
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             placeholder="Tìm theo tên, email, cơ quan, kho..."
-            className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
+            className="w-full pl-9 pr-3 py-2 border border-slate-300  rounded-lg text-xs bg-surface  text-slate-800  placeholder-slate-400  focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+          <Filter className="w-4 h-4 text-slate-400 " />
           <select
             value={selectedWarehouseFilter}
             onChange={e => setSelectedWarehouseFilter(e.target.value)}
-            className="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 cursor-pointer"
+            className="px-3 py-2 border border-slate-300  rounded-lg text-xs bg-surface  text-slate-700  focus:outline-none focus:ring-2 focus:ring-blue-500/30 cursor-pointer"
           >
-            <option value="all" className="bg-white dark:bg-slate-900">Tất cả kho lưu trữ</option>
+            <option value="all" className="bg-surface ">Tất cả kho lưu trữ</option>
             {warehouses.map(w => (
-              <option key={w.id} value={w.id} className="bg-white dark:bg-slate-900">
+              <option key={w.id} value={w.id} className="bg-surface ">
                 {w.name} {w.is_central ? '(Kho Tổng)' : ''}
               </option>
             ))}
@@ -352,19 +352,19 @@ export const AccessRequests: React.FC = () => {
 
       {/* TAB 1: PENDING REQUESTS */}
       {activeTab === 'pending' && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
+        <div className="bg-surface  rounded-2xl border border-slate-200  shadow-sm overflow-hidden transition-colors">
           {loading ? (
-            <div className="p-12 text-center text-xs text-slate-500 dark:text-slate-400">Đang tải danh sách yêu cầu chờ duyệt...</div>
+            <div className="p-12 text-center text-xs text-slate-500 ">Đang tải danh sách yêu cầu chờ duyệt...</div>
           ) : applySearchFilter(pendingRequests).length === 0 ? (
             <div className="p-12 text-center space-y-2">
               <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Không có yêu cầu nào đang chờ duyệt</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Tất cả các yêu cầu đăng ký viewer theo kho đã được thẩm duyệt đầy đủ.</p>
+              <p className="text-sm font-semibold text-slate-700 ">Không có yêu cầu nào đang chờ duyệt</p>
+              <p className="text-xs text-slate-500 ">Tất cả các yêu cầu đăng ký viewer theo kho đã được thẩm duyệt đầy đủ.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                <thead className="bg-slate-50  text-slate-700  border-b border-slate-200 ">
                   <tr>
                     <th className="py-3 px-4 font-bold">Người gửi</th>
                     <th className="py-3 px-4 font-bold">Cơ quan / Đơn vị</th>
@@ -374,38 +374,38 @@ export const AccessRequests: React.FC = () => {
                     <th className="py-3 px-4 font-bold text-right">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-100 ">
                   {applySearchFilter(pendingRequests).map(req => (
-                    <tr key={req.id} className="hover:bg-blue-50/40 dark:hover:bg-slate-800/60 transition">
+                    <tr key={req.id} className="hover:bg-blue-50/40  transition">
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900 dark:text-slate-100">{req.full_name}</div>
-                        <div className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                          <Mail className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {req.email}
+                        <div className="font-bold text-slate-900 ">{req.full_name}</div>
+                        <div className="text-slate-500  flex items-center gap-1.5 mt-0.5">
+                          <Mail className="w-3 h-3 text-slate-400 " /> {req.email}
                         </div>
                         {req.phone && (
-                          <div className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                            <Phone className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {req.phone}
+                          <div className="text-slate-500  flex items-center gap-1.5 mt-0.5">
+                            <Phone className="w-3 h-3 text-slate-400 " /> {req.phone}
                           </div>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-800 dark:text-slate-200 font-medium">
+                      <td className="py-3.5 px-4 text-slate-800  font-medium">
                         <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                          <Building2 className="w-3.5 h-3.5 text-slate-400  flex-shrink-0" />
                           <span>{req.organization || '-'}</span>
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-800 rounded-lg font-bold text-[11px]">
-                          <WarehouseIcon className="w-3 h-3 text-[#1E3A8A] dark:text-blue-400" />
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50  text-blue-900  border border-blue-200  rounded-lg font-bold text-[11px]">
+                          <WarehouseIcon className="w-3 h-3 text-blue-700 " />
                           {req.warehouses?.name || 'Kho đã chọn'}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 max-w-xs">
+                      <td className="py-3.5 px-4 text-slate-600  max-w-xs">
                         <p className="line-clamp-2 leading-relaxed" title={req.purpose || ''}>
                           {req.purpose || 'Không ghi chú'}
                         </p>
                       </td>
-                      <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-slate-500  whitespace-nowrap">
                         {new Date(req.created_at).toLocaleDateString('vi-VN', {
                           day: '2-digit',
                           month: '2-digit',
@@ -417,7 +417,7 @@ export const AccessRequests: React.FC = () => {
                       <td className="py-3.5 px-4 text-right whitespace-nowrap space-x-2">
                         <button
                           onClick={() => setRejectModalReq(req)}
-                          className="px-3 py-1.5 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 font-bold rounded-lg border border-red-200 dark:border-red-800 transition cursor-pointer"
+                          className="px-3 py-1.5 bg-red-50  hover:bg-red-100  text-red-700  font-bold rounded-lg border border-red-200  transition cursor-pointer"
                         >
                           Từ chối
                         </button>
@@ -427,7 +427,7 @@ export const AccessRequests: React.FC = () => {
                             setApprovalDuration(90);
                             setApprovalNotes('');
                           }}
-                          className="px-3.5 py-1.5 bg-[#1E3A8A] dark:bg-blue-600 hover:bg-blue-800 dark:hover:bg-blue-500 text-white font-bold rounded-lg transition shadow-sm cursor-pointer"
+                          className="px-3.5 py-1.5 bg-accent  hover:brightness-95  text-accent-ink font-bold rounded-lg transition shadow-sm cursor-pointer"
                         >
                           Duyệt cấp quyền
                         </button>
@@ -443,7 +443,7 @@ export const AccessRequests: React.FC = () => {
 
       {/* TAB 2: ACTIVE VIEWER PERMISSIONS */}
       {activeTab === 'active_viewers' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {loading ? (
             <div className="p-12 text-center text-xs text-slate-500">Đang tải danh sách viewer được cấp quyền...</div>
           ) : applySearchFilter(filteredViewerAccess).length === 0 ? (
@@ -476,7 +476,7 @@ export const AccessRequests: React.FC = () => {
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg font-semibold text-[11px]">
-                            <WarehouseIcon className="w-3 h-3 text-[#1E3A8A]" />
+                            <WarehouseIcon className="w-3 h-3 text-blue-700" />
                             {access.warehouses?.name || 'Kho lưu trữ'}
                           </div>
                         </td>
@@ -504,7 +504,7 @@ export const AccessRequests: React.FC = () => {
                               setExtendModalItem(access);
                               setExtendDuration(90);
                             }}
-                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#1E3A8A] font-bold rounded-lg border border-blue-200 transition text-[11px]"
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-200 transition text-[11px]"
                           >
                             Gia hạn
                           </button>
@@ -527,7 +527,7 @@ export const AccessRequests: React.FC = () => {
 
       {/* TAB 3: PROCESSED HISTORY */}
       {activeTab === 'history' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {applySearchFilter(processedRequests).length === 0 ? (
             <div className="p-12 text-center text-xs text-slate-500">Chưa có lịch sử xử lý yêu cầu nào</div>
           ) : (
@@ -584,11 +584,11 @@ export const AccessRequests: React.FC = () => {
 
       {/* MODAL: DUYỆT YÊU CẦU */}
       {approveModalReq && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-blue-100 text-[#1E3A8A] rounded-xl">
+                <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <h3 className="text-base font-bold text-slate-900">Phê Duyệt Quyền Xem Kho</h3>
@@ -604,7 +604,7 @@ export const AccessRequests: React.FC = () => {
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
               <div><strong>Người xin cấp:</strong> {approveModalReq.full_name} ({approveModalReq.email})</div>
               <div><strong>Đơn vị:</strong> {approveModalReq.organization || 'Chưa cung cấp'}</div>
-              <div><strong>Kho cấp quyền:</strong> <span className="text-[#1E3A8A] font-bold">{approveModalReq.warehouses?.name}</span></div>
+              <div><strong>Kho cấp quyền:</strong> <span className="text-blue-700 font-bold">{approveModalReq.warehouses?.name}</span></div>
             </div>
 
             {/* Chọn thời hạn xem */}
@@ -626,8 +626,8 @@ export const AccessRequests: React.FC = () => {
                     onClick={() => setApprovalDuration(opt.val as any)}
                     className={`py-2 px-2.5 rounded-lg text-xs font-bold border text-center transition ${
                       approvalDuration === opt.val
-                        ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        ? 'bg-accent text-accent-ink border-blue-500'
+                        : 'bg-surface text-slate-700 border-slate-300 hover:bg-slate-50'
                     }`}
                   >
                     {opt.label}
@@ -646,7 +646,7 @@ export const AccessRequests: React.FC = () => {
                 value={approvalNotes}
                 onChange={e => setApprovalNotes(e.target.value)}
                 placeholder="VD: Cấp quyền xem phục vụ thẩm định hồ sơ thế chấp tín dụng..."
-                className="w-full p-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
+                className="w-full p-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               />
             </div>
 
@@ -662,7 +662,7 @@ export const AccessRequests: React.FC = () => {
                 type="button"
                 disabled={isApproving}
                 onClick={handleApprove}
-                className="px-5 py-2 bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-semibold rounded-xl transition shadow-sm disabled:opacity-50"
+                className="px-5 py-2 bg-accent hover:brightness-95 text-accent-ink text-xs font-semibold rounded-xl transition shadow-sm disabled:opacity-50"
               >
                 {isApproving ? 'Đang duyệt...' : 'Xác nhận duyệt'}
               </button>
@@ -673,8 +673,8 @@ export const AccessRequests: React.FC = () => {
 
       {/* MODAL: THÔNG BÁO DUYỆT THÀNH CÔNG VÀ THÔNG TIN ĐĂNG NHẬP */}
       {approvedSuccessInfo && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
               <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl">
                 <CheckCircle2 className="w-6 h-6 text-emerald-600" />
@@ -687,16 +687,16 @@ export const AccessRequests: React.FC = () => {
 
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs">
               <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Thông tin tài khoản đăng nhập:</div>
-              <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between bg-surface p-2.5 rounded-lg border border-slate-200">
                 <span className="text-slate-600 font-medium flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-[#1E3A8A]" /> Tên đăng nhập:
+                  <User className="w-3.5 h-3.5 text-blue-700" /> Tên đăng nhập:
                 </span>
                 <span className="font-bold text-slate-900 font-mono bg-blue-50 text-blue-900 px-2 py-0.5 rounded border border-blue-200">
                   {approvedSuccessInfo.username}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between bg-surface p-2.5 rounded-lg border border-slate-200">
                 <span className="text-slate-600 font-medium flex items-center gap-1.5">
                   <Mail className="w-3.5 h-3.5 text-slate-500" /> Hoặc Email:
                 </span>
@@ -705,7 +705,7 @@ export const AccessRequests: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between bg-surface p-2.5 rounded-lg border border-slate-200">
                 <span className="text-slate-600 font-medium flex items-center gap-1.5">
                   <KeyRound className="w-3.5 h-3.5 text-blue-600" /> Hình thức xác thực:
                 </span>
@@ -736,7 +736,7 @@ export const AccessRequests: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setApprovedSuccessInfo(null)}
-                className="px-5 py-2 bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+                className="px-5 py-2 bg-accent hover:brightness-95 text-accent-ink text-xs font-semibold rounded-xl transition cursor-pointer"
               >
                 Đóng
               </button>
@@ -745,8 +745,8 @@ export const AccessRequests: React.FC = () => {
         </div>
       )}
       {rejectModalReq && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-red-100 text-red-700 rounded-xl">
@@ -803,11 +803,11 @@ export const AccessRequests: React.FC = () => {
 
       {/* MODAL: GIA HẠN THỜI HẠN */}
       {extendModalItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-blue-100 text-[#1E3A8A] rounded-xl">
+                <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <h3 className="text-base font-bold text-slate-900">Gia Hạn Quyền Xem Kho</h3>
@@ -844,8 +844,8 @@ export const AccessRequests: React.FC = () => {
                     onClick={() => setExtendDuration(opt.val as any)}
                     className={`py-2 px-2.5 rounded-lg text-xs font-bold border text-center transition ${
                       extendDuration === opt.val
-                        ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        ? 'bg-accent text-accent-ink border-blue-500'
+                        : 'bg-surface text-slate-700 border-slate-300 hover:bg-slate-50'
                     }`}
                   >
                     {opt.label}
@@ -866,7 +866,7 @@ export const AccessRequests: React.FC = () => {
                 type="button"
                 disabled={isExtending}
                 onClick={handleExtend}
-                className="px-5 py-2 bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-semibold rounded-xl transition shadow-sm disabled:opacity-50"
+                className="px-5 py-2 bg-accent hover:brightness-95 text-accent-ink text-xs font-semibold rounded-xl transition shadow-sm disabled:opacity-50"
               >
                 {isExtending ? 'Đang gia hạn...' : 'Xác nhận gia hạn'}
               </button>
@@ -877,8 +877,8 @@ export const AccessRequests: React.FC = () => {
 
       {/* MODAL: THU HỒI QUYỀN */}
       {revokeModalItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center gap-2.5 text-red-600 pb-2 border-b border-slate-200">
               <AlertTriangle className="w-6 h-6 flex-shrink-0" />
               <h3 className="text-base font-bold">Xác Nhận Thu Hồi Quyền</h3>

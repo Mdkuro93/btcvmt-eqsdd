@@ -56,6 +56,9 @@ export default defineConfig(() => {
       include: [
         'react',
         'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-dom/client',
         'react-router-dom',
         '@tanstack/react-query',
         '@supabase/supabase-js',

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured, withTimeout, DEFAULT_READ_TIMEOUT, DEFAULT_WRITE_TIMEOUT, isSchemaMissingError } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
-import { Asset, Region, Area, Warehouse, Project, AssetCodeHistoryEntry, ReassignAssetCodeResult } from '../types';
+import { Asset, Region, Area, Warehouse, Project, AssetCodeHistoryEntry, ReassignAssetCodeResult, ReassignBulkRowResult, CorrectAssetWarehouseResult } from '../types';
 import { generateNextAssetCode, resolveRegionCode, checkAssetDuplicate, resolveAssetCodePrefix } from '../lib/assetIdentifier';
 import { createAuditLog } from './auditLogs';
 import { logActivity } from './activityLogs';
@@ -780,11 +780,17 @@ export async function updateAsset(
     );
 
     if (error) {
+      if (error.code === 'PGRST116') {
+        throw new Error('Bạn không có quyền cập nhật GCN này.');
+      }
       console.error('Lỗi khi cập nhật GCN:', error);
       if (error.message && error.message.includes('DUPLICATE_UNCONFIRMED')) {
         throw new Error('Số GCN đã tồn tại. Vui lòng xác nhận trường hợp trùng kèm lý do.');
       }
       throw new Error(`Không thể cập nhật GCN: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+    if (!data) {
+      throw new Error('Bạn không có quyền cập nhật GCN này.');
     }
     updatedAsset = data;
 
@@ -865,16 +871,20 @@ export async function bulkUpdateAssets(
     });
     mockStore.saveAssets(updatedList);
   } else {
-    const { error } = await withTimeout(
+    const { data, error } = await withTimeout(
       supabase
         .from('assets')
         .update(payload)
-        .in('id', ids),
+        .in('id', ids)
+        .select('id'),
       DEFAULT_WRITE_TIMEOUT
     );
     if (error) {
       console.error('Lỗi khi cập nhật hàng loạt GCN:', error);
       throw new Error(`Không thể cập nhật hàng loạt GCN: ${error.message || 'Lỗi cơ sở dữ liệu'}.`);
+    }
+    if (!data || data.length === 0) {
+      throw new Error('Bạn không có quyền cập nhật GCN này.');
     }
 
     try {
@@ -1711,3 +1721,108 @@ export async function fetchAssetCodeHistory(assetId: string): Promise<AssetCodeH
 
   return data || [];
 }
+
+export interface ReassignAssetCodesBulkParams {
+  voucherCode: string;
+  reason: string;
+  newProjectId?: string | null;
+  newCollateralType?: string | null;
+  confirmHistory?: boolean;
+  apply?: boolean;
+}
+
+/**
+ * Tái cấp mã hàng loạt theo phiếu nhập qua RPC `reassign_asset_codes_bulk` (Migration 0098)
+ * - apply=false: xem trước danh sách GCN, tiền tố mới, trạng thái và cờ lịch sử
+ * - apply=true: thực thi đổi mã nguyên tử cho cả phiếu nếu không có dòng lỗi
+ */
+export async function reassignAssetCodesBulk(
+  params: ReassignAssetCodesBulkParams
+): Promise<ReassignBulkRowResult[]> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Hệ thống chưa kết nối cơ sở dữ liệu Supabase.');
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('reassign_asset_codes_bulk', {
+      p_voucher_code: params.voucherCode,
+      p_reason: params.reason,
+      p_new_project_id: params.newProjectId || null,
+      p_new_collateral_type: params.newCollateralType || null,
+      p_confirm_history: Boolean(params.confirmHistory),
+      p_apply: Boolean(params.apply),
+    }),
+    params.apply ? DEFAULT_WRITE_TIMEOUT : DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) {
+    const err: any = new Error(error.message || 'Lỗi khi tái cấp mã theo phiếu nhập');
+    err.code = error.code;
+    err.details = error.details;
+    err.hint = error.hint;
+    throw err;
+  }
+
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  return rows.map((r: any) => ({
+    assetId: r.r_asset_id,
+    certificateNo: r.r_certificate_no,
+    oldCode: r.r_old_code ?? null,
+    newPrefix: r.r_new_prefix ?? null,
+    newCode: r.r_new_code ?? null,
+    status: r.r_status,
+    message: r.r_message ?? null,
+    hasHistory: Boolean(r.r_has_history),
+    applied: Boolean(r.r_applied),
+  }));
+}
+
+export interface CorrectAssetWarehouseParams {
+  assetIds: string[];
+  targetWarehouseId: string;
+  reason: string;
+  apply?: boolean;
+}
+
+/**
+ * Sửa kho (không phiếu) qua RPC `correct_asset_warehouse` (Migration 0100)
+ * - apply=false: xem trước danh sách GCN (ready, skipped, error)
+ * - apply=true: thực thi đổi kho nguyên tử nếu không có dòng error
+ */
+export async function correctAssetWarehouse(
+  params: CorrectAssetWarehouseParams
+): Promise<CorrectAssetWarehouseResult[]> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Hệ thống chưa kết nối cơ sở dữ liệu Supabase.');
+  }
+
+  const { data, error } = await withTimeout(
+    supabase.rpc('correct_asset_warehouse', {
+      p_asset_ids: params.assetIds,
+      p_target_warehouse_id: params.targetWarehouseId,
+      p_reason: params.reason,
+      p_apply: Boolean(params.apply),
+    }),
+    params.apply ? DEFAULT_WRITE_TIMEOUT : DEFAULT_READ_TIMEOUT
+  );
+
+  if (error) {
+    const err: any = new Error(error.message || 'Lỗi khi sửa kho');
+    err.code = error.code;
+    err.details = error.details;
+    err.hint = error.hint;
+    throw err;
+  }
+
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  return rows.map((r: any) => ({
+    assetId: r.r_asset_id,
+    certificateNo: r.r_certificate_no,
+    oldWarehouse: r.r_old_warehouse ?? null,
+    newWarehouse: r.r_new_warehouse ?? null,
+    status: r.r_status,
+    message: r.r_message ?? null,
+    applied: Boolean(r.r_applied),
+  }));
+}
+

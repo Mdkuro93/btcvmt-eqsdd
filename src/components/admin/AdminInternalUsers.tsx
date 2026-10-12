@@ -189,7 +189,7 @@ export const AdminInternalUsers: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsAddUserOpen(!isAddUserOpen)}
-            className="px-3.5 py-2 bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            className="px-3.5 py-2 bg-accent hover:brightness-95 text-accent-ink text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
           >
             <UserPlus className="w-4 h-4" /> Thêm người dùng
           </button>
@@ -205,7 +205,7 @@ export const AdminInternalUsers: React.FC = () => {
               placeholder="Họ và tên..."
               value={newUserFullName}
               onChange={(e) => setNewUserFullName(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface"
               required
             />
             <input
@@ -213,13 +213,13 @@ export const AdminInternalUsers: React.FC = () => {
               placeholder="Email (VD: nv.a@btcvmt.vn)..."
               value={newUserEmail}
               onChange={(e) => setNewUserEmail(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface"
               required
             />
             <select
               value={newUserRole}
               onChange={(e) => setNewUserRole(e.target.value as Role)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface"
             >
               <option value="super_admin">Quản trị viên cấp cao (super_admin)</option>
               <option value="admin">Quản trị viên (admin)</option>
@@ -248,7 +248,7 @@ export const AdminInternalUsers: React.FC = () => {
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs cursor-pointer border transition-colors ${
                         isChecked
                           ? 'bg-amber-100 text-amber-900 border-amber-400 font-medium'
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                          : 'bg-surface text-gray-600 border-gray-200 hover:bg-gray-50'
                       }`}
                     >
                       <input
@@ -281,7 +281,7 @@ export const AdminInternalUsers: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-1.5 bg-[#1E3A8A] text-white text-xs font-semibold rounded-lg hover:bg-blue-800 cursor-pointer"
+              className="px-4 py-1.5 bg-accent text-accent-ink text-xs font-semibold rounded-lg hover:brightness-95 cursor-pointer"
             >
               Tạo tài khoản
             </button>
@@ -331,7 +331,7 @@ export const AdminInternalUsers: React.FC = () => {
                     <select
                       value={prof.role}
                       onChange={(e) => handleUserRoleChange(prof.id, e.target.value as Role)}
-                      className="text-xs border border-gray-300 rounded-md p-1.5 bg-white focus:border-blue-500 font-medium text-gray-800"
+                      className="text-xs border border-gray-300 rounded-md p-1.5 bg-surface focus:border-blue-500 font-medium text-gray-800"
                     >
                       <option value="super_admin">Quản trị viên cấp cao (super_admin)</option>
                       <option value="admin">Quản trị viên (admin)</option>
@@ -422,14 +422,14 @@ export const AdminInternalUsers: React.FC = () => {
                               onClick={() => handleTogglePermission(prof, perm.key)}
                               className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1 ${
                                 isSpecialAdmin
-                                  ? 'bg-blue-50 text-[#1E3A8A] border-blue-200 cursor-default opacity-90'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200 cursor-default opacity-90'
                                   : hasPerm
-                                    ? 'bg-blue-100 text-[#1E3A8A] border-blue-300 hover:bg-blue-200 cursor-pointer font-semibold shadow-2xs'
+                                    ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200 cursor-pointer font-semibold shadow-2xs'
                                     : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100 hover:text-gray-600 cursor-pointer'
                               }`}
                               title={isSpecialAdmin ? 'Vai trò Quản trị luôn có toàn quyền' : `Bấm để ${hasPerm ? 'bỏ' : 'cấp'} quyền "${perm.label}"`}
                             >
-                              {hasPerm && <Check className="w-3 h-3 text-[#1E3A8A]" />}
+                              {hasPerm && <Check className="w-3 h-3 text-blue-700" />}
                               {perm.label}
                             </button>
                           );

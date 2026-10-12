@@ -21,7 +21,8 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
-  AlertTriangle
+  AlertTriangle,
+  Warehouse
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -76,7 +77,8 @@ const FIELD_LABELS: Record<string, { label: string; icon?: any }> = {
   project_name: { label: 'Tên Dự Án' },
   asset_code: { label: 'Mã Tài Sản' },
   old_asset_code: { label: 'Mã Tài Sản Sổ Cũ' },
-  warehouse_id: { label: 'Kho Lưu Trữ' },
+  warehouse_id: { label: 'Kho Lưu Trữ', icon: Warehouse },
+  warehouse_name: { label: 'Tên Kho Lưu Trữ', icon: Warehouse },
   notes: { label: 'Ghi Chú' },
   certificate_group: { label: 'Nhóm Sổ' },
   // Các field cũ dưới đây đã bị gộp/xóa khỏi hệ thống (xem migration 0021), giữ lại
@@ -232,6 +234,20 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
     }
 
     switch (action) {
+      case 'reassign_asset_codes_bulk':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+            <Layers className="w-3.5 h-3.5" />
+            Tái cấp mã hàng loạt theo phiếu
+          </span>
+        );
+      case 'correct_asset_warehouse':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+            <Warehouse className="w-3.5 h-3.5 text-amber-700" />
+            Sửa kho không phiếu
+          </span>
+        );
       case 'reassign_asset_code':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
@@ -370,9 +386,11 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                 const newData = log.new_data || {};
                 const changedKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]));
                 const isReassign = log.action === 'reassign_asset_code';
+                const isBulkReassign = log.action === 'reassign_asset_codes_bulk';
                 const hist = newData.history || {};
                 const hasHadHistory = Boolean(
                   newData.had_history ||
+                  newData.with_history ||
                   (hist && (
                     (Number(hist.transactions) || 0) > 0 ||
                     (Number(hist.inventory_audits) || 0) > 0 ||
@@ -426,6 +444,50 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                         </div>
                       )}
 
+                      {/* Reassign Asset Code Bulk summary banner */}
+                      {isBulkReassign && (
+                        <div className="px-4 py-2.5 bg-purple-50/80 border-b border-purple-100 text-xs space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-purple-950 font-bold">Phiếu nhập:</span>
+                            <span className="font-mono font-semibold px-2 py-0.5 bg-purple-100 text-purple-900 rounded border border-purple-200">
+                              {newData.voucher_code || '(Không rõ mã phiếu)'}
+                            </span>
+                            {oldData.asset_code && newData.asset_code && (
+                              <span className="flex items-center gap-1.5 ml-1">
+                                <span className="font-mono text-slate-500 line-through">{oldData.asset_code}</span>
+                                <ArrowRight className="w-3.5 h-3.5 text-purple-600" />
+                                <span className="font-mono font-bold text-purple-900 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200">
+                                  {newData.asset_code}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-purple-900/90 flex-wrap">
+                            <span>Đã đổi mã: <strong className="text-emerald-700">{newData.reassigned ?? 0}</strong> GCN</span>
+                            <span>Bỏ qua: <strong className="text-slate-600">{newData.skipped ?? 0}</strong> GCN</span>
+                            <span>Có lịch sử: <strong className={newData.with_history ? 'text-amber-700' : 'text-slate-600'}>
+                              {newData.with_history ? 'Có' : 'Không'}
+                            </strong></span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Correct Asset Warehouse summary banner */}
+                      {log.action === 'correct_asset_warehouse' && (
+                        <div className="px-4 py-2.5 bg-amber-50/80 border-b border-amber-200 text-xs space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-amber-950 font-bold">Kho lưu trữ:</span>
+                            <span className="font-semibold text-slate-700 px-2 py-0.5 bg-white border border-slate-200 rounded">
+                              {oldData.warehouse_name || lookupMap.get(oldData.warehouse_id) || '(Chưa có kho)'}
+                            </span>
+                            <ArrowRight className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span className="font-semibold text-amber-950 px-2 py-0.5 bg-amber-100 border border-amber-300 rounded">
+                              {newData.warehouse_name || lookupMap.get(newData.warehouse_id) || '(Kho mới)'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Event Notes */}
                       {log.notes && (
                         <div className="px-4 py-2 bg-blue-50/40 border-b border-blue-50 text-xs text-blue-900 flex items-start gap-1.5">
@@ -463,7 +525,7 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                                         </div>
                                       </td>
                                       <td className="py-2 px-3 text-slate-600 font-mono text-[11px] bg-rose-50/30 break-words">
-                                        {key === 'asset_code' && isReassign ? (
+                                        {key === 'asset_code' && (isReassign || isBulkReassign) ? (
                                           <span className="line-through text-rose-800 font-semibold">{formatValue(oldV, key, lookupMap)}</span>
                                         ) : (
                                           formatValue(oldV, key, lookupMap)
@@ -472,7 +534,7 @@ export const AssetAuditModal: React.FC<Props> = ({ asset, onClose }) => {
                                       <td className="py-2 px-3 text-emerald-900 font-semibold font-mono text-[11px] bg-emerald-50/40 break-words">
                                         <div className="flex items-center gap-1">
                                           <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                          <span className={key === 'asset_code' && isReassign ? 'font-bold text-emerald-800' : ''}>
+                                          <span className={key === 'asset_code' && (isReassign || isBulkReassign) ? 'font-bold text-emerald-800' : ''}>
                                             {formatValue(newV, key, lookupMap)}
                                           </span>
                                         </div>

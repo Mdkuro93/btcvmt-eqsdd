@@ -93,11 +93,11 @@ export const AddSurplusAssetModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-surface rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="px-6 py-4.5 bg-gradient-to-r from-purple-800 to-indigo-900 text-white flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <div className="p-2 bg-white/10 rounded-lg">
+            <div className="p-2 bg-surface/10 rounded-lg">
               <PackagePlus className="w-5 h-5 text-purple-200" />
             </div>
             <div>
@@ -126,7 +126,7 @@ export const AddSurplusAssetModal: React.FC<Props> = ({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Nhập số GCN hoặc mã tài sản cần quét..."
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:bg-surface focus:ring-2 focus:ring-purple-500 focus:outline-none"
               />
             </div>
             <button
@@ -148,7 +148,7 @@ export const AddSurplusAssetModal: React.FC<Props> = ({
                   <div
                     key={ast.id}
                     onClick={() => setSelectedAsset(ast)}
-                    className="p-3 hover:bg-white cursor-pointer transition-colors flex items-center justify-between"
+                    className="p-3 hover:bg-surface cursor-pointer transition-colors flex items-center justify-between"
                   >
                     <div>
                       <p className="font-bold text-gray-900 text-xs">{ast.certificate_no}</p>
@@ -218,7 +218,7 @@ export const AddSurplusAssetModal: React.FC<Props> = ({
                     value={actualLocation}
                     onChange={(e) => setActualLocation(e.target.value)}
                     placeholder="Ví dụ: Kệ B2 - Hộp 01, Ngăn kéo số 2..."
-                    className="w-full pl-9 pr-3.5 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                    className="w-full pl-9 pr-3.5 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:bg-surface focus:ring-2 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -232,7 +232,7 @@ export const AddSurplusAssetModal: React.FC<Props> = ({
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
                   placeholder="Ghi rõ tình trạng bìa sổ, tem niêm phong, nghi vấn phát sinh thừa..."
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:bg-surface focus:ring-2 focus:ring-purple-500 focus:outline-none"
                 />
               </div>
 

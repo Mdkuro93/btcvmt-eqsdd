@@ -24,49 +24,60 @@ export const StatusBadges: React.FC<Props> = ({
   className,
   showMortgage = true
 }) => {
-  const getCustodyProps = (status: CustodyStatus) => {
+  type Tone = 'ok' | 'info' | 'warn' | 'danger' | 'neutral';
+  const TONE: Record<Tone, string> = {
+    ok: 'bg-ok-bg text-ok-fg',
+    info: 'bg-info-bg text-info-fg',
+    warn: 'bg-warn-bg text-warn-fg',
+    danger: 'bg-danger-bg text-danger-fg',
+    neutral: 'bg-neutral-bg text-neutral-fg',
+  };
+
+  const getCustodyProps = (status: CustodyStatus): { label: string; tone: Tone } => {
     switch (status) {
-      case 'in_stock': return { label: 'Trong kho', color: 'bg-green-100 text-green-800 border-green-200' };
-      case 'checked_out': return { label: 'Đang mượn/xuất', color: 'bg-amber-100 text-amber-800 border-amber-200' };
-      case 'in_transit': return { label: 'Đang luân chuyển', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
-      default: return { label: status, color: 'bg-gray-100 text-gray-800 border-gray-200' };
+      case 'in_stock': return { label: 'Trong kho', tone: 'ok' };
+      case 'checked_out': return { label: 'Đang mượn/xuất', tone: 'warn' };
+      case 'in_transit': return { label: 'Đang luân chuyển', tone: 'info' };
+      default: return { label: status, tone: 'neutral' };
     }
   };
 
-  const getLifecycleProps = (status: LifecycleStatus) => {
+  const getLifecycleProps = (status: LifecycleStatus): { label: string; tone: Tone } => {
     switch (status) {
-      case 'active': return { label: 'Active', color: 'bg-blue-100 text-blue-800 border-blue-200' };
-      case 'split': return { label: 'Đã tách', color: 'bg-purple-100 text-purple-800 border-purple-200' };
-      case 'invalidated': return { label: 'Vô hiệu', color: 'bg-red-100 text-red-800 border-red-200' };
-      default: return { label: status, color: 'bg-gray-100 text-gray-800 border-gray-200' };
+      case 'active': return { label: 'Active', tone: 'info' };
+      case 'split': return { label: 'Đã tách', tone: 'neutral' };
+      case 'invalidated': return { label: 'Vô hiệu', tone: 'danger' };
+      default: return { label: status, tone: 'neutral' };
     }
   };
 
-  const getSaleProps = (status: SaleStatus) => {
+  const getSaleProps = (status: SaleStatus): { label: string; tone: Tone } => {
     switch (status) {
-      case 'not_ready': return { label: 'Chưa SS bán', color: 'bg-gray-100 text-gray-600 border-gray-200' };
-      case 'ready_for_sale': return { label: 'Sẵn sàng bán', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
-      case 'sold': return { label: 'Đã bán', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
-      default: return { label: status, color: 'bg-gray-100 text-gray-800 border-gray-200' };
+      case 'not_ready': return { label: 'Chưa SS bán', tone: 'neutral' };
+      case 'ready_for_sale': return { label: 'Sẵn sàng bán', tone: 'ok' };
+      case 'sold': return { label: 'Đã bán', tone: 'info' };
+      default: return { label: status, tone: 'neutral' };
     }
   };
 
-  const getMortgageProps = (status: MortgageStatus) => {
+  const getMortgageProps = (status: MortgageStatus): { label: string; tone: Tone } => {
     switch (status) {
-      case 'none': return { label: 'Không thế chấp', color: 'bg-gray-100 text-gray-600 border-gray-200' };
-      case 'mortgaged': return { label: 'Đang thế chấp', color: 'bg-rose-100 text-rose-800 border-rose-200' };
-      default: return { label: status, color: 'bg-gray-100 text-gray-800 border-gray-200' };
+      case 'none': return { label: 'Không thế chấp', tone: 'neutral' };
+      case 'mortgaged': return { label: 'Đang thế chấp', tone: 'warn' };
+      default: return { label: status, tone: 'neutral' };
     }
   };
 
-  const renderBadge = (props: { label: string, color: string }, title: string) => (
-    <span 
+  // Nhãn trạng thái: có chấm tròn cùng màu chữ để không chỉ dựa vào màu
+  const renderBadge = (props: { label: string; tone: Tone }, title: string) => (
+    <span
       title={title}
       className={cn(
-        'inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-medium border whitespace-nowrap',
-        props.color
+        'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap',
+        TONE[props.tone]
       )}
     >
+      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" aria-hidden="true" />
       {props.label}
     </span>
   );

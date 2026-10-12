@@ -4,6 +4,7 @@ import { Asset, Warehouse, Project, Profile } from '../types';
 import { StatusBadges } from './StatusBadges';
 import { formatPlotCode } from '../lib/assetIdentifier';
 import { getAreaSubLabel } from '../constants/assetTypes';
+import { canBulkTransferAssets } from '../lib/permissions';
 import { BulkWarehouseModal } from './BulkWarehouseModal';
 import { BulkDeleteConfirmModal } from './BulkDeleteConfirmModal';
 import {
@@ -35,7 +36,7 @@ export interface AssetTableProps {
   isFetching?: boolean;
   warehouses: Warehouse[];
   projects: Project[];
-  currentUser?: Profile | { id: string; email?: string; full_name?: string } | null;
+  currentUser?: Profile | { id: string; email?: string; full_name?: string; role?: string } | null;
   // Selection state
   selectedIds?: string[];
   onSelectionChange?: (selectedIds: string[]) => void;
@@ -55,6 +56,7 @@ export interface AssetTableProps {
   // Bulk action hooks
   onBulkEdit?: () => void;
   onBulkRequest?: () => void;
+  onBulkTransferWarehouse?: () => void;
   onBulkTransferOwnership?: () => void;
   onExportExcel?: () => void;
   onRefreshData?: () => void;
@@ -83,6 +85,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
   canTransfer,
   onBulkEdit,
   onBulkRequest,
+  onBulkTransferWarehouse,
   onBulkTransferOwnership,
   onExportExcel,
   onRefreshData,
@@ -109,6 +112,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
     const idSet = new Set(selectedIds);
     return assets.filter(a => idSet.has(a.id));
   }, [assets, selectedIds]);
+
+  const isAdmin = ['admin', 'super_admin'].includes(currentUser?.role || '');
+  const canTransferWarehouse = Boolean(onBulkTransferWarehouse && canBulkTransferAssets(currentUser, selectedAssets));
 
   // Checkbox Select All for current page
   const isAllPageSelected = assets.length > 0 && assets.every(a => selectedIds.includes(a.id));
@@ -164,7 +170,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
         )}
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-850 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+            <tr className="bg-slate-50  border-b border-slate-200  text-xs font-semibold text-slate-600  uppercase tracking-wider whitespace-nowrap">
               {/* CỘT CHECKBOX ĐẦU TIÊN BÊN TRÁI */}
               <th className={`${rowPadding} w-10 min-w-[40px] text-center whitespace-nowrap`}>
                 <input
@@ -175,7 +181,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                     if (el) el.indeterminate = isSomePageSelected;
                   }}
                   onChange={handleSelectAll}
-                  className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                  className="rounded border-slate-300  text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
                   title={isAllPageSelected ? 'Bỏ chọn trang này' : 'Chọn tất cả trang này'}
                 />
               </th>
@@ -188,12 +194,12 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               <th className={`${rowPadding} min-w-[140px] whitespace-nowrap`}>Trạng Thái</th>
               <th className={`${rowPadding} min-w-[150px] whitespace-nowrap`}>Thế Chấp & Ngân Hàng</th>
               {/* CỘT THAO TÁC THU GỌN w-[80px] */}
-              <th className={`${rowPadding} w-[80px] min-w-[80px] max-w-[80px] text-center sticky right-0 z-20 !bg-slate-100 dark:!bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border-l border-slate-200 dark:border-slate-800 uppercase tracking-wider text-xs whitespace-nowrap shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
+              <th className={`${rowPadding} w-[80px] min-w-[80px] max-w-[80px] text-center sticky right-0 z-20 !bg-slate-100  text-slate-700  font-semibold border-l border-slate-200  uppercase tracking-wider text-xs whitespace-nowrap shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                 Thao tác
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
+          <tbody className="divide-y divide-slate-200  text-slate-700  text-xs sm:text-sm">
             {assets.map((asset) => {
               const isSelected = selectedIds.includes(asset.id);
               const isOverdue = isAssetOverdue(asset);
@@ -212,9 +218,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               return (
                 <tr
                   key={asset.id}
-                  className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors ${
-                    isSelected ? 'bg-blue-50/60 dark:bg-blue-950/40' : ''
-                  } ${isOverdue ? 'bg-rose-50/30 dark:bg-rose-950/30' : ''}`}
+                  className={`hover:bg-slate-50/80  transition-colors ${
+                    isSelected ? 'bg-blue-50/60 ' : ''
+                  } ${isOverdue ? 'bg-rose-50/30 ' : ''}`}
                 >
                   {/* CỘT CHECKBOX CHỌN TỪNG DÒNG */}
                   <td className={`${rowPadding} w-10 min-w-[40px] text-center`}>
@@ -222,14 +228,14 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => handleToggleSelect(asset.id)}
-                      className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
+                      className="rounded border-slate-300  text-blue-600 focus:ring-blue-500 cursor-pointer w-4 h-4"
                     />
                   </td>
 
                   {/* Số GCN & Mã TSĐB */}
                   <td className={`${rowPadding} min-w-[170px]`}>
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-slate-100">
-                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">{asset.certificate_no}</span>
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900 ">
+                      <span className="text-sm font-bold text-slate-900  tracking-tight">{asset.certificate_no}</span>
                       {asset.scan_file_url && onPreviewDoc && (
                         <button
                           type="button"
@@ -240,55 +246,55 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                               title: `Bản scan GCN ${asset.certificate_no}`,
                             })
                           }
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                          className="text-blue-600  hover:text-blue-800  transition-colors cursor-pointer"
                           title="Xem bản scan tài liệu"
                         >
                           <FileText className="w-3.5 h-3.5" />
                         </button>
                       )}
                       {asset.certificate_group === 'so_lon' ? (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 whitespace-nowrap">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50  text-purple-700  border border-purple-200  whitespace-nowrap">
                           Sổ lớn
                         </span>
                       ) : (
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                        <span className="text-[10px] text-slate-400  whitespace-nowrap">
                           Phân lô
                         </span>
                       )}
                       {asset.duplicate_ack_reason && (
                         <span
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap cursor-help dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap cursor-help   "
                           title={`Trùng số GCN (đã xác nhận)\nLý do: ${asset.duplicate_ack_reason}\nNgười xác nhận: ${asset.duplicate_acknowledger?.full_name || asset.duplicate_ack_by || 'Chưa rõ'}\nThời điểm: ${asset.duplicate_ack_at ? new Date(asset.duplicate_ack_at).toLocaleString('vi-VN') : '-'}`}
                         >
-                          <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <AlertTriangle className="w-3 h-3 text-amber-600  shrink-0" />
                           Trùng số GCN (đã xác nhận)
                         </span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 tracking-tight" title={asset.asset_code || ''}>
+                      <span className="font-mono text-[11px] text-slate-500  tracking-tight" title={asset.asset_code || ''}>
                         {asset.asset_code || '-'}
                       </span>
                       {asset.asset_code && (
                         <button
                           type="button"
                           onClick={(e) => handleCopy(asset.asset_code!, e)}
-                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                          className="text-slate-400 hover:text-slate-600  transition-colors cursor-pointer"
                           title="Sao chép mã TSĐB"
                         >
                           {copiedCode === asset.asset_code ? (
-                            <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                            <Check className="w-3 h-3 text-emerald-600 " />
                           ) : (
                             <Copy className="w-3 h-3" />
                           )}
                         </button>
                       )}
-                      <span className="inline-block px-1 py-0.2 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <span className="inline-block px-1 py-0.2 rounded text-[10px] font-semibold bg-slate-100  text-slate-500  whitespace-nowrap">
                         {asset.collateral_type || 'BDS'}
                       </span>
                       {asset.asset_type && (
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[90px]" title={asset.asset_type}>
+                        <span className="text-[10px] text-slate-400  truncate max-w-[90px]" title={asset.asset_type}>
                           · {asset.asset_type}
                         </span>
                       )}
@@ -297,13 +303,13 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
                   {/* Dự Án / Kho */}
                   <td className={`${rowPadding} min-w-[150px]`}>
-                    <div className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                    <div className="font-medium text-slate-800  flex items-center gap-1">
                       <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <span className="truncate max-w-[160px]" title={asset.projects?.name || '-'}>
                         {asset.projects?.name || '-'}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                    <div className="text-[11px] text-slate-500  flex items-center gap-1 mt-0.5">
                       <WarehouseIcon className="w-3 h-3 text-slate-400 shrink-0" />
                       <span className="truncate max-w-[160px]" title={asset.warehouses?.name || '-'}>
                         {asset.warehouses?.name || '-'}
@@ -313,12 +319,12 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
                   {/* Dự Án KD / Lô KD */}
                   <td className={`${rowPadding} min-w-[140px]`}>
-                    <div className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[150px]" title={asset.business_project_name || '-'}>
+                    <div className="font-medium text-slate-800  truncate max-w-[150px]" title={asset.business_project_name || '-'}>
                       {asset.business_project_name || '-'}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    <div className="text-[11px] text-slate-500  mt-0.5">
                       {asset.business_plot_code ? (
-                        <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-medium border border-amber-200/60 dark:border-amber-800 whitespace-nowrap">
+                        <span className="px-1.5 py-0.5 rounded bg-amber-50  text-amber-800  font-medium border border-amber-200/60  whitespace-nowrap">
                           Lô KD: {asset.business_plot_code}
                         </span>
                       ) : (
@@ -329,20 +335,20 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
                   {/* Mã Lô PL & Thửa/Tờ */}
                   <td className={`${rowPadding} min-w-[140px]`}>
-                    <div className="font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                    <div className="font-semibold text-slate-800  whitespace-nowrap">
                       {formatPlotCode(asset.legal_lot_code)}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 whitespace-nowrap">
-                      Thửa: <span className="text-slate-700 dark:text-slate-300">{asset.land_lot_no || '-'}</span> · Tờ:{' '}
-                      <span className="text-slate-700 dark:text-slate-300">{asset.map_sheet_no || '-'}</span>
+                    <div className="text-[11px] text-slate-500  mt-0.5 whitespace-nowrap">
+                      Thửa: <span className="text-slate-700 ">{asset.land_lot_no || '-'}</span> · Tờ:{' '}
+                      <span className="text-slate-700 ">{asset.map_sheet_no || '-'}</span>
                     </div>
                   </td>
 
                   {/* Diện tích */}
-                  <td className={`${rowPadding} min-w-[100px] text-right font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap`}>
+                  <td className={`${rowPadding} min-w-[100px] text-right font-medium text-slate-800  whitespace-nowrap`}>
                     <div>{asset.area ? `${Number(asset.area).toLocaleString('vi-VN')} m²` : '-'}</div>
                     {asset.area && asset.asset_type && (
-                      <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                      <div className="text-[10px] text-slate-400  font-normal">
                         {getAreaSubLabel(asset.asset_type)}
                       </div>
                     )}
@@ -350,7 +356,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
 
                   {/* Chủ Sở Hữu */}
                   <td className={`${rowPadding} min-w-[160px]`}>
-                    <div className="font-medium text-slate-900 dark:text-slate-100 truncate max-w-[170px]" title={ownerName}>
+                    <div className="font-medium text-slate-900  truncate max-w-[170px]" title={ownerName}>
                       {ownerName}
                     </div>
                     <div className="flex items-center gap-1 mt-0.5 whitespace-nowrap">
@@ -358,15 +364,15 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                         <span
                           className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                             asset.current_owner_role === 'cdt'
-                              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                              : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                              ? 'bg-indigo-50  text-indigo-700  border border-indigo-200 '
+                              : 'bg-emerald-50  text-emerald-700  border border-emerald-200 '
                           }`}
                         >
                           {ownerRole}
                         </span>
                       )}
                       {asset.current_owner_entity?.company_code && (
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                        <span className="text-[10px] text-slate-400  font-mono">
                           ({asset.current_owner_entity.company_code})
                         </span>
                       )}
@@ -383,7 +389,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                       showMortgage={false}
                     />
                     {isOverdue && (
-                      <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                      <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-rose-600  whitespace-nowrap">
                         <AlertTriangle className="w-3 h-3 shrink-0" />
                         <span>Quá hạn trả mượn</span>
                       </div>
@@ -395,39 +401,39 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                     {asset.mortgage_status === 'mortgaged' ? (
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 whitespace-nowrap">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-50  text-rose-700  border border-rose-200  whitespace-nowrap">
                             Đang thế chấp
                           </span>
                           {asset.mortgage_bank && (
-                            <span className="font-semibold text-slate-900 dark:text-slate-100 text-xs truncate max-w-[130px]" title={asset.mortgage_bank}>
+                            <span className="font-semibold text-slate-900  text-xs truncate max-w-[130px]" title={asset.mortgage_bank}>
                               {asset.mortgage_bank}
                             </span>
                           )}
                         </div>
                         {asset.mortgage_unit && (
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[150px]" title={asset.mortgage_unit}>
+                          <div className="text-[11px] text-slate-500  truncate max-w-[150px]" title={asset.mortgage_unit}>
                             ĐV: {asset.mortgage_unit}
                           </div>
                         )}
                         {asset.collateral_value && (
-                          <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                          <div className="text-[11px] font-semibold text-emerald-700  whitespace-nowrap">
                             {Number(asset.collateral_value).toLocaleString('vi-VN')} đ
                           </div>
                         )}
                       </div>
                     ) : (
-                      <span className="text-slate-400 dark:text-slate-600 text-xs" title="Chưa thế chấp">—</span>
+                      <span className="text-slate-400  text-xs" title="Chưa thế chấp">—</span>
                     )}
                   </td>
 
                   {/* CỘT THAO TÁC CỐ ĐỊNH THU GỌN w-[80px] - CHỈ 2 NÚT (Eye + Radix DropdownMenu) */}
-                  <td className={`${rowPadding} w-[80px] min-w-[80px] max-w-[80px] text-center whitespace-nowrap sticky right-0 z-10 ${isSelected ? '!bg-blue-50 dark:!bg-blue-950/80' : '!bg-white dark:!bg-slate-900'} text-slate-600 dark:text-slate-400 border-l border-slate-200 dark:border-slate-800 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
+                  <td className={`${rowPadding} w-[80px] min-w-[80px] max-w-[80px] text-center whitespace-nowrap sticky right-0 z-10 ${isSelected ? '!bg-blue-50 ' : '!bg-surface '} text-slate-600  border-l border-slate-200  shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                     <div className="flex items-center justify-center gap-1">
                       {/* Nút 1: Xem chi tiết */}
                       <button
                         type="button"
                         onClick={() => onViewDetail(asset)}
-                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-500  hover:text-blue-600  hover:bg-slate-100  rounded-lg transition-colors cursor-pointer"
                         title="Xem chi tiết đầy đủ GCN"
                       >
                         <Eye className="w-4 h-4" />
@@ -438,7 +444,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                         <DropdownMenu.Trigger asChild>
                           <button
                             type="button"
-                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer data-[state=open]:bg-blue-50 dark:data-[state=open]:bg-slate-800 data-[state=open]:text-blue-600 dark:data-[state=open]:text-blue-400 outline-none"
+                            className="p-1.5 rounded-lg text-slate-500  hover:text-slate-800  hover:bg-slate-100  transition-colors cursor-pointer data-[state=open]:bg-blue-50  data-[state=open]:text-blue-600  outline-none"
                             title="Thao tác khác"
                           >
                             <MoreHorizontal className="w-4 h-4" />
@@ -451,13 +457,13 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                             sideOffset={4}
                             avoidCollisions={true}
                             collisionPadding={10}
-                            className="z-[9999] min-w-[190px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 py-1.5 text-xs text-slate-700 dark:text-slate-300 animate-in fade-in zoom-in-95 duration-100 outline-none"
+                            className="z-[9999] min-w-[190px] bg-surface  rounded-xl shadow-2xl border border-slate-200  py-1.5 text-xs text-slate-700  animate-in fade-in zoom-in-95 duration-100 outline-none"
                           >
                             {/* Gia hạn mượn */}
                             {asset.custody_status === 'checked_out' && onExtend && (
                               <DropdownMenu.Item
                                 onSelect={() => onExtend(asset)}
-                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 transition-colors cursor-pointer outline-none select-none"
+                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50  text-slate-700  hover:text-amber-700  transition-colors cursor-pointer outline-none select-none"
                               >
                                 <CalendarClock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                                 <span>Gia hạn mượn</span>
@@ -468,7 +474,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                             {onTransfer && (!canTransfer || canTransfer(asset)) && (
                               <DropdownMenu.Item
                                 onSelect={() => onTransfer(asset)}
-                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors cursor-pointer outline-none select-none"
+                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50  text-slate-700  hover:text-indigo-700  transition-colors cursor-pointer outline-none select-none"
                               >
                                 <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                                 <span>Chuyển quyền sở hữu</span>
@@ -479,7 +485,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                             {onHistory && (
                               <DropdownMenu.Item
                                 onSelect={() => onHistory(asset)}
-                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors cursor-pointer outline-none select-none"
+                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50  text-slate-700  hover:text-cyan-700  transition-colors cursor-pointer outline-none select-none"
                               >
                                 <History className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                                 <span>Lịch sử luân chuyển</span>
@@ -490,7 +496,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                             {onAudit && (
                               <DropdownMenu.Item
                                 onSelect={() => onAudit(asset)}
-                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-400 transition-colors cursor-pointer outline-none select-none"
+                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50  text-slate-700  hover:text-teal-700  transition-colors cursor-pointer outline-none select-none"
                               >
                                 <ShieldCheck className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                                 <span>Kiểm toán thay đổi</span>
@@ -501,7 +507,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                             {onEdit && (!canEdit || canEdit(asset)) && (
                               <DropdownMenu.Item
                                 onSelect={() => onEdit(asset)}
-                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 transition-colors cursor-pointer outline-none select-none"
+                                className="px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50  text-slate-700  hover:text-blue-700  transition-colors cursor-pointer outline-none select-none"
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                                 <span>Chỉnh sửa thông tin</span>
@@ -511,10 +517,10 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                             {/* Xóa GCN */}
                             {onDelete && canDelete && (
                               <>
-                                <DropdownMenu.Separator className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                                <DropdownMenu.Separator className="h-px bg-slate-100  my-1" />
                                 <DropdownMenu.Item
                                   onSelect={() => onDelete(asset)}
-                                  className="px-3 py-2 flex items-center gap-2.5 hover:bg-red-50 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 transition-colors cursor-pointer outline-none select-none font-medium"
+                                  className="px-3 py-2 flex items-center gap-2.5 hover:bg-red-50  text-red-600  transition-colors cursor-pointer outline-none select-none font-medium"
                                 >
                                   <Trash2 className="w-3.5 h-3.5 text-red-500 shrink-0" />
                                   <span>Xóa GCN này</span>
@@ -537,12 +543,12 @@ export const AssetTable: React.FC<AssetTableProps> = ({
       {selectedIds.length > 0 && (
         <div
           id="bulk-action-floating-bar"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl text-slate-800 dark:text-slate-200 py-2 px-4 flex items-center flex-nowrap whitespace-nowrap gap-2 animate-in slide-in-from-bottom-5 duration-200 max-w-[95vw] overflow-x-auto"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-surface/95  backdrop-blur-md border border-slate-200  shadow-2xl rounded-2xl text-slate-800  py-2 px-4 flex items-center flex-nowrap whitespace-nowrap gap-2 animate-in slide-in-from-bottom-5 duration-200 max-w-[95vw] overflow-x-auto"
         >
           {/* Badge hiển thị số lượng */}
-          <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 text-xs whitespace-nowrap shrink-0">
-            <CheckSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span>Đã chọn <strong className="font-bold text-blue-800 dark:text-blue-200">{selectedIds.length}</strong></span>
+          <div className="flex items-center gap-1.5 bg-blue-50  text-blue-700  font-semibold px-3 py-1.5 rounded-lg border border-blue-200  text-xs whitespace-nowrap shrink-0">
+            <CheckSquare className="w-3.5 h-3.5 text-blue-600  shrink-0" />
+            <span>Đã chọn <strong className="font-bold text-blue-800 ">{selectedIds.length}</strong></span>
           </div>
 
           {/* Nút [🗑️ Xóa hàng loạt] (Đỏ) */}
@@ -556,16 +562,33 @@ export const AssetTable: React.FC<AssetTableProps> = ({
             <span>Xóa hàng loạt</span>
           </button>
 
-          {/* Nút [🔄 Chuyển kho] (Xanh dương chính) */}
-          <button
-            type="button"
-            id="btn-bulk-transfer-warehouse"
-            onClick={() => setIsBulkWarehouseOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Chuyển kho</span>
-          </button>
+          {/* Nút [🔄 Luân chuyển kho] (Xanh dương chính) */}
+          {canTransferWarehouse && (
+            <button
+              type="button"
+              id="btn-bulk-transfer-warehouse-action"
+              onClick={onBulkTransferWarehouse}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-accent-ink bg-accent hover:brightness-95 active:brightness-90 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              title="Lập lệnh xuất luân chuyển kho cho các GCN đã chọn"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              <span>Luân chuyển kho ({selectedIds.length})</span>
+            </button>
+          )}
+
+          {/* Nút [⚠️ Sửa kho (không phiếu)] (Tông màu cam cảnh báo, CHỈ hiện cho admin/super_admin) */}
+          {isAdmin && (
+            <button
+              type="button"
+              id="btn-bulk-correct-warehouse"
+              onClick={() => setIsBulkWarehouseOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-950 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 border border-amber-600/30 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              title="Sửa nhập nhầm kho không qua phiếu (chỉ dành cho quản trị viên)"
+            >
+              <WarehouseIcon className="w-3.5 h-3.5 text-amber-950" />
+              <span>Sửa kho (không phiếu)</span>
+            </button>
+          )}
 
           {/* Nút [⚖️ Chuyển quyền] -> Nút phụ */}
           {onBulkTransferOwnership && (
@@ -573,9 +596,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               type="button"
               id="btn-bulk-transfer-ownership"
               onClick={onBulkTransferOwnership}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100  text-slate-700  hover:bg-slate-200  border border-slate-200  rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
             >
-              <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600 " />
               <span>Chuyển quyền</span>
             </button>
           )}
@@ -586,9 +609,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               type="button"
               id="btn-bulk-edit-bar"
               onClick={onBulkEdit}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100  text-slate-700  hover:bg-slate-200  border border-slate-200  rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Edit3 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <Edit3 className="w-3.5 h-3.5 text-amber-600 " />
               <span>Sửa hàng loạt</span>
             </button>
           )}
@@ -599,9 +622,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               type="button"
               id="btn-bulk-request-bar"
               onClick={onBulkRequest}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100  text-slate-700  hover:bg-slate-200  border border-slate-200  rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <Layers className="w-3.5 h-3.5 text-blue-600 " />
               <span>Yêu cầu kho</span>
             </button>
           )}
@@ -612,9 +635,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               type="button"
               id="btn-bulk-export-bar"
               onClick={onExportExcel}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100  text-slate-700  hover:bg-slate-200  border border-slate-200  rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <Download className="w-3.5 h-3.5 text-emerald-600 " />
               <span>Xuất Excel</span>
             </button>
           )}
@@ -624,7 +647,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
             type="button"
             id="btn-bulk-deselect"
             onClick={handleDeselectAll}
-            className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 px-2 py-1.5 text-xs font-medium rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap shrink-0 ml-1"
+            className="inline-flex items-center gap-1 text-slate-500  hover:text-slate-800  px-2 py-1.5 text-xs font-medium rounded-lg hover:bg-slate-100  transition-colors cursor-pointer whitespace-nowrap shrink-0 ml-1"
             title="Hủy chọn tất cả"
           >
             <X className="w-3.5 h-3.5" />

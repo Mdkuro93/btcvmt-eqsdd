@@ -746,7 +746,7 @@ export function exportExecutionReport(
     exportData.push([]);
     exportData.push([
       'Ghi chú:',
-      'Nếu phát hiện đã nhập nhầm dự án hoặc loại tài sản sau khi tạo: mở chi tiết GCN > Tái cấp mã. Nhập nhầm kho: dùng Chuyển kho hoặc Luân chuyển kho.',
+      'Nếu phát hiện đã nhập nhầm dự án hoặc loại tài sản sau khi tạo: mở chi tiết GCN > Tái cấp mã. Nhập nhầm kho: dùng Luân chuyển kho (người dùng thường) hoặc Sửa kho không phiếu (quản trị viên).',
     ]);
   }
 

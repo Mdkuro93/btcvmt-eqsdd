@@ -135,7 +135,7 @@ export const ActivityLogs: React.FC = () => {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <BookText className="w-6 h-6 text-[#1E3A8A]" /> Sổ cái & Nhật ký biến động kho GCN
+            <BookText className="w-6 h-6 text-blue-700" /> Sổ cái & Nhật ký biến động kho GCN
           </h1>
           <p className="text-xs text-gray-500 mt-1">
             Theo dõi dòng luân chuyển, chứng từ PN/PX và tình trạng lưu trữ sổ đỏ
@@ -144,16 +144,16 @@ export const ActivityLogs: React.FC = () => {
         <button
           onClick={exportExcel}
           disabled={logs.length === 0}
-          className="inline-flex items-center px-4 py-2 text-xs font-semibold rounded-lg shadow-sm text-white bg-[#1E3A8A] hover:bg-blue-800 disabled:opacity-50 transition-colors cursor-pointer"
+          className="inline-flex items-center px-4 py-2 text-xs font-semibold rounded-lg shadow-sm text-accent-ink bg-accent hover:brightness-95 disabled:opacity-50 transition-colors cursor-pointer"
         >
           <Download className="w-4 h-4 mr-1.5" /> Xuất Sổ cái Excel
         </button>
       </div>
 
-      <form onSubmit={handleFilter} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
+      <form onSubmit={handleFilter} className="bg-surface p-4 rounded-xl shadow-sm border border-gray-200 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Dự án</label>
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-white cursor-pointer">
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-surface cursor-pointer">
             <option value="">Tất cả dự án</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -163,7 +163,7 @@ export const ActivityLogs: React.FC = () => {
 
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Kho lưu trữ</label>
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-white cursor-pointer">
+          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-surface cursor-pointer">
             <option value="">Tất cả kho</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
@@ -173,7 +173,7 @@ export const ActivityLogs: React.FC = () => {
 
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Loại nghiệp vụ</label>
-          <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-white cursor-pointer">
+          <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-surface cursor-pointer">
             <option value="">Tất cả nghiệp vụ</option>
             <option value="Nhập sổ">Nhập sổ</option>
             <option value="Nhập sổ (Tạo mới)">Nhập sổ (Tạo mới)</option>
@@ -192,15 +192,15 @@ export const ActivityLogs: React.FC = () => {
 
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Từ ngày</label>
-          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-white" />
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-surface" />
         </div>
 
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Đến ngày</label>
-          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-white" />
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-surface" />
         </div>
 
-        <button type="submit" className="px-4 py-2 text-xs font-bold rounded-lg bg-[#1E3A8A] text-white hover:bg-blue-800 transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-1.5 h-[36px]">
+        <button type="submit" className="px-4 py-2 text-xs font-bold rounded-lg bg-accent text-accent-ink hover:brightness-95 transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-1.5 h-[36px]">
           <Filter className="w-3.5 h-3.5" /> Lọc dữ liệu
         </button>
 
@@ -213,7 +213,7 @@ export const ActivityLogs: React.FC = () => {
         </button>
       </form>
 
-      <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-surface shadow-sm border border-gray-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-xs">
             <thead className="bg-gray-50 font-semibold text-gray-700">
@@ -267,7 +267,7 @@ export const ActivityLogs: React.FC = () => {
                             <span className={`font-mono font-bold px-2 py-0.5 rounded border ${
                               isCancelled
                                 ? 'line-through text-red-500 bg-red-50/80 border-red-200'
-                                : 'text-[#1E3A8A] bg-blue-50/80 border-blue-200'
+                                : 'text-blue-700 bg-blue-50/80 border-blue-200'
                             }`}>
                               {l.document_no}
                             </span>

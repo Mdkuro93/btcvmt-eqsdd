@@ -11,10 +11,12 @@ import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
+  Tag,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BulkUpdateMode, BulkRowResult } from '../../api/bulkUpdate';
 import { BULK_MODES_CONFIG, exportExecutionReport } from '../../utils/bulkUpdateExcel';
+import { ReassignByVoucherModal } from '../ReassignByVoucherModal';
 
 interface Props {
   selectedMode: BulkUpdateMode;
@@ -40,12 +42,14 @@ export const ExecutionStep: React.FC<Props> = ({
   const navigate = useNavigate();
   const config = BULK_MODES_CONFIG[selectedMode];
   const [currentPage, setCurrentPage] = useState(1);
+  const [isReassignVoucherModalOpen, setIsReassignVoucherModalOpen] = useState(false);
   const pageSize = 50;
 
   const successRows = executedResults.filter(
     (r) => r.status === 'applied' || r.status === 'created' || r.status === 'ok'
   );
   const failedRows = executedResults.filter((r) => r.status === 'error');
+  const createdVoucherCode = executedResults.find((r) => r.voucherCode && r.voucherCode !== '-')?.voucherCode || '';
 
   const totalPages = Math.max(1, Math.ceil(executedResults.length / pageSize));
   const currentRows = executedResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -355,15 +359,29 @@ export const ExecutionStep: React.FC<Props> = ({
               </div>
             )}
 
-            {/* Hướng dẫn khi tạo thành công (Prompt 19 Mục 3) */}
+            {/* Hướng dẫn khi tạo thành công (Prompt 19 Mục 3 + Prompt 20) */}
             {isCreate && successRows.length > 0 && (
               <div className="mt-4 p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-start gap-3 text-blue-950 text-xs">
                 <HelpCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold text-blue-900">Hướng dẫn sau khi thêm mới GCN:</p>
-                  <p className="mt-1 leading-relaxed">
-                    Nếu phát hiện đã nhập nhầm dự án hoặc loại tài sản sau khi tạo: mở chi tiết GCN &gt; Tái cấp mã. Nhập nhầm kho: dùng Chuyển kho hoặc Luân chuyển kho.
-                  </p>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <p className="font-bold text-blue-900">Hướng dẫn sau khi thêm mới GCN:</p>
+                    <p className="mt-1 leading-relaxed">
+                      Nếu phát hiện đã nhập nhầm dự án hoặc loại tài sản sau khi tạo: nhầm cả lô ➔ dùng <strong>Tái cấp mã theo phiếu nhập</strong>; nhầm một vài GCN ➔ mở chi tiết GCN &gt; <strong>Tái cấp mã</strong>. Nhập nhầm kho: dùng <strong>Luân chuyển kho</strong> (người dùng thường) hoặc <strong>Sửa kho không phiếu</strong> (quản trị viên).
+                    </p>
+                  </div>
+                  {createdVoucherCode && (
+                    <div className="pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsReassignVoucherModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Tag className="w-3.5 h-3.5" />
+                        <span>Tái cấp cả phiếu này ({createdVoucherCode})</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -406,6 +424,15 @@ export const ExecutionStep: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* Modal Tái cấp mã theo phiếu nhập */}
+      {createdVoucherCode && isReassignVoucherModalOpen && (
+        <ReassignByVoucherModal
+          isOpen={isReassignVoucherModalOpen}
+          onClose={() => setIsReassignVoucherModalOpen(false)}
+          initialVoucherCode={createdVoucherCode}
+        />
+      )}
     </div>
   );
 };

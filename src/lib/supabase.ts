@@ -35,9 +35,35 @@ export const supabaseUrl = SUPABASE_URL;
 export const supabaseAnonKey = SUPABASE_ANON_KEY;
 export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-// Initialize Supabase Client Singleton
+import { AUTH_STORAGE_KEY } from '../constants/auth';
+
+// Dọn dẹp các khóa xác thực cũ lưu trong localStorage (chỉ chạy 1 lần khi ứng dụng khởi động)
+if (typeof window !== 'undefined' && window.localStorage) {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        ((key.startsWith('sb-') && key.endsWith('-auth-token')) ||
+          key === 'btcvmt_auth_user_id' ||
+          key === 'supabase.auth.token' ||
+          key === AUTH_STORAGE_KEY)
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // Bỏ qua nếu môi trường hạn chế localStorage
+  }
+}
+
+// Initialize Supabase Client Singleton với sessionStorage để phiên chỉ sống theo tab/cửa sổ trình duyệt
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
+    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+    storageKey: AUTH_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,

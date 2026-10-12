@@ -130,7 +130,7 @@ export const AdminAreas: React.FC = () => {
     <div className="space-y-6 max-w-4xl">
       {/* Form thêm mới */}
       <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-        <h3 className="text-xs font-bold uppercase text-[#1E3A8A] mb-3 flex items-center gap-1.5">
+        <h3 className="text-xs font-bold uppercase text-blue-700 mb-3 flex items-center gap-1.5">
           <Plus className="w-4 h-4" /> Thêm Địa bàn hành chính mới
         </h3>
         <form onSubmit={handleAddArea} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -141,7 +141,7 @@ export const AdminAreas: React.FC = () => {
               value={newAreaName}
               onChange={(e) => setNewAreaName(e.target.value)}
               placeholder="VD: Khánh Hòa (Nha Trang), Long An..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div className="sm:col-span-3">
@@ -149,7 +149,7 @@ export const AdminAreas: React.FC = () => {
             <select
               value={newAreaRegionId}
               onChange={(e) => setNewAreaRegionId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">-- Chọn Vùng --</option>
               {regions.map((r) => (
@@ -162,7 +162,7 @@ export const AdminAreas: React.FC = () => {
             <select
               value={newAreaProvinceCode}
               onChange={(e) => setNewAreaProvinceCode(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">-- Mã --</option>
               {PROVINCE_CODES.map((p) => (
@@ -173,7 +173,7 @@ export const AdminAreas: React.FC = () => {
           <div className="sm:col-span-2 flex items-end">
             <button 
               type="submit" 
-              className="w-full h-[38px] bg-[#1E3A8A] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 flex items-center justify-center gap-1 shadow-xs transition-colors cursor-pointer"
+              className="w-full h-[38px] bg-accent text-accent-ink rounded-lg text-sm font-semibold hover:brightness-95 flex items-center justify-center gap-1 shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Thêm
             </button>
@@ -190,7 +190,7 @@ export const AdminAreas: React.FC = () => {
             value={areaSearch}
             onChange={(e) => setAreaSearch(e.target.value)}
             placeholder="Tìm kiếm địa bàn theo tên..."
-            className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50/50 focus:bg-white"
+            className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg bg-gray-50/50 focus:bg-surface"
           />
           {areaSearch && (
             <button onClick={() => setAreaSearch('')} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
@@ -231,7 +231,7 @@ export const AdminAreas: React.FC = () => {
             return (
               <div key={a.id} className="p-4 flex items-center justify-between hover:bg-gray-50/80 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1E3A8A] flex items-center justify-center font-bold text-xs">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">
                     <MapPin className="w-4 h-4" />
                   </div>
                   <div>
@@ -262,7 +262,7 @@ export const AdminAreas: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setEditingArea({ id: a.id, name: a.name, region_id: a.region_id, province_code: a.province_code || '' })}
-                    className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
+                    className="p-1.5 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
                     title="Sửa địa bàn"
                   >
                     <Edit2 className="w-4 h-4" />
@@ -289,10 +289,10 @@ export const AdminAreas: React.FC = () => {
       {/* Modal: Edit Area */}
       {editingArea && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
+          <div className="bg-surface rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-[#1E3A8A]" /> Chỉnh sửa Địa bàn
+                <Edit2 className="w-4 h-4 text-blue-700" /> Chỉnh sửa Địa bàn
               </h3>
               <button onClick={() => setEditingArea(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
@@ -314,7 +314,7 @@ export const AdminAreas: React.FC = () => {
                 <select
                   value={editingArea.region_id}
                   onChange={(e) => setEditingArea({ ...editingArea, region_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface"
                   required
                 >
                   <option value="">-- Chọn Vùng --</option>
@@ -328,7 +328,7 @@ export const AdminAreas: React.FC = () => {
                 <select
                   value={editingArea.province_code}
                   onChange={(e) => setEditingArea({ ...editingArea, province_code: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-surface"
                   required
                 >
                   <option value="">-- Chọn Mã tỉnh/thành --</option>
@@ -347,7 +347,7 @@ export const AdminAreas: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1E3A8A] text-white text-xs font-semibold rounded-lg hover:bg-blue-800 cursor-pointer"
+                  className="px-4 py-2 bg-accent text-accent-ink text-xs font-semibold rounded-lg hover:brightness-95 cursor-pointer"
                 >
                   Lưu thay đổi
                 </button>

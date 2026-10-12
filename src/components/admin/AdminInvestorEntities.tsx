@@ -236,7 +236,7 @@ export const AdminInvestorEntities: React.FC = () => {
             placeholder="Tìm theo tên pháp nhân, mã doanh nghiệp hoặc ghi chú..."
             value={investorSearch}
             onChange={e => setInvestorSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600 focus:border-rose-600 bg-white"
+            className="w-full pl-9 pr-8 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600 focus:border-rose-600 bg-surface"
           />
           {investorSearch && (
             <button
@@ -265,7 +265,7 @@ export const AdminInvestorEntities: React.FC = () => {
       </div>
 
       {/* Table List */}
-      <div className="border border-gray-200 rounded-xl overflow-hidden shadow-xs bg-white">
+      <div className="border border-gray-200 rounded-xl overflow-hidden shadow-xs bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-gray-600">
             <thead className="bg-gray-50/90 text-gray-700 font-semibold border-b border-gray-200 uppercase tracking-wider text-[11px]">
@@ -328,7 +328,7 @@ export const AdminInvestorEntities: React.FC = () => {
                             setEditInvestorCode(ent.company_code || '');
                             setEditInvestorNote(ent.note || '');
                           }}
-                          className="p-1.5 text-gray-500 hover:text-[#1E3A8A] hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                          className="p-1.5 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition cursor-pointer"
                           title="Chỉnh sửa pháp nhân"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -360,7 +360,7 @@ export const AdminInvestorEntities: React.FC = () => {
       {/* MODAL: Thêm mới Pháp nhân CĐT/NĐT */}
       {isAddInvestorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-gray-200 space-y-4">
+          <div className="bg-surface rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-gray-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-rose-100 text-rose-700 rounded-lg">
@@ -424,7 +424,7 @@ export const AdminInvestorEntities: React.FC = () => {
                     Gợi ý định dạng chuẩn:
                   </p>
                   <p className="text-[11px] text-slate-600 leading-normal">
-                    Viết hoa, không dấu tiếng Việt, không khoảng trắng (chỉ dùng ký tự <code className="font-mono font-bold bg-white px-1 py-0.5 rounded border text-rose-800">A-Z, 0-9, _</code>). 
+                    Viết hoa, không dấu tiếng Việt, không khoảng trắng (chỉ dùng ký tự <code className="font-mono font-bold bg-surface px-1 py-0.5 rounded border text-rose-800">A-Z, 0-9, _</code>). 
                     Mã này duy nhất trong hệ thống và không được trùng lặp.
                   </p>
                 </div>
@@ -468,10 +468,10 @@ export const AdminInvestorEntities: React.FC = () => {
       {/* MODAL: Chỉnh sửa Pháp nhân CĐT/NĐT */}
       {editingInvestor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-gray-200 space-y-4">
+          <div className="bg-surface rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-gray-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-100 text-[#1E3A8A] rounded-lg">
+                <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
                   <Edit2 className="w-5 h-5" />
                 </div>
                 <div>
@@ -498,7 +498,7 @@ export const AdminInvestorEntities: React.FC = () => {
                   required
                   value={editInvestorName}
                   onChange={e => setEditInvestorName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] focus:border-[#1E3A8A]"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
@@ -522,7 +522,7 @@ export const AdminInvestorEntities: React.FC = () => {
                   type="text"
                   value={editInvestorCode}
                   onChange={e => setEditInvestorCode(e.target.value.toUpperCase().replace(/\s+/g, '_'))}
-                  className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] focus:border-[#1E3A8A] bg-gray-50/50"
+                  className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50"
                 />
                 <p className="mt-1 text-[11px] text-gray-500">
                   Gợi ý: Viết hoa, không dấu tiếng Việt, không khoảng trắng (Ví dụ: VINHOMES, VMT_INVEST, SUN_GROUP). Mã không được trùng lặp.
@@ -537,7 +537,7 @@ export const AdminInvestorEntities: React.FC = () => {
                   rows={3}
                   value={editInvestorNote}
                   onChange={e => setEditInvestorNote(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A8A] focus:border-[#1E3A8A]"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
@@ -553,7 +553,7 @@ export const AdminInvestorEntities: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSavingInvestor}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-[#1E3A8A] hover:bg-blue-800 rounded-lg shadow-sm transition flex items-center gap-2 cursor-pointer"
+                  className="px-5 py-2 text-sm font-semibold text-accent-ink bg-accent hover:brightness-95 rounded-lg shadow-sm transition flex items-center gap-2 cursor-pointer"
                 >
                   {isSavingInvestor ? 'Đang lưu...' : 'Lưu thay đổi'}
                 </button>
