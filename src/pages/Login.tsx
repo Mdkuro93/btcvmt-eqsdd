@@ -80,12 +80,12 @@ export const Login: React.FC = () => {
           <div className="w-10 h-10 rounded-[10px] bg-accent text-accent-ink flex items-center justify-center font-bold text-base" aria-hidden="true">eQ</div>
           <div>
             <div className="font-bold text-[17px]">eQSDĐ &amp; TSĐB</div>
-            <div className="text-[11px] uppercase tracking-[1.4px] text-brand-muted">Ban Tài chính · Tập đoàn VMT</div>
+            <div className="text-[11px] uppercase tracking-[1.4px] text-brand-muted font-medium">Ban Tài chính</div>
           </div>
         </div>
 
         <div className="relative max-w-[520px]">
-          <h1 className="text-[38px] leading-[1.2] font-bold tracking-tight">Quản lý GCN QSDĐ và tài sản bảo đảm trên một hệ thống</h1>
+          <h1 className="text-[38px] leading-[1.2] font-bold tracking-tight">Quản lý GCN QSDĐ và TSĐB trên một hệ thống</h1>
           <p className="mt-4 text-base text-brand-muted">Hồ sơ pháp lý, tình trạng lưu kho và biến động quyền sở hữu được theo dõi tập trung, có phân quyền theo từng vùng và kho.</p>
           <ul className="mt-7 space-y-3.5">
             {points.map(({ icon: Icon, title, text }) => (
@@ -108,8 +108,8 @@ export const Login: React.FC = () => {
 
       {/* Cột đăng nhập */}
       <section className="flex-1 min-w-[320px] px-4 sm:px-8 py-10 flex flex-col items-center justify-center">
-        <div className="w-full max-w-[420px] space-y-5">
-          <div className="flex items-center justify-between">
+        <div className="w-full max-w-[420px]">
+          <div className="flex items-center justify-between mb-5">
             <div className="lg:hidden flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-[9px] bg-accent text-accent-ink flex items-center justify-center font-bold" aria-hidden="true">eQ</div>
               <div className="font-bold">eQSDĐ &amp; TSĐB</div>
@@ -119,8 +119,8 @@ export const Login: React.FC = () => {
 
           <form onSubmit={handleLogin} className="bg-surface border border-border rounded-2xl p-8 shadow-[var(--shadow-sm)] space-y-5">
             <div>
-              <h2 className="text-[22px] font-bold tracking-tight">Đăng nhập</h2>
-              <p className="mt-1 text-sm text-muted">Dùng tên đăng nhập và mật khẩu do Quản trị viên cấp.</p>
+              <h2 className="text-[22px] font-bold tracking-tight">Chào mừng trở lại</h2>
+              <p className="mt-1.5 text-sm font-medium text-text/80 dark:text-muted">Nhập thông tin đăng nhập để tiếp tục sử dụng</p>
             </div>
 
             {errorMessage && (
@@ -186,10 +186,10 @@ export const Login: React.FC = () => {
               {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
             </button>
 
-            <p className="text-center text-[13px] text-muted">Quên mật khẩu? Liên hệ Quản trị viên để được cấp lại.</p>
+            <p className="text-center text-[13px] font-medium text-text/75 dark:text-muted">Quên mật khẩu? Liên hệ Quản trị viên để được cấp lại.</p>
           </form>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 border border-dashed border-border-strong rounded-xl text-[13px] text-muted">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 px-5 py-4 border border-dashed border-border-strong rounded-xl text-[13px] font-medium text-text/85 dark:text-muted bg-surface/40">
             <span>Chưa có tài khoản? Hồ sơ đăng ký chờ Quản trị viên duyệt.</span>
             <Link to="/register" className="text-link font-semibold hover:underline">Đăng ký tài khoản</Link>
           </div>

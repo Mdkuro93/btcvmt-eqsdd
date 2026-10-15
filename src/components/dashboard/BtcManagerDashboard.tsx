@@ -26,6 +26,8 @@ interface BtcManagerDashboardProps {
   overdueAssets: Asset[];
   pendingTransactions: any[];
   isReadOnly?: boolean;
+  /** Nhãn phạm vi dữ liệu, mặc định "Toàn Hệ Thống" */
+  scopeLabel?: string;
 }
 
 export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
@@ -34,6 +36,7 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
   overdueAssets,
   pendingTransactions,
   isReadOnly = false,
+  scopeLabel = 'Toàn Hệ Thống',
 }) => {
   // Modal states for inspecting detail assets
   const [modalState, setModalState] = useState<{
@@ -235,13 +238,13 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
 
           <div className="mt-4">
             {overdueAssets.length === 0 ? (
-              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-white/70 py-2.5 px-3 rounded-xl border border-emerald-200">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-surface/70 py-2.5 px-3 rounded-xl border border-emerald-200">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>Tuyệt vời! Không có GCN nào đang bị giữ quá hạn cam kết.</span>
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="bg-white/80 rounded-xl border border-rose-200 divide-y divide-rose-100 overflow-hidden text-xs">
+                <div className="bg-surface/80 rounded-xl border border-rose-200 divide-y divide-rose-100 overflow-hidden text-xs">
                   {overdueAssets.slice(0, 3).map(asset => {
                     const diffDays = Math.ceil(
                       (new Date().getTime() - new Date(asset.expected_return_date!).getTime()) / (1000 * 60 * 60 * 24)
@@ -284,7 +287,7 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
                     subtitle: 'Tổng hợp các Giấy chứng nhận đã quá ngày hẹn hoàn trả kho',
                     assets: overdueAssets,
                   })}
-                  className="w-full py-1.5 text-xs font-bold text-rose-700 hover:text-rose-900 bg-white/60 hover:bg-white rounded-lg border border-rose-200 transition-colors flex items-center justify-center gap-1"
+                  className="w-full py-1.5 text-xs font-bold text-rose-700 hover:text-rose-900 bg-surface/60 hover:bg-surface rounded-lg border border-rose-200 transition-colors flex items-center justify-center gap-1"
                 >
                   <span>Xem chi tiết toàn bộ {overdueAssets.length} GCN quá hạn</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -303,7 +306,7 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className={`p-2 rounded-xl ${
-                slaOverdueRequests.length > 0 ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white'
+                slaOverdueRequests.length > 0 ? 'bg-amber-600 text-accent-ink' : 'bg-accent text-accent-ink'
               }`}>
                 <Clock className="w-5 h-5" />
               </div>
@@ -321,13 +324,13 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
 
           <div className="mt-4">
             {slaOverdueRequests.length === 0 ? (
-              <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 bg-white/70 py-2.5 px-3 rounded-xl border border-blue-200">
+              <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 bg-surface/70 py-2.5 px-3 rounded-xl border border-blue-200">
                 <CheckCircle2 className="w-4 h-4 text-blue-600" />
                 <span>Tiến độ xử lý đạt chuẩn! Toàn bộ yêu cầu đều trong khung thời gian cam kết.</span>
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="bg-white/80 rounded-xl border border-amber-200 divide-y divide-amber-100 overflow-hidden text-xs">
+                <div className="bg-surface/80 rounded-xl border border-amber-200 divide-y divide-amber-100 overflow-hidden text-xs">
                   {slaOverdueRequests.slice(0, 3).map((req, i) => (
                     <div key={i} className="p-2.5 flex items-center justify-between hover:bg-amber-100/50 transition-colors">
                       <div>
@@ -352,7 +355,7 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
                 {!isReadOnly && (
                   <Link
                     to="/requests"
-                    className="w-full py-1.5 text-xs font-bold text-amber-800 hover:text-amber-950 bg-white/60 hover:bg-white rounded-lg border border-amber-200 transition-colors flex items-center justify-center gap-1"
+                    className="w-full py-1.5 text-xs font-bold text-amber-800 hover:text-amber-950 bg-surface/60 hover:bg-surface rounded-lg border border-amber-200 transition-colors flex items-center justify-center gap-1"
                   >
                     <span>Chuyển tới trang Phê duyệt để xử lý ngay</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -366,7 +369,7 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
 
       {/* 2. KHỐI 2: Khối Cơ Cấu Trạng Thái Quỹ Đất Toàn Hệ Thống (Donut Chart) */}
       <DonutChart
-        title="Cơ Cấu Trạng Thái Quỹ Đất Toàn Hệ Thống"
+        title={`Cơ Cấu Trạng Thái Quỹ Đất ${scopeLabel}`}
         subtitle="Tỷ lệ phân bổ Giấy chứng nhận đang lưu kho, thế chấp ngân hàng và đang mượn công tác"
         total={totalAllAssets}
         unit="GCN"
@@ -426,7 +429,7 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
       />
 
       {/* 3. KHỐI 3: Khối Cơ Cấu Giấy Chứng Nhận Theo Từng Dự Án */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-surface rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-blue-100 text-blue-800">
@@ -605,7 +608,7 @@ export const BtcManagerDashboard: React.FC<BtcManagerDashboardProps> = ({
         </div>
 
         {/* Bảng Dữ Liệu Chi Tiết */}
-        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="lg:col-span-7 bg-surface rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-purple-100 text-purple-800">

@@ -20,6 +20,7 @@ import {
 import { Link } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { isHighRiseAsset } from '../constants/assetTypes';
 import { BtcManagerDashboard } from '../components/dashboard/BtcManagerDashboard';
 import { WarehouseManagerDashboard } from '../components/dashboard/WarehouseManagerDashboard';
 import { DepartmentDashboard } from '../components/dashboard/DepartmentDashboard';
@@ -59,6 +60,10 @@ export const Dashboard: React.FC = () => {
     soldCount: 0,
   });
 
+  // Quản lý (supervisor): chỉ xem theo "Kho phụ trách" do admin gán -> lọc thêm ở giao diện (ngoài RLS của DB)
+  const scopeIds: string[] | null = profile?.role === 'supervisor' ? (profile.assigned_warehouse_ids || []) : null;
+  const scopeKey = scopeIds ? scopeIds.join(',') : '';
+
   const loadStats = useCallback(async () => {
     setLoading(true);
     try {
@@ -93,11 +98,54 @@ export const Dashboard: React.FC = () => {
         }),
       ]);
 
-      setTransactions(txs || []);
-      setWarehouses(whList || []);
+      const inScope = (whId?: string | null) => !scopeIds || (!!whId && scopeIds.includes(whId));
+      const scopedAssets = (detailedAssets || []).filter(a => inScope(a.warehouse_id));
+      const scopedOverdue = (overdueList || []).filter(a => inScope(a.warehouse_id));
+      const scopedTxs = scopeIds
+        ? (txs || [])
+            .map((tx: any) => ({ ...tx, items: (tx.items || []).filter((it: any) => inScope(it.asset?.warehouse_id)) }))
+            .filter((tx: any) => tx.items.length > 0)
+        : (txs || []);
+
+      setTransactions(scopedTxs);
+      setWarehouses(scopeIds ? (whList || []).filter(w => scopeIds.includes(w.id)) : (whList || []));
       setProjects(projList || []);
-      setAllAssets(detailedAssets || []);
-      setOverdueAssets(overdueList || []);
+      setAllAssets(scopedAssets);
+      setOverdueAssets(scopedOverdue);
+
+      // Số liệu tổng hợp: với vai trò bị giới hạn kho thì tính lại theo đúng kho được gán
+      let statsForCards = assetStats;
+      if (scopeIds) {
+        if (scopeIds.length === 0) {
+          statsForCards = { total: 0, inStock: 0, checkedOut: 0, mortgaged: 0, sold: 0, totalArea: 0, totalHighRiseArea: 0, activeProjectsCount: 0 };
+        } else {
+          const { data: rows, error: scopeErr } = await supabase
+            .from('assets')
+            .select('area, project_id, business_project_name, asset_type, custody_status, mortgage_status, sale_status')
+            .in('warehouse_id', scopeIds);
+          if (scopeErr) throw scopeErr;
+          const list = rows || [];
+          const projSet = new Set<string>();
+          let totalArea = 0;
+          let totalHighRiseArea = 0;
+          list.forEach((r: any) => {
+            const v = Number(r.area) || 0;
+            if (isHighRiseAsset(r.asset_type)) totalHighRiseArea += v; else totalArea += v;
+            const k = r.project_id || r.business_project_name;
+            if (k) projSet.add(k);
+          });
+          statsForCards = {
+            total: list.length,
+            inStock: list.filter((r: any) => r.custody_status === 'in_stock').length,
+            checkedOut: list.filter((r: any) => r.custody_status === 'checked_out').length,
+            mortgaged: list.filter((r: any) => r.mortgage_status === 'mortgaged').length,
+            sold: list.filter((r: any) => r.sale_status === 'sold').length,
+            totalArea,
+            totalHighRiseArea,
+            activeProjectsCount: projSet.size,
+          };
+        }
+      }
 
       let pendingTotal = 0;
       let overdueCount = 0;
@@ -110,7 +158,7 @@ export const Dashboard: React.FC = () => {
       };
 
       const warehousePendingMap: Record<string, { warehouseId: string; warehouseName: string; count: number; isCentral?: boolean }> = {};
-      (whList || []).forEach(w => {
+      (scopeIds ? (whList || []).filter(w => scopeIds.includes(w.id)) : (whList || [])).forEach(w => {
         warehousePendingMap[w.id] = {
           warehouseId: w.id,
           warehouseName: w.name,
@@ -119,9 +167,9 @@ export const Dashboard: React.FC = () => {
         };
       });
 
-      if (txs) {
+      if (scopedTxs) {
         const now = new Date();
-        txs.forEach((tx: any) => {
+        scopedTxs.forEach((tx: any) => {
           (tx.items || []).forEach((item: any) => {
             if (item.status === 'pending') {
               pendingTotal++;
@@ -146,19 +194,19 @@ export const Dashboard: React.FC = () => {
       }
 
       setSummaryData({
-        totalAssets: assetStats.total,
-        totalArea: assetStats.totalArea || 0,
-        totalHighRiseArea: assetStats.totalHighRiseArea || 0,
-        activeProjectsCount: assetStats.activeProjectsCount || 0,
+        totalAssets: statsForCards.total,
+        totalArea: statsForCards.totalArea || 0,
+        totalHighRiseArea: statsForCards.totalHighRiseArea || 0,
+        activeProjectsCount: statsForCards.activeProjectsCount || 0,
         pendingRequests: pendingTotal,
         overdueRequests: overdueCount,
         pendingByType: typeCounts,
         pendingByWarehouse: Object.values(warehousePendingMap),
-        assetsInUse: (assetStats.checkedOut || 0) + (assetStats.mortgaged || 0),
-        checkedOutCount: assetStats.checkedOut || 0,
-        mortgagedCount: assetStats.mortgaged || 0,
-        inStockCount: assetStats.inStock || 0,
-        soldCount: assetStats.sold || 0,
+        assetsInUse: (statsForCards.checkedOut || 0) + (statsForCards.mortgaged || 0),
+        checkedOutCount: statsForCards.checkedOut || 0,
+        mortgagedCount: statsForCards.mortgaged || 0,
+        inStockCount: statsForCards.inStock || 0,
+        soldCount: statsForCards.sold || 0,
       });
 
       setLastUpdated(new Date());
@@ -168,7 +216,7 @@ export const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopeKey]);
 
   useEffect(() => {
     loadStats();
@@ -250,6 +298,7 @@ export const Dashboard: React.FC = () => {
             overdueAssets={overdueAssets}
             pendingTransactions={transactions}
             isReadOnly={isSupervisorReadOnly}
+            scopeLabel={isSupervisorReadOnly ? 'Theo Kho Được Phân Công' : undefined}
           />
         ) : isWarehouseManagerGroup ? (
           <WarehouseManagerDashboard

@@ -61,22 +61,25 @@ export const Reports: React.FC = () => {
   // 1-Row Unified Active Tab: 'inventory' | 'project' | 'mortgaged_review'
   const [activeTab, setActiveTab] = useState<'inventory' | 'project' | 'mortgaged_review'>('inventory');
 
-  // Role permissions: Chỉ Admin/Quản lý kho xem được mục Rà soát thế chấp
+  // Role permissions: Admin/BTC/Quản lý kho xem và thao tác; Quản lý (supervisor) chỉ xem (readOnly)
   const canViewMortgageReview = useMemo(() => {
     const role = profile?.role || '';
-    return ['admin', 'super_admin', 'btc_manager', 'warehouse_manager', 'quan_ly'].includes(role) &&
+    return ['admin', 'super_admin', 'btc_manager', 'warehouse_manager', 'quan_ly', 'supervisor'].includes(role) &&
       !['capital_dept', 're_dept', 'project_dept', 'investor', 'viewer', 'user'].includes(role);
   }, [profile?.role]);
 
-  // Warehouse scoping for warehouse_manager
+  // Giới hạn kho: quản lý kho theo kho quản lý; Quản lý (supervisor) theo "Kho phụ trách" admin đã gán
   const isWarehouseManager = profile?.role === 'warehouse_manager';
+  const isSupervisor = profile?.role === 'supervisor';
+  const isScopedRole = isWarehouseManager || isSupervisor;
   const managedWarehouseIds = useMemo(() => {
+    if (isSupervisor) return profile?.assigned_warehouse_ids || [];
     if (!isWarehouseManager) return undefined;
     if (profile?.managed_warehouse_ids && profile.managed_warehouse_ids.length > 0) {
       return profile.managed_warehouse_ids;
     }
     return undefined;
-  }, [profile, isWarehouseManager]);
+  }, [profile, isWarehouseManager, isSupervisor]);
 
   // Filters
   const [selectedRegion, setSelectedRegion] = useState<string>('Tất cả vùng');
@@ -201,9 +204,9 @@ export const Reports: React.FC = () => {
 
   // Available warehouses for dropdown based on user role
   const availableWarehouses = useMemo(() => {
-    if (!isWarehouseManager || !managedWarehouseIds) return warehouses;
+    if (!isScopedRole || !managedWarehouseIds) return warehouses;
     return warehouses.filter(w => managedWarehouseIds.includes(w.id));
-  }, [warehouses, isWarehouseManager, managedWarehouseIds]);
+  }, [warehouses, isScopedRole, managedWarehouseIds]);
 
   const currentWarehouseName = useMemo(() => {
     if (!selectedWarehouseId) return undefined;
@@ -490,6 +493,7 @@ export const Reports: React.FC = () => {
           projects={projects}
           warehouses={warehouses}
           managedWarehouseIds={managedWarehouseIds}
+          readOnly={isSupervisor}
           currentUser={profile}
           onRefreshData={loadData}
         />
@@ -543,12 +547,12 @@ export const Reports: React.FC = () => {
         </div>
 
         {/* WAREHOUSE SCOPE NOTICE FOR WAREHOUSE MANAGERS */}
-        {isWarehouseManager && (
+        {isScopedRole && (
           <div className="bg-amber-50  border border-amber-200  rounded-lg p-3 flex items-center justify-between gap-3 text-xs text-amber-900 ">
             <div className="flex items-center gap-2">
               <WarehouseIcon className="w-4 h-4 text-amber-700  shrink-0" />
               <span>
-                <strong>Phạm vi dữ liệu Quản lý kho:</strong> Báo cáo tự động giới hạn hiển thị các GCN thuộc các kho do bạn phụ trách{' '}
+                <strong>{isSupervisor ? 'Phạm vi dữ liệu Quản lý:' : 'Phạm vi dữ liệu Quản lý kho:'}</strong> Báo cáo tự động giới hạn hiển thị các GCN thuộc các kho {isSupervisor ? 'được phân công cho bạn' : 'do bạn phụ trách'}{' '}
                 {availableWarehouses.length > 0 ? (
                   <span className="font-bold text-amber-950 ">({availableWarehouses.map(w => w.name).join(', ')})</span>
                 ) : (
@@ -557,7 +561,7 @@ export const Reports: React.FC = () => {
               </span>
             </div>
             <span className="text-[11px] font-semibold bg-amber-200/60  text-amber-800  px-2.5 py-0.5 rounded-full whitespace-nowrap">
-              Quyền Quản Lý Kho
+              {isSupervisor ? 'Chỉ xem' : 'Quyền Quản Lý Kho'}
             </span>
           </div>
         )}
@@ -585,7 +589,7 @@ export const Reports: React.FC = () => {
               onChange={(e) => setSelectedWarehouseId(e.target.value)}
               className="w-full text-xs px-3 py-2 border border-blue-200  rounded-md bg-blue-50/40  text-blue-900  font-medium"
             >
-              <option value="">-- {isWarehouseManager ? 'Tất cả kho phụ trách' : 'Tất cả các kho'} --</option>
+              <option value="">-- {isScopedRole ? 'Tất cả kho phụ trách' : 'Tất cả các kho'} --</option>
               {availableWarehouses.map(w => (
                 <option key={w.id} value={w.id}>{w.name}</option>
               ))}
