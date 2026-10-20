@@ -1,5 +1,5 @@
 import React, { useRef, useState, useMemo } from 'react';
-import { X, Printer, Download, FileSpreadsheet, Edit3, Eye } from 'lucide-react';
+import { X, Printer, Download, FileSpreadsheet, Edit3, Eye, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { Warehouse } from '../types';
@@ -93,6 +93,38 @@ export const VoucherPrintModal: React.FC<Props> = ({
   const itemReason = item.reason || item.details?.reason || transaction?.notes;
   const vType = getVoucherTypeFromTransaction(txType, itemReason);
 
+  // Điều kiện kiểm soát in ấn: CHỈ cho phép hiển thị và kích hoạt nút "In biên bản"
+  // đối với các chứng từ Nhập kho (PN/checkin), Xuất kho (PX/checkout), Luân chuyển kho (transfer).
+  // ẨN HOÀN TOÀN nút in đối với các thao tác cập nhật hàng loạt hoặc kiểm kê kho.
+  const isPrintableVoucher = useMemo(() => {
+    if (!item) return false;
+    const actionStr = String(item.action_type || item.actionType || '').toLowerCase();
+    const reasonStr = String(item.reason || item.details?.reason || transaction?.notes || '').toLowerCase();
+    const descStr = String(item.description || item.details?.description || '').toLowerCase();
+    const typeStr = String(item.type || transaction?.type || '').toLowerCase();
+
+    // 1. Kiểm tra loại trừ triệt để: kiểm kê kho hoặc cập nhật hàng loạt / thao tác hệ thống
+    const isExcluded =
+      actionStr.includes('kiểm kê') ||
+      reasonStr.includes('kiểm kê') ||
+      descStr.includes('kiểm kê') ||
+      typeStr.includes('audit') ||
+      actionStr.includes('cập nhật hàng loạt') ||
+      reasonStr.includes('cập nhật hàng loạt') ||
+      descStr.includes('cập nhật hàng loạt') ||
+      actionStr.includes('chỉnh sửa') ||
+      actionStr.includes('cập nhật thông tin');
+
+    if (isExcluded) return false;
+
+    // 2. Bắt buộc thuộc luồng giao dịch kho: Nhập kho (checkin/PN), Xuất kho (checkout/PX), Luân chuyển kho (transfer)
+    const isCheckin = typeStr === 'checkin' || vType === 'PN' || actionStr.includes('nhập') || reasonStr.includes('nhập');
+    const isCheckout = typeStr === 'checkout' || vType === 'PX' || actionStr.includes('xuất') || reasonStr.includes('xuất') || actionStr.includes('mượn') || reasonStr.includes('mượn') || actionStr.includes('thế chấp') || reasonStr.includes('thế chấp');
+    const isTransfer = typeStr === 'transfer' || actionStr.includes('điều chuyển') || actionStr.includes('luân chuyển') || reasonStr.includes('điều chuyển') || reasonStr.includes('luân chuyển');
+
+    return isCheckin || isCheckout || isTransfer;
+  }, [item, transaction, vType]);
+
   const defaultVoucherCode = item.voucher_code || item.details?.voucherCode || transaction?.items?.find((i: any) => i.voucher_code)?.voucher_code || `${vType}${format(new Date(), 'yyMM')}-${Math.floor(100 + Math.random() * 900)}`;
   const defaultDateStr = item.decided_at || transaction?.created_at || new Date().toISOString();
   const createdDate = new Date(defaultDateStr);
@@ -156,11 +188,13 @@ export const VoucherPrintModal: React.FC<Props> = ({
 
   // Handle standard browser print
   const handlePrint = () => {
+    if (!isPrintableVoucher) return;
     window.print();
   };
 
   // Handle Export Excel file matching the template exactly
   const handleExportExcel = () => {
+    if (!isPrintableVoucher) return;
     const wsData: any[][] = [];
 
     // Row 1: Company Name & Template Code
@@ -276,7 +310,7 @@ export const VoucherPrintModal: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {txItems.length > 1 && (
+            {isPrintableVoucher && txItems.length > 1 && (
               <div className="flex items-center bg-white border border-gray-300 rounded-lg p-0.5 text-xs">
                 <button
                   type="button"
@@ -303,48 +337,73 @@ export const VoucherPrintModal: React.FC<Props> = ({
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => setIsEditing(!isEditing)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
-                isEditing
-                  ? 'bg-amber-100 text-amber-900 border-amber-300'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              {isEditing ? <Eye className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
-              {isEditing ? 'Xem trước' : 'Sửa nhanh'}
-            </button>
+            {isPrintableVoucher && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(!isEditing)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                    isEditing
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {isEditing ? <Eye className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
+                  {isEditing ? 'Xem trước' : 'Sửa nhanh'}
+                </button>
 
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
-              title="Tải file Excel đúng mẫu (.xlsx)"
-            >
-              <Download className="w-4 h-4" /> Xuất Excel
-            </button>
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+                  title="Tải file Excel đúng mẫu (.xlsx)"
+                >
+                  <Download className="w-4 h-4" /> Xuất Excel
+                </button>
 
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors"
-            >
-              <Printer className="w-4 h-4" /> In biên bản (A4)
-            </button>
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1E3A8A] hover:bg-blue-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> In biên bản (A4)
+                </button>
+              </>
+            )}
 
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Quick Edit Drawer if enabled */}
-        {isEditing && (
+        {!isPrintableVoucher ? (
+          <div className="p-12 text-center bg-gray-50 flex-1 flex flex-col items-center justify-center min-h-[360px]">
+            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 mb-4 shadow-xs">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-2">
+              Không áp dụng in biên bản bàn giao phiếu kho
+            </h3>
+            <p className="text-xs text-gray-600 max-w-lg mb-6 leading-relaxed">
+              Biên bản bàn giao chuẩn A4 chỉ áp dụng cho các chứng từ nghiệp vụ <strong>Nhập kho</strong>, <strong>Xuất kho</strong> và <strong>Luân chuyển kho</strong>.
+              Thao tác cập nhật hàng loạt hay điều chỉnh dữ liệu hệ thống không phát sinh biên bản giao nhận kho; các đợt kiểm kê kho được quản lý và in ấn chuyên biệt tại mục <strong>Kiểm kê kho</strong>.
+            </p>
+            <button
+              onClick={onClose}
+              className="px-5 py-2.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer shadow-xs"
+            >
+              Đóng cửa sổ
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Quick Edit Drawer if enabled */}
+            {isEditing && (
           <div className="p-4 bg-amber-50/70 border-b border-amber-200 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs shrink-0 print:hidden">
             <div>
               <label className="block font-semibold text-gray-700 mb-1">Tên Tập đoàn / Đơn vị chủ quản</label>
@@ -633,6 +692,8 @@ export const VoucherPrintModal: React.FC<Props> = ({
 
           </div>
         </div>
+          </>
+        )}
 
       </div>
     </div>

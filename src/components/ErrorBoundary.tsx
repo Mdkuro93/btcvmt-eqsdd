@@ -27,6 +27,8 @@ export class ErrorBoundary extends Component<Props, State> {
     const isMismatchOrChunkError =
       errorMsg.includes('Invalid hook call') ||
       errorMsg.includes("reading 'useState'") ||
+      errorMsg.includes("reading 'useRef'") ||
+      errorMsg.includes("reading 'use") ||
       errorMsg.includes('Failed to fetch dynamically imported module') ||
       errorMsg.includes('dynamically imported module') ||
       error?.name === 'ChunkLoadError';
@@ -55,6 +57,8 @@ export class ErrorBoundary extends Component<Props, State> {
         errorMsg.includes('dynamically imported module') ||
         errorMsg.includes('Invalid hook call') ||
         errorMsg.includes("reading 'useState'") ||
+        errorMsg.includes("reading 'useRef'") ||
+        errorMsg.includes("reading 'use") ||
         this.state.error?.name === 'ChunkLoadError';
 
       return (

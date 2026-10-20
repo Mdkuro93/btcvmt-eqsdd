@@ -19,6 +19,7 @@ import { BulkDecideModal } from '../components/BulkDecideModal';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
 import { DEFAULT_PERMISSIONS_BY_ROLE, getEffectivePermissions } from '../api/users';
 import { useAuth } from '../contexts/AuthContext';
+import { scopeWarehouses } from '../utils/warehouseScope';
 import { Loader2, FileText, CheckCircle, XCircle, Clock, ChevronDown, ChevronRight, AlertTriangle, Printer, Filter, Store, RefreshCw, CalendarX, Ban, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import toast, { Toaster } from 'react-hot-toast';
@@ -675,7 +676,7 @@ export const Requests: React.FC = () => {
           className="px-3 py-1.5 border border-gray-300  rounded-lg bg-surface  text-slate-800  font-medium focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
         >
           <option value="all" className="bg-surface ">-- Tất cả kho lưu trữ --</option>
-          {warehouses.map(w => (
+          {scopeWarehouses(warehouses, profile).map(w => (
             <option key={w.id} value={w.id} className="bg-surface ">
               {w.name} {w.is_central ? '(Kho TT)' : ''}
             </option>

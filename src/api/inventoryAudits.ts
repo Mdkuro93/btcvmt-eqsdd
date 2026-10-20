@@ -455,26 +455,14 @@ export async function deleteInventoryAudit(auditId: string): Promise<boolean> {
   }
 
   try {
-    // Bước 1: Xóa toàn bộ các bản ghi con trong inventory_audit_items trước
-    const { error: itemsDelError } = await withTimeout(
-      supabase
-        .from('inventory_audit_items')
-        .delete()
-        .eq('audit_id', auditId),
-      DEFAULT_WRITE_TIMEOUT
-    );
-
-    if (itemsDelError) {
-      console.error('Lỗi khi xóa các dòng chi tiết kiểm kê trên Supabase:', itemsDelError);
-      throw new Error(`Không thể xóa chi tiết đợt kiểm kê: ${itemsDelError.message || 'Lỗi cơ sở dữ liệu'}.`);
-    }
-
-    // Bước 2: Xóa bản ghi cha trong inventory_audits
-    const { error: auditDelError } = await withTimeout(
+    // Dòng chi tiết tự xóa theo ON DELETE CASCADE (0055). Không xóa tay từng bước để tránh mất dòng con
+    // khi xóa đợt cha bị RLS từ chối.
+    const { data: deleted, error: auditDelError } = await withTimeout(
       supabase
         .from('inventory_audits')
         .delete()
-        .eq('id', auditId),
+        .eq('id', auditId)
+        .select('id'),
       DEFAULT_WRITE_TIMEOUT
     );
 
@@ -482,9 +470,90 @@ export async function deleteInventoryAudit(auditId: string): Promise<boolean> {
       console.error('Lỗi khi xóa đợt kiểm kê trên Supabase:', auditDelError);
       throw new Error(`Không thể xóa đợt kiểm kê: ${auditDelError.message || 'Lỗi cơ sở dữ liệu'}.`);
     }
+    // RLS từ chối thì Supabase không báo lỗi mà trả 0 dòng
+    if (!deleted || deleted.length === 0) {
+      throw new Error('Không xóa được: bạn không có quyền xóa đợt kiểm kê này hoặc đợt đã bị xóa.');
+    }
     return true;
   } catch (err: any) {
     console.error('Lỗi trong hàm deleteInventoryAudit:', err);
     throw new Error(err.message || 'Không thể xóa đợt kiểm kê, vui lòng thử lại.');
   }
+}
+
+/**
+ * Kiểm tra xem một đợt kiểm kê có đang ở trạng thái lưu trữ (xóa mềm) hay không
+ */
+export function isAuditArchived(audit?: InventoryAudit | null): boolean {
+  if (!audit) return false;
+  const col = (audit as any).is_archived;
+  if (typeof col === 'boolean') return col; // cột riêng (0114) là nguồn đúng; thẻ trong notes chỉ dùng khi chưa có cột
+  const notes = audit.notes || '';
+  return notes.includes('[ĐÃ LƯU TRỮ]') || notes.includes('[ARCHIVED]');
+}
+
+/**
+ * Xóa mềm (Lưu trữ) đợt kiểm kê
+ */
+export async function archiveInventoryAudit(auditId: string, currentNotes?: string | null): Promise<boolean> {
+  const clean = currentNotes || '';
+  const newNotes = clean.includes('[ĐÃ LƯU TRỮ]') ? clean : `[ĐÃ LƯU TRỮ] ${clean}`.trim();
+
+  if (!isSupabaseConfigured) {
+    const audits = mockStore.getInventoryAudits();
+    const target = audits.find(a => a.id === auditId);
+    if (target) {
+      target.notes = newNotes;
+    }
+    return true;
+  }
+
+  const { error } = await withTimeout(
+    supabase
+      .from('inventory_audits')
+      .update({ is_archived: true, updated_at: new Date().toISOString() })
+      .eq('id', auditId),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) {
+    console.error('Lỗi khi lưu trữ đợt kiểm kê:', error);
+    throw new Error(error.message || 'Không thể lưu trữ đợt kiểm kê.');
+  }
+
+  return true;
+}
+
+/**
+ * Khôi phục đợt kiểm kê từ mục lưu trữ
+ */
+export async function restoreInventoryAudit(auditId: string, currentNotes?: string | null): Promise<boolean> {
+  const cleanNotes = (currentNotes || '')
+    .replace(/\[ĐÃ LƯU TRỮ\]/g, '')
+    .replace(/\[ARCHIVED\]/g, '')
+    .trim();
+
+  if (!isSupabaseConfigured) {
+    const audits = mockStore.getInventoryAudits();
+    const target = audits.find(a => a.id === auditId);
+    if (target) {
+      target.notes = cleanNotes;
+    }
+    return true;
+  }
+
+  const { error } = await withTimeout(
+    supabase
+      .from('inventory_audits')
+      .update({ is_archived: false, notes: cleanNotes || null, updated_at: new Date().toISOString() })
+      .eq('id', auditId),
+    DEFAULT_WRITE_TIMEOUT
+  );
+
+  if (error) {
+    console.error('Lỗi khi khôi phục đợt kiểm kê:', error);
+    throw new Error(error.message || 'Không thể khôi phục đợt kiểm kê.');
+  }
+
+  return true;
 }

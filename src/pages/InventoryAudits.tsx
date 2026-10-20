@@ -13,7 +13,10 @@ import {
   updateInventoryAuditItem, 
   batchUpdateAuditItems, 
   completeInventoryAudit, 
-  deleteInventoryAudit 
+  deleteInventoryAudit,
+  isAuditArchived,
+  archiveInventoryAudit,
+  restoreInventoryAudit
 } from '../api/inventoryAudits';
 import { fetchWarehouses, fetchAssets } from '../api/assets';
 import { CreateAuditModal } from '../components/CreateAuditModal';
@@ -21,6 +24,7 @@ import { AuditItemDetailModal } from '../components/AuditItemDetailModal';
 import { AddSurplusAssetModal } from '../components/AddSurplusAssetModal';
 import { InventoryAuditPrintModal } from '../components/InventoryAuditPrintModal';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
+import { AuditDeleteConfirmModal } from '../components/audit/AuditDeleteConfirmModal';
 import { exportInventoryAuditToExcel } from '../lib/excelHelper';
 import { 
   ClipboardCheck, 
@@ -36,6 +40,9 @@ import {
   FileSpreadsheet, 
   ArrowLeft, 
   Trash2, 
+  Archive,
+  RotateCcw,
+  ShieldAlert,
   Eye, 
   Edit3, 
   CheckCheck, 
@@ -43,18 +50,19 @@ import {
   User, 
   FileText, 
   ChevronRight, 
-  Loader2,
-  PackagePlus,
-  Printer,
-  Layers,
-  Check,
-  Send,
-  ExternalLink
+  Loader2, 
+  PackagePlus, 
+  Printer, 
+  Layers, 
+  Check, 
+  Send, 
+  ExternalLink 
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
+import { scopeWarehouses } from '../utils/warehouseScope';
 
 interface Props {
   profile?: Profile;
@@ -90,23 +98,54 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
   const [completionNotes, setCompletionNotes] = useState('');
   const [completingLoading, setCompletingLoading] = useState(false);
 
+  // Delete & Archive modal state
+  const [deleteModalState, setDeleteModalState] = useState<{
+    isOpen: boolean;
+    audit: InventoryAudit | null;
+    mode: 'soft_delete' | 'hard_delete';
+  }>({
+    isOpen: false,
+    audit: null,
+    mode: 'soft_delete',
+  });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [auditListScope, setAuditListScope] = useState<'active' | 'archived'>('active');
+
   // Filter & search in active audit
   const [searchTerm, setSearchTerm] = useState('');
   const [statusTab, setStatusTab] = useState<'all' | 'pending' | 'matched' | 'misplaced' | 'missing' | 'surplus'>('all');
 
   // Permission checks
-  const canPerformAudit = 
+  const isAdmin = 
     profile?.role === 'admin' || 
     profile?.role === 'super_admin' || 
-    profile?.role === 'warehouse_manager' || 
     profile?.role === 'btc_manager';
+
+  const canPerformAudit = 
+    isAdmin || 
+    profile?.role === 'warehouse_manager';
+
+  // Compute active vs archived audits
+  const activeAudits = useMemo(() => {
+    return audits.filter(a => !isAuditArchived(a));
+  }, [audits]);
+
+  const archivedAudits = useMemo(() => {
+    return audits.filter(a => isAuditArchived(a));
+  }, [audits]);
+
+  const displayedAudits = useMemo(() => {
+    if (isAdmin && auditListScope === 'archived') {
+      return archivedAudits;
+    }
+    return activeAudits;
+  }, [isAdmin, auditListScope, activeAudits, archivedAudits]);
 
   const isWarehouseAssigned = (warehouseId: string) => {
     if (!profile) return false;
     if (profile.role === 'admin' || profile.role === 'super_admin' || profile.role === 'btc_manager') return true;
     if (profile.role === 'warehouse_manager') {
-      if (!profile.managed_warehouse_ids || profile.managed_warehouse_ids.length === 0) return true;
-      return profile.managed_warehouse_ids.includes(warehouseId);
+      return (profile.managed_warehouse_ids || []).includes(warehouseId);
     }
     return false;
   };
@@ -328,21 +367,50 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
     }
   };
 
-  // Delete Audit
-  const handleDeleteAudit = async (auditId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa đợt kiểm kê này? Mọi dữ liệu đối soát sẽ bị xóa vĩnh viễn.')) {
-      return;
-    }
+  // Open Delete / Archive Confirmation Modal
+  const handleOpenDelete = (audit: InventoryAudit, mode: 'soft_delete' | 'hard_delete') => {
+    setDeleteModalState({
+      isOpen: true,
+      audit,
+      mode,
+    });
+  };
 
+  // Execute Confirmed Delete or Archive
+  const handleConfirmDelete = async () => {
+    const audit = deleteModalState.audit;
+    if (!audit) return;
+
+    setDeleteLoading(true);
     try {
-      await deleteInventoryAudit(auditId);
-      toast.success('Đã xóa đợt kiểm kê.');
-      if (selectedAuditId === auditId) {
+      if (deleteModalState.mode === 'hard_delete') {
+        await deleteInventoryAudit(audit.id);
+        toast.success('Đã xóa vĩnh viễn đợt kiểm kê khỏi cơ sở dữ liệu.');
+      } else {
+        await archiveInventoryAudit(audit.id, audit.notes);
+        toast.success('Đã chuyển đợt kiểm kê vào mục Lưu trữ.');
+      }
+
+      setDeleteModalState({ isOpen: false, audit: null, mode: 'soft_delete' });
+      if (selectedAuditId === audit.id) {
         setSelectedAuditId(null);
       }
       loadInitialData();
     } catch (err: any) {
-      toast.error(err?.message || 'Có lỗi xảy ra khi xóa.');
+      toast.error(err?.message || 'Có lỗi xảy ra khi thực hiện.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // Restore audit from archive
+  const handleRestoreAudit = async (audit: InventoryAudit) => {
+    try {
+      await restoreInventoryAudit(audit.id, audit.notes);
+      toast.success(`Đã khôi phục đợt kiểm kê tại kho ${audit.warehouses?.name || audit.warehouse?.name || ''}.`);
+      loadInitialData();
+    } catch (err: any) {
+      toast.error(err?.message || 'Có lỗi xảy ra khi khôi phục.');
     }
   };
 
@@ -1380,7 +1448,7 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
               className="w-full px-3.5 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-900 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">Tất cả các kho</option>
-              {warehouses.map((w) => (
+              {scopeWarehouses(warehouses, authProfile).map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name} {w.is_central ? '⭐ [Kho Tổng]' : ''}
                 </option>
@@ -1390,7 +1458,19 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
         </div>
 
         <div className="flex items-center space-x-2 text-xs text-gray-500">
-          <span>Tổng số: <strong className="text-gray-900">{audits.length}</strong> đợt kiểm kê</span>
+          {isAdmin && (
+            <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden mr-2">
+              <button type="button" onClick={() => setAuditListScope('active')}
+                className={`px-2.5 py-1 font-semibold cursor-pointer ${auditListScope === 'active' ? 'bg-blue-700 text-white' : 'bg-white text-gray-600'}`}>
+                Đang dùng ({activeAudits.length})
+              </button>
+              <button type="button" onClick={() => setAuditListScope('archived')}
+                className={`px-2.5 py-1 font-semibold cursor-pointer ${auditListScope === 'archived' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600'}`}>
+                Lưu trữ ({archivedAudits.length})
+              </button>
+            </div>
+          )}
+          <span>Tổng số: <strong className="text-gray-900">{displayedAudits.length}</strong> đợt kiểm kê</span>
         </div>
       </div>
 
@@ -1400,7 +1480,7 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
           <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
           <p className="text-xs text-gray-500 mt-2 font-medium">Đang tải danh sách kiểm kê...</p>
         </div>
-      ) : audits.length === 0 ? (
+      ) : displayedAudits.length === 0 ? (
         <div className="bg-white rounded-3xl border border-gray-200 p-12 text-center shadow-xs">
           <div className="p-4 bg-blue-50 text-blue-700 rounded-2xl w-16 h-16 mx-auto flex items-center justify-center mb-4">
             <ClipboardCheck className="w-8 h-8" />
@@ -1421,7 +1501,8 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {audits.map((audit) => {
+          {displayedAudits.map((audit) => {
+            const archived = isAuditArchived(audit);
             const wh = audit.warehouses || audit.warehouse;
             const perf = (audit.performer as any) || (audit.profiles as any);
             const isCompleted = audit.status === 'completed';
@@ -1451,18 +1532,35 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
                       </h3>
                     </div>
 
-                    {(profile.role === 'admin' || profile.role === 'super_admin') && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteAudit(audit.id);
-                        }}
-                        className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors cursor-pointer"
-                        title="Xóa đợt kiểm kê"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {archived && isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRestoreAudit(audit); }}
+                          className="p-1 text-gray-400 hover:text-emerald-700 rounded hover:bg-emerald-50 transition-colors cursor-pointer"
+                          title="Khôi phục đợt kiểm kê"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      )}
+                      {!archived && !isCompleted && canPerformAudit && isWarehouseAssigned(audit.warehouse_id) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenDelete(audit, 'soft_delete'); }}
+                          className="p-1 text-gray-400 hover:text-amber-700 rounded hover:bg-amber-50 transition-colors cursor-pointer"
+                          title="Lưu trữ (ẩn) đợt kiểm kê"
+                        >
+                          <Archive className="w-4 h-4" />
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenDelete(audit, 'hard_delete'); }}
+                          className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                          title="Xóa vĩnh viễn đợt kiểm kê"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {audit.notes && (
@@ -1518,19 +1616,44 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
                     Tỷ lệ khớp: <strong className="text-emerald-700">{matchedRate}%</strong>
                   </span>
 
-                  <button
-                    onClick={() => setSelectedAuditId(audit.id)}
-                    className="inline-flex items-center px-3.5 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all cursor-pointer group-hover:bg-blue-700 group-hover:text-white"
-                  >
-                    {isCompleted ? 'Xem Kết Quả' : 'Tiếp Tục Kiểm Kê'}
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {isCompleted && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAuditId(audit.id);
+                          setIsPrintOpen(true);
+                        }}
+                        className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all cursor-pointer"
+                        title="Xem trước và in biên bản kiểm kê chuẩn A4"
+                      >
+                        <Printer className="w-3.5 h-3.5 mr-1" />
+                        In Biên Bản
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSelectedAuditId(audit.id)}
+                      className="inline-flex items-center px-3.5 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all cursor-pointer group-hover:bg-blue-700 group-hover:text-white"
+                    >
+                      {isCompleted ? 'Xem Kết Quả' : 'Tiếp Tục Kiểm Kê'}
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      <AuditDeleteConfirmModal
+        isOpen={deleteModalState.isOpen}
+        onClose={() => !deleteLoading && setDeleteModalState({ isOpen: false, audit: null, mode: 'soft_delete' })}
+        audit={deleteModalState.audit}
+        mode={deleteModalState.mode}
+        onConfirm={handleConfirmDelete}
+        loading={deleteLoading}
+      />
 
       {/* Create Audit Modal */}
       <CreateAuditModal

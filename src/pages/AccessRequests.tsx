@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { scopeWarehouses } from '../utils/warehouseScope';
 import { fetchAccessRequests, approveAccessRequest, rejectAccessRequest } from '../api/accessRequests';
 import { fetchViewerWarehouseAccess, extendViewerWarehouseAccess, revokeViewerWarehouseAccess } from '../api/viewerAccess';
 import { fetchWarehouses } from '../api/assets';
@@ -341,7 +342,7 @@ export const AccessRequests: React.FC = () => {
             className="px-3 py-2 border border-slate-300  rounded-lg text-xs bg-surface  text-slate-700  focus:outline-none focus:ring-2 focus:ring-blue-500/30 cursor-pointer"
           >
             <option value="all" className="bg-surface ">Tất cả kho lưu trữ</option>
-            {warehouses.map(w => (
+            {scopeWarehouses(warehouses, profile).map(w => (
               <option key={w.id} value={w.id} className="bg-surface ">
                 {w.name} {w.is_central ? '(Kho Tổng)' : ''}
               </option>

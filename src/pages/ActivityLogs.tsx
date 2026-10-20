@@ -3,13 +3,62 @@ import { fetchActivityLogs } from '../api/activityLogs';
 import { fetchProjects, fetchWarehouses } from '../api/assets';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockStore } from '../lib/mockStore';
-import { Download, BookText, Filter, AlertTriangle } from 'lucide-react';
+import { Download, BookText, Filter, AlertTriangle, Printer } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
 import { useAuth } from '../contexts/AuthContext';
+import { scopeWarehouses } from '../utils/warehouseScope';
 import { LoadingFallback } from '../components/LoadingFallback';
+
+/**
+ * Bộ lọc nghiệp vụ Sổ cái & Nhật ký biến động:
+ * CHỈ hiển thị các giao dịch luân chuyển kho vật lý (Nhập kho, Xuất kho, Luân chuyển kho).
+ * LOẠI BỎ HOÀN TOÀN: các bản ghi kiểm kê kho và nhật ký cập nhật hàng loạt / can thiệp hệ thống.
+ */
+export function isPhysicalWarehouseMovement(log: any): boolean {
+  if (!log) return false;
+  const action = String(log.action_type || '').toLowerCase();
+  const desc = String(log.description || '').toLowerCase();
+  const notes = String(log.notes || '').toLowerCase();
+
+  // 1. Loại bỏ triệt để: Đợt kiểm kê & Cập nhật hàng loạt / Chỉnh sửa hệ thống
+  if (
+    action.includes('kiểm kê') ||
+    desc.includes('kiểm kê') ||
+    notes.includes('kiểm kê') ||
+    action.includes('audit') ||
+    action.includes('cập nhật hàng loạt') ||
+    desc.includes('cập nhật hàng loạt') ||
+    notes.includes('cập nhật hàng loạt') ||
+    action.includes('chỉnh sửa') ||
+    action.includes('cập nhật thông tin') ||
+    action.includes('gia hạn')
+  ) {
+    return false;
+  }
+
+  // 2. Chỉ chấp nhận các nghiệp vụ luân chuyển kho vật lý thuần túy
+  const validKeywords = [
+    'nhập',
+    'xuất',
+    'mượn',
+    'điều chuyển',
+    'luân chuyển',
+    'thế chấp',
+    'xuất bán',
+    'tách sổ',
+    'cấp đổi',
+    'đổi sổ',
+    'thu hồi',
+    'giải chấp',
+    'cấp mới',
+    'hủy phiếu',
+  ];
+
+  return validKeywords.some(kw => action.includes(kw));
+}
 
 export const ActivityLogs: React.FC = () => {
   const { profile } = useAuth();
@@ -77,7 +126,10 @@ export const ActivityLogs: React.FC = () => {
         fromDate: fromDate || undefined,
         toDate: toDate || undefined,
       });
-      setLogs(data || []);
+
+      // Lọc CHỈ hiển thị giao dịch kho vật lý thuần túy (loại bỏ kiểm kê và cập nhật hàng loạt)
+      const physicalLogs = (data || []).filter(isPhysicalWarehouseMovement);
+      setLogs(physicalLogs);
     } catch (error: any) {
       toast.error(error.message || 'Lỗi tải nhật ký biến động');
       console.error(error);
@@ -97,10 +149,10 @@ export const ActivityLogs: React.FC = () => {
     setActionType('');
     setFromDate('');
     setToDate('');
-    // Gọi tải lại với các bộ lọc trống
+    // Gọi tải lại với các bộ lọc trống và lọc chỉ giao dịch kho vật lý
     setLoading(true);
     fetchActivityLogs({})
-      .then(data => setLogs(data || []))
+      .then(data => setLogs((data || []).filter(isPhysicalWarehouseMovement)))
       .catch(err => {
         toast.error('Lỗi khi làm mới bộ lọc');
         console.error(err);
@@ -138,7 +190,7 @@ export const ActivityLogs: React.FC = () => {
             <BookText className="w-6 h-6 text-blue-700" /> Sổ cái & Nhật ký biến động kho GCN
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Theo dõi dòng luân chuyển, chứng từ PN/PX và tình trạng lưu trữ sổ đỏ
+            Theo dõi dòng luân chuyển kho vật lý: Phiếu Nhập kho (PN), Phiếu Xuất kho (PX) và Phiếu Luân chuyển
           </p>
         </div>
         <button
@@ -165,28 +217,28 @@ export const ActivityLogs: React.FC = () => {
           <label className="block text-xs font-semibold text-gray-600 mb-1">Kho lưu trữ</label>
           <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-surface cursor-pointer">
             <option value="">Tất cả kho</option>
-            {warehouses.map((w) => (
+            {scopeWarehouses(warehouses, profile).map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">Loại nghiệp vụ</label>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Loại nghiệp vụ kho</label>
           <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="w-full border border-gray-300 rounded-lg text-xs px-2.5 py-2 bg-surface cursor-pointer">
-            <option value="">Tất cả nghiệp vụ</option>
+            <option value="">Tất cả nghiệp vụ kho</option>
             <option value="Nhập sổ">Nhập sổ</option>
             <option value="Nhập sổ (Tạo mới)">Nhập sổ (Tạo mới)</option>
             <option value="Nhập sổ (Import Excel)">Nhập sổ (Import Excel)</option>
             <option value="Mượn/Xuất sổ">Mượn/Xuất sổ</option>
-            <option value="Hủy phiếu">Hủy phiếu</option>
-            <option value="Điều chuyển kho">Điều chuyển kho</option>
+            <option value="Điều chuyển kho">Điều chuyển / Luân chuyển kho</option>
             <option value="Thế chấp">Thế chấp</option>
             <option value="Xuất bán">Xuất bán</option>
             <option value="Tách sổ">Tách sổ</option>
             <option value="Cấp đổi GCN">Cấp đổi GCN</option>
             <option value="Nhập khác">Nhập khác</option>
             <option value="Xuất khác">Xuất khác</option>
+            <option value="Hủy phiếu">Hủy phiếu</option>
           </select>
         </div>
 
@@ -289,12 +341,13 @@ export const ActivityLogs: React.FC = () => {
                       <td className="px-3 py-2.5 text-right">
                         {isCancelled ? (
                           <span className="text-gray-400 italic text-[11px]">Phiếu đã hủy</span>
-                        ) : l.document_no ? (
+                        ) : (l.document_no && isPhysicalWarehouseMovement(l)) ? (
                           <button
                             onClick={() => setSelectedVoucherLog(l)}
-                            className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors cursor-pointer"
+                            title="In biên bản bàn giao phiếu kho A4"
                           >
-                            In phiếu
+                            <Printer className="w-3 h-3" /> In phiếu
                           </button>
                         ) : null}
                       </td>
@@ -313,7 +366,12 @@ export const ActivityLogs: React.FC = () => {
           onClose={() => setSelectedVoucherLog(null)}
           item={{
             id: selectedVoucherLog.id,
-            type: selectedVoucherLog.action_type.includes('Nhập') ? 'checkin' : 'checkout',
+            action_type: selectedVoucherLog.action_type,
+            type: selectedVoucherLog.action_type.includes('Nhập')
+              ? 'checkin'
+              : (selectedVoucherLog.action_type.includes('Điều chuyển') || selectedVoucherLog.action_type.includes('Luân chuyển'))
+                ? 'transfer'
+                : 'checkout',
             voucher_code: selectedVoucherLog.document_no,
             decided_at: selectedVoucherLog.log_date,
             notes: selectedVoucherLog.notes,

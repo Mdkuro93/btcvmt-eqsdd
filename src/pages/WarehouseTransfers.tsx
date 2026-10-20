@@ -78,6 +78,19 @@ export const WarehouseTransfers: React.FC = () => {
     [isAdminOrBtc, managedWarehouseIds]
   );
 
+  // Bộ lọc kho xuất / kho đích: admin & BTC thấy tất cả kho; vai trò khác chỉ thấy các kho xuất / đích
+  // xuất hiện trong những lệnh luân chuyển mình được xem (không liệt kê kho không liên quan).
+  const sourceFilterOptions = useMemo(() => {
+    if (isAdminOrBtc) return warehouses;
+    const ids = new Set(transfers.map((t: any) => t.details?.transfer?.source_warehouse_id).filter(Boolean));
+    return warehouses.filter((w) => ids.has(w.id));
+  }, [isAdminOrBtc, warehouses, transfers]);
+  const targetFilterOptions = useMemo(() => {
+    if (isAdminOrBtc) return warehouses;
+    const ids = new Set(transfers.map((t: any) => t.details?.transfer?.target_warehouse_id).filter(Boolean));
+    return warehouses.filter((w) => ids.has(w.id));
+  }, [isAdminOrBtc, warehouses, transfers]);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -334,7 +347,7 @@ export const WarehouseTransfers: React.FC = () => {
             className="px-2.5 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Tất cả kho xuất</option>
-            {warehouses.map((w) => (
+            {sourceFilterOptions.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
               </option>
@@ -353,7 +366,7 @@ export const WarehouseTransfers: React.FC = () => {
             className="px-2.5 py-2 text-xs bg-surface  border border-gray-300  rounded-lg text-gray-900  focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Tất cả kho đích</option>
-            {warehouses.map((w) => (
+            {targetFilterOptions.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
               </option>

@@ -164,7 +164,15 @@ export const MainLayout: React.FC = () => {
                   ) : (
                     roleLabel
                   )}
-                  {' · '}{profile?.regions?.name || 'Toàn hệ thống'}
+                  {(() => {
+                    // Nhãn phạm vi: chỉ hiển thị, không ảnh hưởng quyền. Thủ kho đã có "(N kho)" ở trên nên không ghi "Toàn hệ thống".
+                    const role = profile?.role;
+                    if (role === 'warehouse_manager') return null;
+                    if (['supervisor', 'capital_dept', 'project_dept', 're_dept'].includes(role || '')) {
+                      return ` · ${profile?.assigned_warehouse_ids?.length || 0} kho được gán`;
+                    }
+                    return ` · ${profile?.regions?.name || 'Toàn hệ thống'}`;
+                  })()}
                 </span>
               </div>
             </div>

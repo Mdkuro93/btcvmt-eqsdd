@@ -505,6 +505,9 @@ export interface InventoryAudit {
   total_missing: number;
   total_misplaced: number;
   total_surplus?: number;
+  is_archived?: boolean;
+  archived_at?: string | null;
+  archived_by?: string | null;
   created_at?: string;
   updated_at?: string;
   warehouse?: Warehouse;

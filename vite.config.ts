@@ -64,10 +64,13 @@ export default defineConfig(() => {
         '@supabase/supabase-js',
         'lucide-react',
         'date-fns',
+        'date-fns/locale',
         'clsx',
         'tailwind-merge',
         'react-hot-toast',
         'xlsx',
+        '@radix-ui/react-dropdown-menu',
+        'tesseract.js',
       ],
     },
     server: {
