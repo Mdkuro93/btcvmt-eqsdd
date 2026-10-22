@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { KeyRound, X, Eye, EyeOff, Check, RefreshCw, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Profile } from '../../types';
 import { adminResetUserPassword } from '../../api/users';
+
+// 10 ký tự không gây nhầm lẫn + "@" + 2 số; dùng bộ sinh ngẫu nhiên mật mã của trình duyệt.
+function makeTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const buf = new Uint32Array(12);
+  crypto.getRandomValues(buf);
+  let res = '';
+  for (let i = 0; i < 10; i++) res += chars.charAt(buf[i] % chars.length);
+  return `${res}@${(buf[10] % 90) + 10}`;
+}
 
 interface AdminResetPasswordModalProps {
   user: Profile | null;
@@ -15,20 +25,20 @@ export const AdminResetPasswordModal: React.FC<AdminResetPasswordModalProps> = (
   onClose,
   onSuccess,
 }) => {
-  const [newPassword, setNewPassword] = useState('Abc@123456');
+  // Mật khẩu tạm điền sẵn: ngẫu nhiên MỖI LẦN mở (không dùng mật khẩu cố định đoán được).
+  const [newPassword, setNewPassword] = useState(() => makeTempPassword());
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+
+  // Mỗi lần mở cho một tài khoản mới (hoặc đổi tài khoản) thì sinh mật khẩu tạm mới.
+  useEffect(() => {
+    if (user) setNewPassword(makeTempPassword());
+  }, [user?.id]);
+
   if (!user) return null;
 
-  const generateRandomPassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    let res = '';
-    for (let i = 0; i < 8; i++) {
-      res += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setNewPassword(`${res}@123`);
-  };
+  const generateRandomPassword = () => setNewPassword(makeTempPassword());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -557,3 +557,26 @@ export async function restoreInventoryAudit(auditId: string, currentNotes?: stri
 
   return true;
 }
+
+/**
+ * Lưu thông tin biên bản kiểm kê (hội đồng + kết luận) vào DB (migration 0116).
+ * RLS không báo lỗi khi không có quyền mà trả 0 dòng, nên phải kiểm tra số dòng.
+ */
+export async function updateAuditPrintInfo(
+  auditId: string,
+  patch: {
+    print_committee?: any[] | null;
+    print_physical_notes?: string | null;
+    print_additional_notes?: string | null;
+  }
+): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const { data, error } = await withTimeout(
+    supabase.from('inventory_audits').update(patch).eq('id', auditId).select('id'),
+    DEFAULT_WRITE_TIMEOUT
+  );
+  if (error) throw new Error(error.message || 'Không lưu được thông tin biên bản.');
+  if (!data || data.length === 0) {
+    throw new Error('Bạn không có quyền lưu thông tin biên bản của đợt kiểm kê này.');
+  }
+}

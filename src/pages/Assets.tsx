@@ -1285,6 +1285,7 @@ export const Assets: React.FC = () => {
                 notes: details.notes || '',
                 scan_url: details.scan_url || null,
                 desiredReceiveDate: details.desiredReceiveDate,
+                autoApprove: Boolean(details.autoApprove),
                 items: targetAssets.map(a => ({
                   asset_id: a.id,
                   assetId: a.id,
@@ -1293,7 +1294,7 @@ export const Assets: React.FC = () => {
                   details,
                 })),
               });
-              toast.success(`Đã tạo yêu cầu kho thành công cho ${targetAssets.length} GCN!`);
+              toast.success(details.autoApprove ? `Đã ghi nhận ngay cho ${targetAssets.length} GCN!` : `Đã tạo yêu cầu kho thành công cho ${targetAssets.length} GCN!`);
               setIsModalOpen(false);
               const processedIds = new Set(targetAssets.map(a => a.id));
               setSelectedAssetIds(prev => prev.filter(id => !processedIds.has(id)));

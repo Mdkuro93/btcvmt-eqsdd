@@ -5,6 +5,7 @@ import { TransactionType, TransactionReason, Asset } from '../types';
 import { DEFAULT_WAREHOUSE_SLA_DAYS, DEFAULT_RETURN_DAYS } from '../lib/constants';
 import { previewVoucherCode } from '../lib/voucherEngine';
 import { fetchInvestorEntities } from '../api/investorEntities';
+import { fetchPendingItemsForAssets, describePendingItem, PendingItemInfo } from '../api/transactions';
 import { validateScanLink } from '../lib/scanLink';
 import toast from 'react-hot-toast';
 
@@ -118,6 +119,18 @@ export const RequestModal: React.FC<Props> = ({
     }
   }, [isOpen]);
 
+  // GCN đang có phiếu chờ duyệt: hệ thống chặn gửi trùng, nên báo rõ trước khi người dùng điền cả biểu mẫu
+  const [pendingConflicts, setPendingConflicts] = useState<PendingItemInfo[]>([]);
+  const activeAssetIdsKey = activeAssets.map(a => a.id).sort().join(',');
+  useEffect(() => {
+    if (!isOpen || !activeAssetIdsKey) { setPendingConflicts([]); return; }
+    let cancelled = false;
+    fetchPendingItemsForAssets(activeAssetIdsKey.split(','))
+      .then(list => { if (!cancelled) setPendingConflicts(list); })
+      .catch(() => { if (!cancelled) setPendingConflicts([]); });
+    return () => { cancelled = true; };
+  }, [isOpen, activeAssetIdsKey]);
+
   const parentTotalArea = activeAssets.reduce((sum, a) => sum + (a.area || 0), 0);
   const childrenTotalArea = splitChildren.reduce((sum, c) => sum + (parseFloat(c.area) || 0), 0);
   const remainingArea = Math.max(0, parentTotalArea - childrenTotalArea);
@@ -206,11 +219,33 @@ export const RequestModal: React.FC<Props> = ({
   addOpt('checkin', 'khác', 'Nhập khác');
 
   const selectedOpt = allowedOptions.find(o => o.key === requestKey);
+  const conflictsForType = selectedOpt
+    ? pendingConflicts.filter(c => c.type === selectedOpt.type)
+    : pendingConflicts;
+  const conflictBlocksSubmit = Boolean(selectedOpt) && conflictsForType.length > 0;
 
   // PHÂN LOẠI XUẤT KHO:
   // 1. Chỉ duy nhất khi "Xuất chuyển kho / Chuyển nhượng" (chuyển nhượng) mới cần chọn Kho nhận (targetWarehouseId)
   const isTransferToWarehouse =
     selectedOpt?.type === 'checkout' && selectedOpt?.reason === 'chuyển nhượng';
+
+  // Ghi nhận ngay (không cần duyệt lại): quản trị/BTC mọi kho, quản lý kho chỉ GCN thuộc kho mình.
+  // Không áp dụng: luân chuyển/chuyển nhượng giữa kho, nhập về kho khác, tách sổ/đổi sổ (hệ thống chưa hỗ trợ duyệt).
+  const directRole = effectiveRole || profile?.role;
+  const managedWhIds: string[] = profile?.managed_warehouse_ids || [];
+  const canDirectRole =
+    directRole === 'super_admin' || directRole === 'admin' || directRole === 'btc_manager' || directRole === 'warehouse_manager';
+  const directEligible =
+    canDirectRole &&
+    Boolean(selectedOpt) &&
+    selectedOpt?.reason !== 'chuyển nhượng' &&
+    selectedOpt?.reason !== 'tách sổ' &&
+    selectedOpt?.reason !== 'đổi sổ' &&
+    !(selectedOpt?.type === 'checkin' && targetWarehouseId && activeAssets.some(a => a.warehouse_id && a.warehouse_id !== targetWarehouseId)) &&
+    (directRole !== 'warehouse_manager' ||
+      (activeAssets.length > 0 && activeAssets.every(a => a.warehouse_id && managedWhIds.includes(a.warehouse_id))));
+  const [autoApproveChoice, setAutoApproveChoice] = useState(true);
+  const willAutoApprove = directEligible && autoApproveChoice;
 
   // 2. Các trường hợp xuất ra bên ngoài / mượn / thế chấp KHÔNG cần kho nhận
   const isDirectCustomerExport =
@@ -367,6 +402,7 @@ export const RequestModal: React.FC<Props> = ({
         }
       }
 
+      if (willAutoApprove) details.autoApprove = true;
       await onSubmit(selectedOpt.type, details, activeAssets);
       onClose();
     } catch (error) {
@@ -401,6 +437,32 @@ export const RequestModal: React.FC<Props> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+          {/* GCN ĐANG CÓ PHIẾU CHỜ DUYỆT */}
+          {conflictsForType.length > 0 && (
+            <div className="bg-red-50 border border-red-300 rounded-xl p-4 space-y-2" role="alert">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-red-900 leading-relaxed">
+                  <h4 className="font-bold uppercase tracking-wider">
+                    {conflictBlocksSubmit ? 'Không thể gửi: có GCN đang chờ xử lý' : 'Lưu ý: có GCN đang chờ xử lý'}
+                  </h4>
+                  <ul className="mt-1 space-y-1 list-disc pl-4">
+                    {conflictsForType.slice(0, 5).map(c => (
+                      <li key={c.itemId}>
+                        {describePendingItem(c, activeAssets.find(a => a.id === c.assetId)?.certificate_no)}
+                      </li>
+                    ))}
+                    {conflictsForType.length > 5 && <li>… và {conflictsForType.length - 5} phiếu khác</li>}
+                  </ul>
+                  <p className="mt-1.5">
+                    Hãy duyệt hoặc từ chối phiếu cũ ở mục{' '}
+                    <a href="/requests" className="font-bold underline">Duyệt yêu cầu &amp; Kho</a>
+                    , hoặc bỏ GCN đó khỏi danh sách chọn, rồi gửi lại.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {/* CẢNH BÁO & PHÂN NHÓM KHI TRẠNG THÁI KHO BỊ LẪN LỘN (Bulk Mixed Status) */}
           {isMixedStatus && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
@@ -1121,6 +1183,21 @@ export const RequestModal: React.FC<Props> = ({
             </div>
           )}
 
+          {directEligible && (
+            <label className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={autoApproveChoice}
+                onChange={e => setAutoApproveChoice(e.target.checked)}
+              />
+              <span>
+                <b>Ghi nhận ngay (không cần duyệt lại)</b> — phiếu được tạo và duyệt trong phạm vi kho bạn quản lý, vẫn có mã chứng từ và nhật ký.
+                Bỏ chọn nếu muốn gửi phiếu để người khác duyệt.
+              </span>
+            </label>
+          )}
+
           {/* Footer Submit */}
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 shrink-0">
             <button
@@ -1136,11 +1213,12 @@ export const RequestModal: React.FC<Props> = ({
               disabled={
                 loading ||
                 !selectedOpt ||
+                conflictBlocksSubmit ||
                 (selectedOpt.reason === 'khác' && otherReasonDetail.trim().length < OTHER_REASON_MIN_LENGTH)
               }
               className="px-5 py-2 text-xs font-bold text-white bg-[#1E3A8A] hover:bg-blue-900 rounded-lg shadow-sm transition-all disabled:opacity-50 cursor-pointer"
             >
-              {loading ? 'Đang gửi...' : 'Gửi yêu cầu'}
+              {loading ? 'Đang xử lý...' : willAutoApprove ? 'Ghi nhận ngay' : 'Gửi yêu cầu'}
             </button>
           </div>
         </form>

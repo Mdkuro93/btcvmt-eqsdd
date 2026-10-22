@@ -1285,6 +1285,7 @@ export const InventoryAudits: React.FC<Props> = ({ profile: propProfile }) => {
           isOpen={isPrintOpen}
           onClose={() => setIsPrintOpen(false)}
           audit={activeAudit}
+          onPrintInfoSaved={(patch) => setActiveAudit(prev => (prev ? { ...prev, ...patch } : prev))}
         />
 
         {/* Document Preview Modal */}

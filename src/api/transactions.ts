@@ -8,6 +8,70 @@ import { generateNextVoucherCode } from '../lib/voucherEngine';
 import { createNotification } from './notifications';
 import { getResponsibleWarehouseId } from '../lib/warehouseRouting';
 
+/** Phiếu đang CHỜ DUYỆT của một GCN (dùng để cảnh báo trước khi gửi phiếu mới, vì hệ thống chặn gửi trùng). */
+export interface PendingItemInfo {
+  itemId: string;
+  transactionId: string;
+  assetId: string;
+  type: 'checkout' | 'checkin' | string;
+  reason: string | null;
+  createdAt: string | null;
+  requesterName: string | null;
+}
+
+export const PENDING_TYPE_LABEL: Record<string, string> = { checkout: 'xuất kho', checkin: 'nhập kho' };
+
+/** Tra cứu các phiếu đang chờ duyệt của danh sách GCN (chỉ thấy phiếu trong phạm vi quyền xem của người dùng). */
+export async function fetchPendingItemsForAssets(assetIds: string[]): Promise<PendingItemInfo[]> {
+  const ids = Array.from(new Set((assetIds || []).filter(Boolean)));
+  if (!isSupabaseConfigured || ids.length === 0) return [];
+
+  const { data: items, error } = await withTimeout(
+    supabase
+      .from('transaction_items')
+      .select('id, transaction_id, asset_id, type, reason, created_at')
+      .in('asset_id', ids)
+      .eq('status', 'pending'),
+    DEFAULT_READ_TIMEOUT
+  );
+  if (error || !items || items.length === 0) return [];
+
+  const names = new Map<string, string>();
+  const createdBy = new Map<string, string>();
+  try {
+    const txIds = Array.from(new Set(items.map((i: any) => i.transaction_id).filter(Boolean)));
+    const { data: txs } = await supabase.from('transactions').select('id, created_by').in('id', txIds);
+    (txs || []).forEach((t: any) => { if (t.created_by) createdBy.set(t.id, t.created_by); });
+    const userIds = Array.from(new Set(Array.from(createdBy.values())));
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase.from('profiles').select('id, full_name, email').in('id', userIds);
+      (profs || []).forEach((p: any) => names.set(p.id, p.full_name || p.email || ''));
+    }
+  } catch {
+    // Không tra được tên người tạo thì bỏ qua, vẫn hiện được phiếu
+  }
+
+  return items.map((i: any) => ({
+    itemId: i.id,
+    transactionId: i.transaction_id,
+    assetId: i.asset_id,
+    type: i.type,
+    reason: i.reason ?? null,
+    createdAt: i.created_at ?? null,
+    requesterName: names.get(createdBy.get(i.transaction_id) || '') || null,
+  }));
+}
+
+/** Câu mô tả một phiếu đang chờ, dùng cho cả thông báo lỗi và khung cảnh báo. */
+export function describePendingItem(p: PendingItemInfo, certificateNo?: string): string {
+  const when = p.createdAt ? new Date(p.createdAt).toLocaleString('vi-VN') : '';
+  return [
+    certificateNo ? `GCN ${certificateNo}` : 'GCN',
+    `đang có phiếu ${PENDING_TYPE_LABEL[p.type] || p.type}${p.reason ? ` (${p.reason})` : ''} chờ duyệt`,
+    `(mã phiếu ${String(p.transactionId).slice(0, 8).toUpperCase()}${when ? `, tạo ${when}` : ''}${p.requesterName ? ` bởi ${p.requesterName}` : ''})`,
+  ].join(' ');
+}
+
 export async function fetchTransactions(): Promise<any[]> {
   if (!isSupabaseConfigured) {
     return mockStore.getTransactions();
@@ -59,6 +123,10 @@ export async function createTransaction(
   let txType: TransactionType;
   let txNotes: string | undefined;
   let items: Array<{ asset_id: string; type: TransactionType; reason?: string | null; details?: any }>;
+  // Quản lý kho / admin: tạo xong ghi nhận ngay (tạo phiếu rồi duyệt ngay bằng chính RPC duyệt có kiểm tra quyền + kho)
+  const autoApprove = Boolean(
+    (typeof param1 === 'object' && param1 && param1.autoApprove) || (details && details.autoApprove)
+  );
 
   // Thêm logic desiredReceiveDate nếu thiếu
   if (details && !details.desiredReceiveDate) {
@@ -136,8 +204,28 @@ export async function createTransaction(
     asset_id: it.asset_id,
     type: it.type || txType,
     reason: it.reason || it.details?.reason || null,
-    details: { ...(it.details || {}), scan_url: scanUrl },
+    details: (() => {
+      const { autoApprove: _drop, ...rest } = (it.details || {}) as any;
+      return { ...rest, scan_url: scanUrl };
+    })(),
   }));
+
+  // Kiểm tra trước: GCN đã có phiếu cùng loại đang chờ duyệt thì báo rõ phiếu nào (thay vì lỗi chung chung từ CSDL)
+  try {
+    const pending = (await fetchPendingItemsForAssets(items.map(it => it.asset_id)))
+      .filter(p => p.type === txType);
+    if (pending.length > 0) {
+      const lines = pending.slice(0, 3).map(p => describePendingItem(p));
+      throw new Error(
+        'Không thể tạo phiếu: ' + lines.join('; ') +
+        (pending.length > 3 ? ` và ${pending.length - 3} GCN khác` : '') +
+        '. Vào "Duyệt yêu cầu & Kho" để duyệt hoặc từ chối phiếu đó trước, rồi tạo lại.'
+      );
+    }
+  } catch (preErr: any) {
+    if (preErr?.message?.startsWith('Không thể tạo phiếu:')) throw preErr;
+    // Lỗi tra cứu (mạng...) thì bỏ qua, để CSDL kiểm tra
+  }
 
   // Ưu tiên gọi RPC atomic create_transaction_request kèm p_scan_url
   let rpcResult: any = null;
@@ -179,7 +267,15 @@ export async function createTransaction(
 
   // Nếu RPC gặp lỗi thật (không phải PGRST202 function not found) -> báo lỗi rõ ràng theo Rule #15
   if (rpcErr && rpcErr.code !== 'PGRST202') {
-    throw new Error('Lỗi tạo phiếu yêu cầu: ' + (rpcErr.message || 'Không thể tạo phiếu yêu cầu'));
+    const raw = String(rpcErr.message || 'Không thể tạo phiếu yêu cầu');
+    if (/đang chờ duyệt/.test(raw)) {
+      // CSDL từ chối vì đã có phiếu chờ duyệt mà người dùng không thấy được (thường thuộc người/kho khác)
+      throw new Error(
+        raw.replace('phiếu checkout', 'phiếu xuất kho').replace('phiếu checkin', 'phiếu nhập kho') +
+        ' Phiếu đó không hiện trong danh sách của bạn (có thể do người khác tạo hoặc thuộc kho khác); hãy nhờ quản trị viên xử lý.'
+      );
+    }
+    throw new Error('Lỗi tạo phiếu yêu cầu: ' + raw);
   }
 
   let finalTx: any = null;
@@ -189,81 +285,42 @@ export async function createTransaction(
     finalTx = rpcResult;
     finalItems = rpcResult.items || [];
   } else {
-    // Nếu RPC chưa được nạp (PGRST202), thực hiện insert trực tiếp qua bảng transactions
-    const { data: authData } = await supabase.auth.getUser();
-    const effectiveCreatedBy = createdBy || authData.user?.id || null;
-
-    const insertPayload: any = { type: txType, notes: txNotes };
-    if (effectiveCreatedBy) {
-      insertPayload.created_by = effectiveCreatedBy;
-    }
-    if (scanUrl) {
-      insertPayload.scan_url = scanUrl;
-    }
-
-    let tx: any = null;
-    const { data: directTx, error: txErr } = await withTimeout(
-      supabase
-        .from('transactions')
-        .insert([insertPayload])
-        .select()
-        .single(),
-      DEFAULT_WRITE_TIMEOUT
+    // Không còn ghi trực tiếp vào transactions / transaction_items từ trình duyệt (migration 0117):
+    // mọi phiếu phải đi qua RPC create_transaction_request (có kiểm tra vai trò, lý do, phạm vi, trùng phiếu).
+    throw new Error(
+      'Không thể tạo phiếu yêu cầu: hệ thống chưa sẵn sàng (thiếu hàm create_transaction_request trên CSDL). ' +
+      'Vui lòng liên hệ quản trị viên.'
     );
+  }
 
-    if (txErr) {
-      // Nếu lỗi do cột scan_url chưa có trong schema cache, thử lại không có cột scan_url
-      if (txErr.message?.includes('scan_url')) {
-        const retryPayload: any = { type: txType, notes: txNotes };
-        if (effectiveCreatedBy) retryPayload.created_by = effectiveCreatedBy;
-        const { data: retryTx, error: retryErr } = await withTimeout(
-          supabase
-            .from('transactions')
-            .insert([retryPayload])
-            .select()
-            .single(),
-          DEFAULT_WRITE_TIMEOUT
-        );
-        if (retryErr) {
-          throw new Error('Lỗi tạo phiếu yêu cầu: ' + retryErr.message);
-        }
-        tx = retryTx;
-      } else {
-        throw new Error('Lỗi tạo phiếu yêu cầu: ' + (txErr.message || 'Không thể ghi nhận phiếu vào hệ thống'));
+  // Ghi nhận ngay: duyệt từng mục vừa tạo. Nếu một mục lỗi thì từ chối các mục còn chờ để không để phiếu treo chặn lần tạo sau.
+  if (autoApprove) {
+    const approvedIds: string[] = [];
+    let failure: any = null;
+    for (const fi of finalItems) {
+      try {
+        const src = items.find(it => it.asset_id === fi.asset_id);
+        const { autoApprove: _drop, ...baseDetails } = (src?.details || fi.details || {}) as any;
+        await decideTransactionItem(fi.id, 'approved', 'Tự ghi nhận khi tạo phiếu (quản lý kho/quản trị trong phạm vi quyền)', createdBy, { ...baseDetails, scan_url: scanUrl });
+        approvedIds.push(fi.id);
+      } catch (e: any) {
+        failure = e;
+        break;
       }
-    } else {
-      tx = directTx;
     }
-
-    const itemsToInsert = items.map(it => {
-      const assetId = sanitizeUuid(it.asset_id);
-      if (!assetId) {
-        throw new Error('Mã tài sản GCN không hợp lệ hoặc bị thiếu (asset_id is null).');
+    if (failure) {
+      for (const fi of finalItems) {
+        if (approvedIds.includes(fi.id)) continue;
+        try {
+          await decideTransactionItem(fi.id, 'rejected', 'Tự động từ chối: ghi nhận ngay thất bại', createdBy);
+        } catch { /* bỏ qua: phiếu vẫn hiện ở Duyệt yêu cầu để xử lý tay */ }
       }
-      return {
-        transaction_id: tx.id,
-        asset_id: assetId,
-        type: it.type || txType,
-        reason: it.reason || it.details?.reason || null,
-        details: it.details || {},
-        status: 'pending',
-      };
-    });
-
-    const { data: insertedItems, error: itErr } = await withTimeout(
-      supabase
-        .from('transaction_items')
-        .insert(itemsToInsert)
-        .select(),
-      DEFAULT_WRITE_TIMEOUT
-    );
-
-    if (itErr) {
-      throw new Error('Lỗi lưu danh sách GCN vào phiếu: ' + (itErr.message || 'Chưa thỏa mãn chính sách bảo mật RLS'));
+      throw new Error(
+        'Không ghi nhận được ngay' +
+        (approvedIds.length ? ` (đã ghi nhận ${approvedIds.length}/${finalItems.length} GCN, phần còn lại đã tự từ chối)` : '') +
+        ': ' + (failure?.message || 'lỗi không xác định')
+      );
     }
-
-    finalTx = tx;
-    finalItems = insertedItems || [];
   }
 
   try {
@@ -446,16 +503,6 @@ export async function decideTransactionItem(
           if (details.returnDate) assetUpdates.expected_return_date = details.returnDate;
           if (details.reason) assetUpdates.borrow_purpose = details.reason;
           await updateAsset(effectiveAssetId, assetUpdates);
-
-          await createTransferReceiptStep({
-            assetId: effectiveAssetId,
-            sourceWarehouseId: sourceWarehouseId!,
-            targetWarehouseId: targetWarehouseId!,
-            voucherCode: generatedVoucher,
-            details,
-            transactionParent,
-            performerId,
-          });
         } else {
           assetUpdates.current_holder_dept = details.department || null;
           if (details.reason === 'mượn' && details.returnDate) {
@@ -788,121 +835,6 @@ export async function decideTransactionItem(
   }
 
   return targetItem;
-}
-
-/**
- * Tự động tạo Bước 2 của quy trình luân chuyển kho
- * (Tạo phiếu checkin chờ thủ kho đích phê duyệt)
- */
-async function createTransferReceiptStep(params: {
-  assetId: string;
-  sourceWarehouseId: string;
-  targetWarehouseId: string;
-  voucherCode: string;
-  details: any;
-  transactionParent: any;
-  performerId?: string;
-}) {
-  if (isSupabaseConfigured) {
-    let sourceWhName = 'kho xuất';
-    let targetWhName = 'kho đích';
-    let certNo = '';
-
-    const [whRes, assetRes] = await Promise.all([
-      supabase.from('warehouses').select('id, name').in('id', [params.sourceWarehouseId, params.targetWarehouseId]),
-      supabase.from('assets').select('id, certificate_no').eq('id', params.assetId).single()
-    ]);
-
-    if (whRes.data) {
-      const sWh = whRes.data.find(w => w.id === params.sourceWarehouseId);
-      const tWh = whRes.data.find(w => w.id === params.targetWarehouseId);
-      if (sWh) sourceWhName = sWh.name;
-      if (tWh) targetWhName = tWh.name;
-    }
-    if (assetRes.data) {
-      certNo = assetRes.data.certificate_no || '';
-    }
-
-    const step2ItemDetails = {
-      ...params.details,
-      sourceWarehouseId: params.sourceWarehouseId,
-      targetWarehouseId: params.targetWarehouseId,
-      transferVoucherCode: params.voucherCode,
-      isTransferReceipt: true,
-      reason: `[Bước 2 - Xác nhận nhập kho luân chuyển] Tiếp nhận GCN ${certNo} từ ${sourceWhName} sang ${targetWhName} (Theo ${params.voucherCode})`,
-    };
-
-    const notes = `[Bước 2 - Chờ xác nhận nhập kho luân chuyển] Bàn giao GCN ${certNo} từ ${sourceWhName} đến ${targetWhName} (PX: ${params.voucherCode})`;
-
-    const { data: txData, error: txErr } = await supabase.from('transactions').insert([{
-      type: 'checkin',
-      requester_id: params.transactionParent?.requester_id || '00000000-0000-0000-0000-000000000001',
-      details: { notes, isTransferReceipt: true },
-    }]).select().single();
-
-    if (txErr) {
-      throw new Error('Lỗi khi tạo phiếu bước 2 luân chuyển kho: ' + txErr.message);
-    }
-
-    if (txData) {
-      const { error: itemErr } = await supabase.from('transaction_items').insert([{
-        transaction_id: txData.id,
-        asset_id: params.assetId,
-        type: 'checkin',
-        reason: 'luân chuyển',
-        status: 'pending',
-        details: step2ItemDetails,
-      }]);
-      if (itemErr) {
-        throw new Error('Lỗi khi tạo chi tiết phiếu bước 2 luân chuyển: ' + itemErr.message);
-      }
-    }
-    return;
-  }
-
-  // Fallback chỉ khi hoàn toàn không cấu hình Supabase
-  const warehouses = mockStore.getWarehouses();
-  const sourceWh = warehouses.find(w => w.id === params.sourceWarehouseId);
-  const targetWh = warehouses.find(w => w.id === params.targetWarehouseId);
-  const assets = mockStore.getAssets();
-  const asset = assets.find(a => a.id === params.assetId);
-
-  const newTxId = 'tx-transit-' + Date.now();
-  const newTxItemId = 'txi-transit-' + Date.now();
-
-  const step2ItemDetails = {
-    ...params.details,
-    sourceWarehouseId: params.sourceWarehouseId,
-    targetWarehouseId: params.targetWarehouseId,
-    transferVoucherCode: params.voucherCode,
-    isTransferReceipt: true,
-    reason: `[Bước 2 - Xác nhận nhập kho luân chuyển] Tiếp nhận GCN ${asset?.certificate_no || ''} từ ${sourceWh?.name || 'kho xuất'} sang ${targetWh?.name || 'kho đích'} (Theo ${params.voucherCode})`,
-  };
-
-  const newTx = {
-    id: newTxId,
-    type: 'checkin',
-    created_at: new Date().toISOString(),
-    notes: `[Bước 2 - Chờ xác nhận nhập kho luân chuyển] Bàn giao GCN ${asset?.certificate_no || ''} từ ${sourceWh?.name || 'kho xuất'} đến ${targetWh?.name || 'kho nhận'} (PX: ${params.voucherCode})`,
-    requester_id: params.transactionParent?.requester_id || '00000000-0000-0000-0000-000000000001',
-    created_by: params.transactionParent?.created_by || { full_name: 'Hệ thống luân chuyển VMT', email: 'system@btcvmt.vn' },
-    items: [
-      {
-        id: newTxItemId,
-        transaction_id: newTxId,
-        asset_id: params.assetId,
-        type: 'checkin',
-        reason: 'luân chuyển',
-        status: 'pending',
-        details: step2ItemDetails,
-        requested_details: step2ItemDetails,
-        asset: asset,
-      },
-    ],
-  };
-
-  const txs = mockStore.getTransactions();
-  mockStore.saveTransactions([newTx, ...txs]);
 }
 
 /**

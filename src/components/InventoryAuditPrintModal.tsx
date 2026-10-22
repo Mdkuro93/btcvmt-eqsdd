@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import toast from 'react-hot-toast';
+import { updateAuditPrintInfo } from '../api/inventoryAudits';
 import { InventoryAudit, InventoryAuditItem } from '../types';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -22,12 +24,15 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   audit: InventoryAudit | null;
+  /** Gọi sau khi lưu DB thành công để trang cha cập nhật bản sao đợt kiểm kê đang mở */
+  onPrintInfoSaved?: (patch: Partial<InventoryAudit>) => void;
 }
 
 export const InventoryAuditPrintModal: React.FC<Props> = ({
   isOpen,
   onClose,
   audit,
+  onPrintInfoSaved,
 }) => {
   if (!isOpen || !audit) return null;
 
@@ -73,6 +78,9 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   ], [performerName]);
 
   const [committee, setCommittee] = useState<CommitteeMember[]>(() => {
+    if (Array.isArray(audit.print_committee) && audit.print_committee.length > 0) {
+      return audit.print_committee as CommitteeMember[];
+    }
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
@@ -95,6 +103,7 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   const defaultAdditionalNotes = cleanAuditNotes || 'Hội đồng kiểm kê xác nhận số liệu thực tế khớp đúng với hồ sơ theo dõi tại thời điểm lập biên bản.';
 
   const [physicalConditionNotes, setPhysicalConditionNotes] = useState<string>(() => {
+    if (typeof audit.print_physical_notes === 'string') return audit.print_physical_notes;
     try {
       const saved = localStorage.getItem(`${notesStorageKey}_physical`);
       if (saved !== null) return saved;
@@ -103,6 +112,7 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   });
 
   const [additionalNotes, setAdditionalNotes] = useState<string>(() => {
+    if (typeof audit.print_additional_notes === 'string') return audit.print_additional_notes;
     try {
       const saved = localStorage.getItem(`${notesStorageKey}_additional`);
       if (saved !== null) return saved;
@@ -114,7 +124,8 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
-      if (!saved) {
+      const hasDb = Array.isArray(audit.print_committee) && audit.print_committee.length > 0;
+      if (!saved && !hasDb) {
         setCommittee(defaultCommittee);
       }
     } catch {
@@ -122,7 +133,43 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
     }
   }, [defaultCommittee, storageKey]);
 
+  // Lưu lên DB (gộp thay đổi, chờ 800ms); lỗi quyền thì chỉ cảnh báo 1 lần, nội dung vẫn giữ tạm trên máy này.
+  const pendingPatch = useRef<Record<string, any>>({});
+  const saveTimer = useRef<number | undefined>(undefined);
+  const warnedRef = useRef(false);
+
+  const flushPrintInfo = async () => {
+    if (saveTimer.current !== undefined) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = undefined;
+    }
+    const patch = pendingPatch.current;
+    pendingPatch.current = {};
+    if (Object.keys(patch).length === 0) return;
+    try {
+      await updateAuditPrintInfo(audit.id, patch);
+      onPrintInfoSaved?.(patch as Partial<InventoryAudit>);
+    } catch (err: any) {
+      if (!warnedRef.current) {
+        warnedRef.current = true;
+        toast.error((err?.message || 'Không lưu được lên hệ thống.') + ' Nội dung chỉ được giữ tạm trên máy này.');
+      }
+    }
+  };
+
+  const queuePrintInfoSave = (patch: Record<string, any>) => {
+    pendingPatch.current = { ...pendingPatch.current, ...patch };
+    if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => { void flushPrintInfo(); }, 800);
+  };
+
+  const handleClose = () => {
+    void flushPrintInfo();
+    onClose();
+  };
+
   const handleSaveCommittee = (updated: CommitteeMember[]) => {
+    queuePrintInfoSave({ print_committee: updated });
     setCommittee(updated);
     try {
       localStorage.setItem(storageKey, JSON.stringify(updated));
@@ -132,6 +179,7 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   };
 
   const handleResetCommittee = () => {
+    queuePrintInfoSave({ print_committee: null });
     setCommittee(defaultCommittee);
     try {
       localStorage.removeItem(storageKey);
@@ -164,6 +212,7 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   };
 
   const handlePhysicalNotesChange = (val: string) => {
+    queuePrintInfoSave({ print_physical_notes: val });
     setPhysicalConditionNotes(val);
     try {
       localStorage.setItem(`${notesStorageKey}_physical`, val);
@@ -171,6 +220,7 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   };
 
   const handleAdditionalNotesChange = (val: string) => {
+    queuePrintInfoSave({ print_additional_notes: val });
     setAdditionalNotes(val);
     try {
       localStorage.setItem(`${notesStorageKey}_additional`, val);
@@ -178,6 +228,7 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
   };
 
   const handleResetNotes = () => {
+    queuePrintInfoSave({ print_physical_notes: null, print_additional_notes: null });
     setPhysicalConditionNotes(defaultPhysicalNotes);
     setAdditionalNotes(defaultAdditionalNotes);
     try {
@@ -270,7 +321,7 @@ export const InventoryAuditPrintModal: React.FC<Props> = ({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
               title="Đóng (Esc)"
             >
